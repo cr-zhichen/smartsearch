@@ -73,7 +73,13 @@ COMMAND_ALIASES = {
     "setup": ["init"],
     "skills": ["skill"],
     "config": ["cfg"],
+    "providers": ["prov"],
     "regression": ["reg"],
+}
+
+PROVIDERS_COMMAND_ALIASES = {
+    "status": ["st", "ls"],
+    "reset": ["clear"],
 }
 
 CONFIG_COMMAND_ALIASES = {
@@ -335,6 +341,36 @@ def _search_timeout_lines(data: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _provider_notice_lines(data: dict[str, Any]) -> list[str]:
+    """Render degraded optional providers once instead of repeating raw attempts.
+
+    A provider that is already on cooldown is only worth a line when the answer
+    itself failed. Repeating a known-down channel on every successful search is
+    the noise this notice exists to replace; `providers status` and the JSON
+    payload still carry it.
+    """
+    notices = data.get("provider_notices") or []
+    if not notices:
+        return []
+    include_cooldown = not data.get("ok", False)
+    parts: list[str] = []
+    for notice in notices:
+        if not isinstance(notice, dict):
+            continue
+        provider = notice.get("provider", "")
+        label = notice.get("error_type") or notice.get("status") or "failed"
+        if notice.get("status") == "cooldown":
+            if not include_cooldown:
+                continue
+            remaining = _format_seconds(float(notice.get("cooldown_remaining_seconds") or 0.0))
+            parts.append(f"{provider} (cooldown {remaining}s, {label})")
+        else:
+            parts.append(f"{provider} ({label})")
+    if not parts:
+        return []
+    return ["", f"> Degraded providers: {', '.join(parts)}. `smart-search providers status` for details."]
+
+
 def _format_result_markdown(command: str, data: dict[str, Any], title: str) -> str:
     lines = [
         f"# {title}",
@@ -365,6 +401,50 @@ def _format_result_markdown(command: str, data: dict[str, Any], title: str) -> s
     elif data.get("ok"):
         lines.append("No results.")
     lines.extend(_error_lines(data))
+    return "\n".join(lines).strip() + "\n"
+
+
+def _format_providers_markdown(data: dict[str, Any]) -> str:
+    if data.get("error"):
+        lines = ["# Provider Health", "", f"Status: {_status_label(data.get('ok'))}"]
+        lines.extend(_error_lines(data))
+        return "\n".join(lines).strip() + "\n"
+    if "cleared" in data:
+        cleared = data.get("cleared") or []
+        return "\n".join(
+            [
+                "# Provider Health Reset",
+                "",
+                f"Status: {_status_label(data.get('ok'))}",
+                "Cleared: " + (", ".join(str(item) for item in cleared) if cleared else "no cooldown was active"),
+            ]
+        ).strip() + "\n"
+    lines = [
+        "# Provider Health",
+        "",
+        f"Cooldown: {'enabled' if data.get('enabled') else 'disabled'}"
+        f" ({_format_seconds(float(data.get('cooldown_seconds') or 0.0))} seconds"
+        f" after {data.get('failure_threshold', '')} consecutive soft failures)",
+        f"Store: `{data.get('store_path', '')}`",
+    ]
+    rows = [
+        [
+            item.get("provider", ""),
+            _yes_no(item.get("configured")),
+            item.get("state", ""),
+            item.get("consecutive_failures", 0),
+            item.get("error_type", "") or "-",
+            _format_seconds(float(item.get("cooldown_remaining_seconds") or 0.0)),
+            _one_line(item.get("error", "") or "-", 80),
+        ]
+        for item in data.get("providers") or []
+        if isinstance(item, dict)
+    ]
+    table = _markdown_table(
+        ["Provider", "Configured", "State", "Failures", "Error type", "Cooldown left (s)", "Last error"],
+        rows,
+    )
+    lines.extend(["", *table] if table else ["", "No provider is configured or tracked."])
     return "\n".join(lines).strip() + "\n"
 
 
@@ -427,6 +507,35 @@ def _format_doctor_markdown(data: dict[str, Any]) -> str:
         if rows:
             lines.extend(["", "## Capabilities"])
             lines.extend(_markdown_table(["Capability", "Status", "Configured", "Fallback chain"], rows))
+
+    provider_health = data.get("provider_health") or {}
+    health_rows = [
+        [
+            item.get("provider", ""),
+            item.get("state", ""),
+            item.get("consecutive_failures", 0),
+            item.get("error_type", "") or "-",
+            _format_seconds(float(item.get("cooldown_remaining_seconds") or 0.0)),
+            _one_line(item.get("error", "") or "-", 80),
+        ]
+        for item in provider_health.get("providers") or []
+        if isinstance(item, dict) and item.get("state") == "cooldown"
+    ]
+    if health_rows:
+        lines.extend(
+            [
+                "",
+                "## Providers On Cooldown",
+                "These optional providers are skipped until the cooldown ends. Fix the credential, "
+                "or run `smart-search providers reset PROVIDER` to retry immediately.",
+            ]
+        )
+        lines.extend(
+            _markdown_table(
+                ["Provider", "State", "Failures", "Error type", "Cooldown left (s)", "Last error"],
+                health_rows,
+            )
+        )
 
     main_tests = data.get("main_search_connection_tests") or {}
     if main_tests:
@@ -890,10 +999,12 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
             if data.get("diagnose_command"):
                 lines.extend(["", "## Next Command"])
                 lines.extend(_markdown_code_block(data.get("diagnose_command")))
+            lines.extend(_provider_notice_lines(data))
             lines.extend(_error_lines(data))
             return "\n".join(lines).strip() + "\n"
         lines = [data.get("content", "")]
         lines.extend(_search_timeout_lines(data))
+        lines.extend(_provider_notice_lines(data))
         primary_sources = data.get("primary_sources") or []
         extra_sources = data.get("extra_sources") or []
         if primary_sources or extra_sources:
@@ -1015,6 +1126,8 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
         return _format_setup_markdown(data)
     if command == "skills":
         return _format_skills_markdown(data)
+    if command == "providers":
+        return _format_providers_markdown(data)
     titles = {
         "map": "Site Map",
         "exa-search": "Exa Search",
@@ -1113,6 +1226,20 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
             "This command only plans; execute the listed CLI steps to perform live research.",
         ]
         return "\n".join(lines) + "\n"
+    if command == "providers":
+        if data.get("error"):
+            return f"Providers {_status_label(data.get('ok'))}: {_error_summary(data)}\n"
+        if "cleared" in data:
+            cleared = data.get("cleared") or []
+            return (
+                f"Providers reset {_status_label(data.get('ok'))}: "
+                + (", ".join(str(item) for item in cleared) if cleared else "no cooldown to clear")
+                + "\n"
+            )
+        cooling = data.get("cooldown_providers") or []
+        tracked = data.get("providers") or []
+        summary = ", ".join(str(item) for item in cooling) if cooling else "none"
+        return f"Provider health: {len(tracked)} tracked, cooldown={summary}\n"
     if command == "doctor":
         configured = data.get("capability_status", {})
         capability_bits = []
@@ -1131,6 +1258,13 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
                 "Embedding preset recommendation: "
                 f"threshold={router.get('embedding_preset_threshold')} "
                 f"margin={router.get('embedding_preset_margin')}"
+            )
+        cooling = (data.get("provider_health") or {}).get("cooldown_providers") or []
+        if cooling:
+            lines.append(
+                "Providers on cooldown: "
+                + ", ".join(str(item) for item in cooling)
+                + " (`smart-search providers status`)"
             )
         if data.get("error"):
             lines.append(f"Error: {_error_summary(data)}")
@@ -2428,6 +2562,8 @@ def _run_advanced_setup_prompts(values: dict[str, str], current: dict[str, str],
         ("SMART_SEARCH_FALLBACK_MODE", "Fallback mode (auto/off)", True),
         ("SMART_SEARCH_MINIMUM_PROFILE", "Minimum profile (standard/off)", True),
         ("SMART_SEARCH_INTENT_ROUTER", "Intent router mode (hybrid/rules/off)", True),
+        ("SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS", "Optional-provider failure cooldown seconds (0 disables)", True),
+        ("SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD", "Consecutive soft failures before cooldown", True),
         ("INTENT_EMBEDDING_API_URL", "Intent embedding API URL", True),
         ("INTENT_EMBEDDING_API_KEY", "Intent embedding API key", True),
         ("INTENT_EMBEDDING_MODEL", "Intent embedding model", True),
@@ -2709,6 +2845,16 @@ def _run_config(args: argparse.Namespace) -> int:
     return _print_result("config", data, args.format, args.output)
 
 
+def _run_providers(args: argparse.Namespace) -> int:
+    if args.providers_command == "status":
+        data = service.provider_health_status()
+    elif args.providers_command == "reset":
+        data = service.reset_provider_health(list(args.providers) or None)
+    else:
+        data = {"ok": False, "error_type": "parameter_error", "error": "Unknown providers command"}
+    return _print_result("providers", data, args.format, args.output)
+
+
 def _skill_targets_from_args(args: argparse.Namespace) -> list[str]:
     if getattr(args, "all", False):
         return [target.target_id for target in SKILL_TARGETS]
@@ -2752,6 +2898,8 @@ def _run_setup(args: argparse.Namespace) -> int:
 
     values = {
         "SMART_SEARCH_TIMEOUT_SECONDS": args.search_timeout,
+        "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS": args.provider_cooldown,
+        "SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD": args.provider_failure_threshold,
         "XAI_API_URL": args.xai_api_url,
         "XAI_API_KEY": args.xai_api_key,
         "XAI_MODEL": args.xai_model,
@@ -3337,6 +3485,34 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_format_args(skills_update)
 
+    providers_parser = sub.add_parser(
+        "providers",
+        aliases=COMMAND_ALIASES["providers"],
+        help="Inspect or clear the persisted failure cooldown for optional providers.",
+    )
+    providers_parser.set_defaults(command="providers")
+    providers_sub = providers_parser.add_subparsers(dest="providers_command", required=True, parser_class=SmartSearchArgumentParser)
+    providers_status = providers_sub.add_parser(
+        "status",
+        aliases=PROVIDERS_COMMAND_ALIASES["status"],
+        help="Show which providers are on cooldown and why.",
+    )
+    providers_status.set_defaults(providers_command="status")
+    _add_format_args(providers_status)
+    providers_reset = providers_sub.add_parser(
+        "reset",
+        aliases=PROVIDERS_COMMAND_ALIASES["reset"],
+        help="Clear cooldowns so the next run retries the provider immediately.",
+    )
+    providers_reset.set_defaults(providers_command="reset")
+    providers_reset.add_argument(
+        "providers",
+        nargs="*",
+        default=[],
+        help="Provider ids to clear, e.g. zhipu zhipu-mcp. Omit to clear every cooldown.",
+    )
+    _add_format_args(providers_reset)
+
     setup_parser = sub.add_parser(
         "setup", aliases=COMMAND_ALIASES["setup"], help="Interactively save local provider configuration."
     )
@@ -3385,6 +3561,19 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--intent-classifier-api-key", default="", help="Save INTENT_CLASSIFIER_API_KEY.")
     setup_parser.add_argument("--intent-classifier-model", default="", help="Save INTENT_CLASSIFIER_MODEL.")
     setup_parser.add_argument("--intent-router-timeout", default="", help="Save INTENT_ROUTER_TIMEOUT_SECONDS.")
+    setup_parser.add_argument(
+        "--provider-cooldown",
+        "--provider-cooldown-seconds",
+        dest="provider_cooldown",
+        default="",
+        help="Save SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS; 0 disables the optional-provider failure cooldown.",
+    )
+    setup_parser.add_argument(
+        "--provider-failure-threshold",
+        dest="provider_failure_threshold",
+        default="",
+        help="Save SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD.",
+    )
     setup_parser.add_argument("--exa-key", default="", help="Save EXA_API_KEY.")
     setup_parser.add_argument("--context7-key", default="", help="Save CONTEXT7_API_KEY.")
     setup_parser.add_argument("--zhipu-key", default="", help="Save ZHIPU_API_KEY.")
@@ -3451,6 +3640,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run_skills(args)
         if args.command == "config":
             return _run_config(args)
+        if args.command == "providers":
+            return _run_providers(args)
         if args.command == "model":
             return _run_model(args)
         return asyncio.run(_run_async(args))

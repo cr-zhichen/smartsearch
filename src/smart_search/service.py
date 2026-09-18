@@ -47,7 +47,14 @@ from .providers.sciverse import SciverseProvider
 from .providers.xai_responses import XAIResponsesSearchProvider
 from .providers.zhipu import ZhipuWebSearchProvider
 from .providers.zhipu_mcp import ZhipuMCPProvider
-from .provider_errors import ProviderCallError, classify_provider_exception, provider_call_error, sanitize_provider_error_message
+from .provider_errors import (
+    APPROVED_PROVIDER_ERROR_TYPES,
+    ProviderCallError,
+    classify_provider_exception,
+    provider_call_error,
+    sanitize_provider_error_message,
+)
+from .provider_health import provider_fingerprint, provider_health
 from .sciverse_schema import (
     SciverseParameterError,
     build_sciverse_meta_search_payload,
@@ -314,7 +321,7 @@ MAIN_SEARCH_PROVIDER_ALIASES = {
 MODEL_BREAKER_FAILURE_THRESHOLD = 2
 MODEL_BREAKER_COOLDOWN_SECONDS = 600.0
 _OPENAI_COMPATIBLE_MODEL_BREAKERS: dict[tuple[str, str, str], dict[str, Any]] = {}
-MAIN_SEARCH_RESERVE_CAP_SECONDS = 120.0
+MAIN_SEARCH_RESERVE_CAP_SECONDS = 240.0
 
 
 class SearchBudget:
@@ -546,6 +553,7 @@ def _empty_search_result(
         "routing_decision": {},
         "providers_used": [],
         "provider_attempts": [],
+        "provider_notices": [],
         "fallback_used": False,
         "validation_level": "",
         "timeout_seconds": None,
@@ -592,6 +600,13 @@ def _attempt_from_exception(capability: str, provider: str, start: float, exc: B
     return _attempt(capability, provider, "error", start, error_type=error_type, error=error)
 
 
+def _attempt_with_health(capability: str, provider: str, start: float, exc: BaseException) -> dict[str, Any]:
+    """Record a raised optional-provider failure in persisted health, then report it."""
+    error_type, error = classify_provider_exception(exc)
+    health_extra = _record_provider_result(provider, "error", error_type, error)
+    return _attempt(capability, provider, "error", start, error_type=error_type, error=error, extra=health_extra)
+
+
 def _attempt_status_for_result(data: dict[str, Any]) -> str:
     return "error" if data.get("error_type") else "empty"
 
@@ -602,6 +617,172 @@ def _tavily_is_enabled() -> bool:
 
 def _tavily_disabled_message() -> str:
     return "Tavily is disabled by TAVILY_ENABLED=false. No Tavily network request was made."
+
+
+PROVIDER_CREDENTIAL_SOURCES: dict[str, Any] = {
+    "zhipu": lambda: (config.zhipu_api_key, config.zhipu_api_url),
+    "zhipu-mcp": lambda: (config.zhipu_mcp_api_key, config.zhipu_mcp_search_api_url),
+    "zhipu-mcp-reader": lambda: (config.zhipu_mcp_api_key, config.zhipu_mcp_reader_api_url),
+    "tavily": lambda: (config.tavily_api_key, config.tavily_api_url),
+    "firecrawl": lambda: (config.firecrawl_api_key, config.firecrawl_api_url),
+    "exa": lambda: (config.exa_api_key, config.exa_base_url),
+    "context7": lambda: (config.context7_api_key, config.context7_base_url),
+    "jina": lambda: (config.jina_api_key, config.jina_reader_api_url),
+    "anysearch": lambda: (config.anysearch_api_key, config.anysearch_api_url),
+    "sciverse": lambda: (config.sciverse_api_token, config.sciverse_api_url),
+}
+PROVIDER_COOLDOWN_HINT = (
+    "Run `smart-search providers status` for detail. Fixing the credential or "
+    "`smart-search providers reset PROVIDER` retries it immediately."
+)
+
+
+def _provider_fingerprint(provider: str) -> str:
+    """Fingerprint a provider's credentials so re-keying clears its cooldown."""
+    source = PROVIDER_CREDENTIAL_SOURCES.get(provider)
+    if source is None:
+        return ""
+    return provider_fingerprint(*source())
+
+
+def _provider_health_status(provider: str) -> dict[str, Any]:
+    return provider_health.status(provider, _provider_fingerprint(provider))
+
+
+def _cooldown_attempt_extra(state: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "provider_health": {
+            "state": state.get("state", "closed"),
+            "consecutive_failures": state.get("consecutive_failures", 0),
+            "cooldown_remaining_seconds": state.get("cooldown_remaining_seconds", 0.0),
+            "hard_failure": bool(state.get("hard_failure")),
+            "probe": bool(state.get("probe")),
+        }
+    }
+
+
+def _plan_provider_health(capability: str, providers: list[str]) -> tuple[list[str], list[dict]]:
+    """Split a capability chain into providers worth calling and cooled-down skips.
+
+    A provider that keeps failing is skipped instead of being retried on every
+    run. When the whole chain is cooling, one soft failure is still probed so a
+    recovered provider returns on its own; a hard failure (bad key, bad config)
+    waits for a credential change or an explicit reset.
+    """
+    if not providers or not provider_health.enabled:
+        return providers, []
+
+    states = {provider: _provider_health_status(provider) for provider in providers}
+    runnable = [provider for provider in providers if states[provider]["state"] != "cooldown"]
+    if not runnable:
+        probe = next((provider for provider in providers if not states[provider]["hard_failure"]), "")
+        if probe:
+            states[probe] = {**states[probe], "probe": True}
+            runnable = [probe]
+
+    skipped = []
+    for provider in providers:
+        if provider in runnable:
+            continue
+        state = states[provider]
+        skipped.append(
+            _attempt(
+                capability,
+                provider,
+                "skipped",
+                time.time(),
+                error_type=state.get("error_type", ""),
+                error=state.get("error", "") or "provider is on failure cooldown",
+                extra=_cooldown_attempt_extra(state),
+            )
+        )
+    return runnable, skipped
+
+
+def _record_provider_result(
+    provider: str,
+    status: str,
+    error_type: str = "",
+    error: str = "",
+) -> dict[str, Any]:
+    """Update persisted health for one optional-provider call.
+
+    ``empty`` is not a failure: a provider that answers with no results is
+    working, it just had nothing to say about this query.
+    """
+    fingerprint = _provider_fingerprint(provider)
+    if status == "ok":
+        provider_health.record_success(provider, fingerprint)
+        return {}
+    if status != "error" and not error_type:
+        return {}
+    state = provider_health.record_failure(provider, fingerprint, error_type, error)
+    return _cooldown_attempt_extra(state) if state.get("state") == "cooldown" else {}
+
+
+def _provider_notices(attempts: list[dict]) -> list[dict[str, Any]]:
+    """Collapse optional-provider failures into one deduplicated notice each."""
+    notices: dict[str, dict[str, Any]] = {}
+    for attempt in attempts:
+        provider = str(attempt.get("provider") or "")
+        status = attempt.get("status")
+        capability = str(attempt.get("capability") or "")
+        if not provider or capability == "main_search" or status not in {"error", "skipped"}:
+            continue
+        health = attempt.get("provider_health") or {}
+        cooling = health.get("state") == "cooldown"
+        notice = {
+            "provider": provider,
+            "capability": capability,
+            "status": "cooldown" if cooling else "failed",
+            "error_type": str(attempt.get("error_type") or ""),
+            "error": str(attempt.get("error") or ""),
+            "cooldown_remaining_seconds": float(health.get("cooldown_remaining_seconds") or 0.0),
+            "hint": PROVIDER_COOLDOWN_HINT if cooling else "",
+        }
+        previous = notices.get(provider)
+        if previous is None or (notice["status"] == "cooldown" and previous["status"] != "cooldown"):
+            notices[provider] = notice
+    return list(notices.values())
+
+
+def reset_provider_health(providers: list[str] | None = None) -> dict[str, Any]:
+    """Clear persisted provider cooldowns so the next run retries them."""
+    known = sorted(PROVIDER_CREDENTIAL_SOURCES)
+    if providers:
+        unknown = [provider for provider in providers if provider not in known]
+        if unknown:
+            return {
+                "ok": False,
+                "error_type": "parameter_error",
+                "error": "Unknown provider: " + ", ".join(unknown) + ". Known providers: " + ", ".join(known),
+                "known_providers": known,
+                "cleared": [],
+            }
+    cleared = provider_health.reset(providers)
+    return {"ok": True, "error_type": "", "error": "", "cleared": cleared, "known_providers": known}
+
+
+def provider_health_status() -> dict[str, Any]:
+    """Report the persisted cooldown state for every optional provider."""
+    configured = [provider for provider in sorted(PROVIDER_CREDENTIAL_SOURCES) if _provider_configured(provider)]
+    tracked = {state["provider"]: state for state in provider_health.snapshot()}
+    providers = []
+    for provider in configured:
+        state = tracked.pop(provider, None) or _provider_health_status(provider)
+        providers.append({**state, "configured": True})
+    for provider, state in tracked.items():
+        providers.append({**state, "configured": False})
+    cooling = [state["provider"] for state in providers if state["state"] == "cooldown"]
+    return {
+        "ok": True,
+        "enabled": provider_health.enabled,
+        "cooldown_seconds": provider_health.cooldown_seconds,
+        "failure_threshold": provider_health.failure_threshold,
+        "store_path": str(provider_health.path),
+        "providers": providers,
+        "cooldown_providers": cooling,
+    }
 
 
 def _openai_model_breaker_key(api_url: str, model: str, api_mode: str = "chat-completions") -> tuple[str, str, str]:
@@ -1845,6 +2026,7 @@ async def research(
             "stop_reason": "evidence_converged" if gap_status == "closed" else ("degraded_with_gaps" if evidence_items else "provider_exhausted"),
         },
         "provider_attempts": provider_attempts,
+        "provider_notices": _provider_notices(provider_attempts),
         "providers_used": _provider_names_from_attempts(provider_attempts),
         "fallback_used": _fallback_used(provider_attempts),
         "degraded": bool(gaps),
@@ -2130,6 +2312,9 @@ async def _run_web_fetch_fallback(
     if fallback == "off":
         providers = providers[:1]
 
+    providers, skipped = _plan_provider_health("web_fetch", providers)
+    attempts.extend(skipped)
+
     for provider in providers:
         start = time.time()
         try:
@@ -2140,18 +2325,21 @@ async def _run_web_fetch_fallback(
                 content = data.get("content") if data.get("ok") else None
                 if not data.get("ok"):
                     status = _attempt_status_for_result(data)
-                    attempts.append(_attempt("web_fetch", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", "")))
+                    health_extra = _record_provider_result(provider, status, data.get("error_type", ""), data.get("error", ""))
+                    attempts.append(_attempt("web_fetch", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", ""), extra=health_extra))
                     continue
             elif provider == "zhipu-mcp-reader":
                 data = await zhipu_mcp_reader(url)
                 content = data.get("content") if data.get("ok") else None
                 if not data.get("ok"):
                     status = _attempt_status_for_result(data)
-                    attempts.append(_attempt("web_fetch", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", "")))
+                    health_extra = _record_provider_result(provider, status, data.get("error_type", ""), data.get("error", ""))
+                    attempts.append(_attempt("web_fetch", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", ""), extra=health_extra))
                     continue
             else:
                 content = await call_firecrawl_scrape(url)
             if content and content.strip():
+                _record_provider_result(provider, "ok")
                 attempts.append(_attempt("web_fetch", provider, "ok", start, result_count=1))
                 return {
                     "ok": True,
@@ -2161,7 +2349,7 @@ async def _run_web_fetch_fallback(
                 }, attempts
             attempts.append(_attempt("web_fetch", provider, "empty", start))
         except Exception as e:
-            attempts.append(_attempt_from_exception("web_fetch", provider, start, e))
+            attempts.append(_attempt_with_health("web_fetch", provider, start, e))
     return None, attempts
 
 
@@ -2187,6 +2375,9 @@ async def _run_web_search_fallback(
     if fallback == "off":
         configured = configured[:1]
 
+    configured, skipped = _plan_provider_health("web_search", configured)
+    attempts.extend(skipped)
+
     for provider in configured:
         start = time.time()
         try:
@@ -2195,23 +2386,28 @@ async def _run_web_search_fallback(
                 if data.get("ok"):
                     sources = _normalize_source_results(data.get("results"), "zhipu")
                     if sources:
+                        _record_provider_result(provider, "ok")
                         attempts.append(_attempt("web_search", provider, "ok", start, result_count=len(sources)))
                         return sources, attempts
                 status = _attempt_status_for_result(data)
-                attempts.append(_attempt("web_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", "")))
+                health_extra = _record_provider_result(provider, status, data.get("error_type", ""), data.get("error", ""))
+                attempts.append(_attempt("web_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", ""), extra=health_extra))
             elif provider == "zhipu-mcp":
                 data = await zhipu_mcp_search(query, count=count)
                 if data.get("ok"):
                     sources = _normalize_source_results(data.get("results"), "zhipu-mcp")
                     if sources:
+                        _record_provider_result(provider, "ok")
                         attempts.append(_attempt("web_search", provider, "ok", start, result_count=len(sources)))
                         return sources, attempts
                 status = _attempt_status_for_result(data)
-                attempts.append(_attempt("web_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", "")))
+                health_extra = _record_provider_result(provider, status, data.get("error_type", ""), data.get("error", ""))
+                attempts.append(_attempt("web_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", ""), extra=health_extra))
             elif provider == "tavily":
                 results = await call_tavily_search(query, count)
                 sources = _normalize_source_results(results, "tavily")
                 if sources:
+                    _record_provider_result(provider, "ok")
                     attempts.append(_attempt("web_search", provider, "ok", start, result_count=len(sources)))
                     return sources, attempts
                 attempts.append(_attempt("web_search", provider, "empty", start))
@@ -2219,11 +2415,12 @@ async def _run_web_search_fallback(
                 results = await call_firecrawl_search(query, count)
                 sources = _normalize_source_results(results, "firecrawl")
                 if sources:
+                    _record_provider_result(provider, "ok")
                     attempts.append(_attempt("web_search", provider, "ok", start, result_count=len(sources)))
                     return sources, attempts
                 attempts.append(_attempt("web_search", provider, "empty", start))
         except Exception as e:
-            attempts.append(_attempt_from_exception("web_search", provider, start, e))
+            attempts.append(_attempt_with_health("web_search", provider, start, e))
     return [], attempts
 
 
@@ -2244,6 +2441,9 @@ async def _run_docs_search_fallback(
     if fallback == "off":
         configured = configured[:1]
 
+    configured, skipped = _plan_provider_health("docs_search", configured)
+    attempts.extend(skipped)
+
     for provider in configured:
         start = time.time()
         try:
@@ -2252,14 +2452,17 @@ async def _run_docs_search_fallback(
                 if data.get("ok"):
                     sources = _normalize_source_results(data.get("results"), "exa")
                     if sources:
+                        _record_provider_result(provider, "ok")
                         attempts.append(_attempt("docs_search", provider, "ok", start, result_count=len(sources)))
                         return sources, attempts
                 status = _attempt_status_for_result(data)
-                attempts.append(_attempt("docs_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", "")))
+                health_extra = _record_provider_result(provider, status, data.get("error_type", ""), data.get("error", ""))
+                attempts.append(_attempt("docs_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", ""), extra=health_extra))
             elif provider == "context7":
                 data = await context7_library(query, query)
                 if data.get("ok"):
                     selected_library = _select_context7_library_candidate(data.get("results"), query)
+                    _record_provider_result(provider, "ok")
                     if selected_library:
                         source = {
                             "url": f"context7:{selected_library.get('id')}",
@@ -2272,9 +2475,10 @@ async def _run_docs_search_fallback(
                     attempts.append(_attempt("docs_search", provider, "empty", start))
                 else:
                     status = _attempt_status_for_result(data)
-                    attempts.append(_attempt("docs_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", "")))
+                    health_extra = _record_provider_result(provider, status, data.get("error_type", ""), data.get("error", ""))
+                    attempts.append(_attempt("docs_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", ""), extra=health_extra))
         except Exception as e:
-            attempts.append(_attempt_from_exception("docs_search", provider, start, e))
+            attempts.append(_attempt_with_health("docs_search", provider, start, e))
     return [], attempts
 
 
@@ -2293,6 +2497,9 @@ async def _run_vertical_search_fallback(
     if fallback == "off":
         configured = configured[:1]
 
+    configured, skipped = _plan_provider_health("vertical_search", configured)
+    attempts.extend(skipped)
+
     for provider in configured:
         start = time.time()
         try:
@@ -2300,12 +2507,14 @@ async def _run_vertical_search_fallback(
             if data.get("ok"):
                 sources = _normalize_source_results(data.get("results"), "anysearch")
                 if sources:
+                    _record_provider_result(provider, "ok")
                     attempts.append(_attempt("vertical_search", provider, "ok", start, result_count=len(sources)))
                     return sources, attempts
             status = _attempt_status_for_result(data)
-            attempts.append(_attempt("vertical_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", "")))
+            health_extra = _record_provider_result(provider, status, data.get("error_type", ""), data.get("error", ""))
+            attempts.append(_attempt("vertical_search", provider, status, start, error_type=data.get("error_type", ""), error=data.get("error", ""), extra=health_extra))
         except Exception as e:
-            attempts.append(_attempt_from_exception("vertical_search", provider, start, e))
+            attempts.append(_attempt_with_health("vertical_search", provider, start, e))
     return [], attempts
 
 
@@ -2877,6 +3086,7 @@ async def search(
                 "搜索失败或无结果",
             )
         result["provider_attempts"] = provider_attempts
+        result["provider_notices"] = _provider_notices(provider_attempts)
         result["providers_used"] = _provider_names_from_attempts(provider_attempts)
         result["fallback_used"] = _fallback_used(provider_attempts)
         result["transport_fallback_used"] = transport_fallback_used
@@ -2900,9 +3110,16 @@ async def search(
     effective_model = successful_main_config["model"]
 
     extra_calls: list[tuple[str, Any]] = []
-    if tavily_count:
+    extra_providers = [
+        provider
+        for provider, wanted in (("tavily", tavily_count), ("firecrawl", firecrawl_count))
+        if wanted
+    ]
+    extra_runnable, extra_skipped = _plan_provider_health("web_search", extra_providers)
+    provider_attempts.extend(extra_skipped)
+    if tavily_count and "tavily" in extra_runnable:
         extra_calls.append(("tavily", lambda: call_tavily_search(query, tavily_count)))
-    if firecrawl_count:
+    if firecrawl_count and "firecrawl" in extra_runnable:
         extra_calls.append(("firecrawl", lambda: call_firecrawl_search(query, firecrawl_count)))
 
     gathered = await _collect_extra_source_calls(extra_calls, budget, execution)
@@ -2911,13 +3128,14 @@ async def search(
     firecrawl_results: list[dict] | None = None
     for provider, attempt_start, result in gathered:
         if isinstance(result, BaseException):
-            provider_attempts.append(_attempt_from_exception("web_search", provider, attempt_start, result))
+            provider_attempts.append(_attempt_with_health("web_search", provider, attempt_start, result))
             continue
         if result:
             if provider == "tavily":
                 tavily_results = result
             else:
                 firecrawl_results = result
+            _record_provider_result(provider, "ok")
             provider_attempts.append(_attempt("web_search", provider, "ok", attempt_start, result_count=len(result)))
         else:
             provider_attempts.append(_attempt("web_search", provider, "empty", attempt_start))
@@ -3017,6 +3235,7 @@ async def search(
         "routing_decision": routing_decision,
         "providers_used": _provider_names_from_attempts(provider_attempts),
         "provider_attempts": provider_attempts,
+        "provider_notices": _provider_notices(provider_attempts),
         "fallback_used": _fallback_used(provider_attempts),
         "transport_fallback_used": transport_fallback_used,
         "model_fallback_used": model_fallback_used,
@@ -3595,6 +3814,7 @@ async def fetch(url: str) -> dict[str, Any]:
         return {
             **fetch_result,
             "provider_attempts": attempts,
+            "provider_notices": _provider_notices(attempts),
             "fallback_used": _fallback_used(attempts),
             "elapsed_ms": _elapsed_ms(start),
         }
@@ -3610,10 +3830,12 @@ async def fetch(url: str) -> dict[str, Any]:
             error = f"{error}; {_tavily_disabled_message()}"
         error_type = "config_error"
     else:
+        # A cooled-down provider still carries the failure that opened it, so a
+        # fully skipped chain reports that cause instead of "returned empty".
         failed_attempts = [
             attempt
             for attempt in attempts
-            if attempt.get("status") == "error" and attempt.get("error_type")
+            if attempt.get("status") in {"error", "skipped"} and attempt.get("error_type")
         ]
         if failed_attempts:
             last_failure = failed_attempts[-1]
@@ -3630,6 +3852,7 @@ async def fetch(url: str) -> dict[str, Any]:
         "error_type": error_type,
         "error": error,
         "provider_attempts": attempts,
+        "provider_notices": _provider_notices(attempts),
         "fallback_used": _fallback_used(attempts),
         "elapsed_ms": _elapsed_ms(start),
     }
@@ -4600,6 +4823,33 @@ async def _test_context7_connection() -> dict[str, Any]:
     return {"status": "warning", "message": result.get("error", "Context7 API 不可用"), "response_time_ms": result.get("elapsed_ms", 0)}
 
 
+DOCTOR_PROBE_PROVIDERS = {
+    "exa_connection_test": "exa",
+    "tavily_connection_test": "tavily",
+    "jina_connection_test": "jina",
+    "zhipu_connection_test": "zhipu",
+    "zhipu_mcp_connection_test": "zhipu-mcp",
+    "context7_connection_test": "context7",
+}
+DOCTOR_PROBE_NEUTRAL_STATUSES = {"not_configured", "configured", "skipped", "disabled"}
+
+
+def _record_doctor_probes(info: dict[str, Any]) -> None:
+    """Let `doctor` double as the recovery path for a cooled-down provider."""
+    for key, provider in DOCTOR_PROBE_PROVIDERS.items():
+        test = info.get(key)
+        if not isinstance(test, dict):
+            continue
+        status = str(test.get("status") or "")
+        if status in DOCTOR_PROBE_NEUTRAL_STATUSES:
+            continue
+        if status == "ok":
+            _record_provider_result(provider, "ok")
+            continue
+        error_type = status if status in APPROVED_PROVIDER_ERROR_TYPES or status == "config_error" else "provider_error"
+        _record_provider_result(provider, "error", error_type, str(test.get("message") or ""))
+
+
 async def doctor() -> dict[str, Any]:
     info = config.get_config_info()
 
@@ -4677,6 +4927,9 @@ async def doctor() -> dict[str, Any]:
         info["context7_connection_test"] = {"status": "timeout", "message": "Context7 API 请求超时"}
     except Exception as e:
         info["context7_connection_test"] = {"status": "error", "message": sanitize_provider_error_message(e)}
+
+    _record_doctor_probes(info)
+    info["provider_health"] = provider_health_status()
 
     minimum = validate_minimum_profile()
     info["capability_status"] = minimum.get("capability_status", get_capability_status())

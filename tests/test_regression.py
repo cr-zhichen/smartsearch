@@ -183,7 +183,7 @@ def test_search_timeout_retry_policy_is_distributable():
     skill_markers = [
         "Timeout Retry Policy",
         "error_type: \"timeout\"",
-        "Retry up to 3 total attempts with `--timeout 180`",
+        "Retry up to 3 total attempts with `--timeout 300`",
         "`--extra-sources 1` during retry attempts",
         "`--timeout` only for an explicit one-call override",
         "Do not wrap `smart-search` in a shell-level `timeout` command",
@@ -195,7 +195,7 @@ def test_search_timeout_retry_policy_is_distributable():
     ]
     contract_markers = [
         "Agent timeout handling contract",
-        "`smart-search search ... --timeout 180 --extra-sources 1 --format json --output PATH`",
+        "`smart-search search ... --timeout 300 --extra-sources 1 --format json --output PATH`",
         "not a shell-level `timeout` wrapper",
         "`SMART_SEARCH_RETRY_*` settings are not the contract",
         "switch to source-first fallback",

@@ -26,7 +26,8 @@ Use the local `smart-search` command as the default execution layer for web rese
 6. Use `smart-search skills status --targets codex --format json` when the installed global skill may be stale; use `smart-search skills update --targets codex --format json` to refresh it without rerunning setup.
 7. Use `smart-search smoke --mock --format json` after CLI/provider architecture changes. Use `--live` only when real keys are available and the user expects live checks.
 8. Treat `TAVILY_ENABLED=false` as an intentional no-network boundary: do not work around it with direct Tavily or `map` calls. Check `doctor` and live smoke for disabled/skipped Tavily state; Firecrawl remains independently configured.
-9. Preserve command lines and source URLs in your answer. Prefer citing fetched pages or `primary_sources`; treat `extra_sources` as follow-up candidates until fetched.
+9. If a result reports a degraded provider in `provider_notices`, or a provider attempt is `skipped`, run `smart-search providers status --format json`. The channel is on a persisted failure cooldown; fix the credential or run `smart-search providers reset PROVIDER` instead of retrying the same failing provider.
+10. Preserve command lines and source URLs in your answer. Prefer citing fetched pages or `primary_sources`; treat `extra_sources` as follow-up candidates until fetched.
 
 ## Routing
 
@@ -41,6 +42,7 @@ Use the local `smart-search` command as the default execution layer for web rese
 - `map`: documentation site or domain structure before fetching many pages from one site.
 - `anysearch-*`: explicit experimental vertical search only. Inspect domains first and do not use AnySearch as default fallback. Parse JSON parameters before repeatable `--param key=value` overrides; `anysearch-extract --max-length` sends only the URL upstream and truncates successful text locally.
 - `sciverse-*`: explicit experimental academic search only. Use for catalog/search/semantic/read/relations; do not use Sciverse as `docs_search`, `standard`, or default `search` / `research` fallback.
+- `providers status` / `providers reset`: inspect or clear the persisted failure cooldown for optional providers; use it when a channel keeps reporting the same failure.
 - `model current`: inspect explicit provider models only. Change models with `smart-search config set XAI_MODEL ...` or `smart-search config set OPENAI_COMPATIBLE_MODEL ...`.
 
 ## Key Boundaries

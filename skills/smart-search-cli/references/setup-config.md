@@ -13,7 +13,8 @@
 
 - Prefer the CLI's local config file managed by `smart-search setup` / `smart-search config`.
 - Environment variables remain supported for CI and advanced users, and override the local config file.
-- `SMART_SEARCH_TIMEOUT_SECONDS` persists the total monotonic `search` budget and defaults to `180`; explicit `search --timeout SECONDS` overrides environment, config, and default for one invocation.
+- `SMART_SEARCH_TIMEOUT_SECONDS` persists the total monotonic `search` budget and defaults to `300`; explicit `search --timeout SECONDS` overrides environment, config, and default for one invocation. The budget is also the main-search read ceiling, so slow reasoning models are no longer cut off by a separate fixed provider read timeout.
+- `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS` defaults to `900` and `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` defaults to `2`. They control how long a repeatedly failing optional provider is skipped; `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS=0` disables the cooldown entirely.
 - Do not ask users to set Windows global API-key environment variables by default.
 - If keys are changed with `smart-search config set`, rerun the CLI; no Codex restart is needed.
 - If PATH is changed, a new terminal or Codex restart may be needed.
@@ -26,7 +27,7 @@
 
 - Use `smart-search doctor --format json` for agent/script parsing and `smart-search doctor --format markdown` when a human wants a detailed diagnostic report.
 - If `smart-search doctor --format json` returns `ok: false`, follow the `error` field's guidance (`smart-search setup` or `smart-search config set KEY VALUE`); do not silently fall back to native web search.
-- `doctor --format markdown` must render a detailed diagnostic report with overall status, active/default/legacy config paths, log path resolution, file-logging status, masked config values with sources, minimum profile, capability status, main-search provider checks, provider connectivity checks, intent router status, embedding threshold/margin metadata, model metadata, and full long error/message detail.
+- `doctor --format markdown` must render a detailed diagnostic report with overall status, active/default/legacy config paths, log path resolution, file-logging status, masked config values with sources, minimum profile, capability status, providers currently on failure cooldown, main-search provider checks, provider connectivity checks, intent router status, embedding threshold/margin metadata, model metadata, and full long error/message detail.
 - Use `smart-search diagnose openai-compatible --format markdown` when `doctor` succeeds but OpenAI-compatible `search` appears to hang, returns a timeout, or differs between `--stream` and `--no-stream`. It is the beginner-facing one-command report for upstream/relay compatibility.
 - `diagnose openai-compatible --format markdown` must render a short copy-pasteable troubleshooting report with masked config, the selected API mode and endpoint, a quick selected-endpoint check, real search-shape `stream=false` and `stream=true` checks, fallback-model inventory against `/models`, the remaining-budget timeout policy, a plain-language summary, and a next command.
 
@@ -71,7 +72,7 @@
 - Use `smart-search setup --non-interactive --openai-compatible-api-mode responses` only when a named relay requires `/responses`. The default is `chat-completions` and uses `/chat/completions`; invalid modes fail before setup saves any field.
 - Use `smart-search setup --non-interactive --openai-compatible-stream true` only when an OpenAI-compatible relay benefits from SSE streaming for long requests. Default remains false.
 - Use `smart-search setup --non-interactive --openai-compatible-fallback-models "model-a,model-b"` to save ordered OpenAI-compatible backup models for primary model hard failure. These models do not receive a reserved time slice; the primary model keeps the remaining shared main-search budget. `--fallback off` and `search --model MODEL` disable this model fallback for one invocation.
-- Use `smart-search setup --non-interactive --search-timeout 180` or `smart-search config set SMART_SEARCH_TIMEOUT_SECONDS 180` to persist the normal search budget. Invalid non-positive values fail before provider work.
+- Use `smart-search setup --non-interactive --search-timeout 300` or `smart-search config set SMART_SEARCH_TIMEOUT_SECONDS 300` to persist the normal search budget. Invalid non-positive values fail before provider work.
 - Use `smart-search setup --non-interactive --anysearch-api-url "https://api.anysearch.com/mcp" --anysearch-key "key"` only for experimental AnySearch acceptance; do not add it to the normal minimum-profile setup.
 - Use `smart-search setup --non-interactive --sciverse-token "key" --sciverse-api-url "https://api.sciverse.space"` only for explicit experimental Sciverse academic commands; do not add it to the normal minimum-profile setup.
 - `TAVILY_API_URL` defaults to `https://api.tavily.com` and only affects Tavily REST calls. It does not proxy Zhipu.
@@ -80,6 +81,16 @@
 - `ANYSEARCH_API_URL` defaults to `https://api.anysearch.com/mcp`; `ANYSEARCH_TIMEOUT_SECONDS` defaults to `30`.
 - `SCIVERSE_API_URL` defaults to `https://api.sciverse.space`; `SCIVERSE_TIMEOUT_SECONDS` defaults to `30`.
 - `FIRECRAWL_API_URL` defaults to `https://api.firecrawl.dev/v2`. Use it only for a Firecrawl-compatible REST base.
+
+## Provider Failure Cooldown
+
+- Optional providers (`web_search`, `docs_search`, `web_fetch`, `vertical_search`) are additive. When one keeps failing, Smart Search records it in `provider_health.json` next to `config.json` and skips it instead of re-calling it on every invocation. Main-search providers are never skipped this way.
+- A hard failure (`auth_error`, `config_error`) opens the cooldown on the first occurrence and is never probed, because a bad key does not heal itself. Soft failures (timeout, `5xx`, rate limit) need `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` consecutive failures and stay probeable, so a recovered provider returns without user action.
+- An empty result set is not a failure and never opens a cooldown.
+- The record is keyed to a fingerprint of the provider's credentials, so re-keying a provider with `smart-search config set` clears its cooldown automatically. A successful `smart-search doctor` probe also clears it.
+- Use `smart-search providers status --format json` to see which providers are cooling and why, and `smart-search providers reset PROVIDER` to retry one immediately. `smart-search providers reset` with no argument clears every cooldown.
+- Use `smart-search setup --non-interactive --provider-cooldown 600 --provider-failure-threshold 3`, or `smart-search config set SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS VALUE`, to persist the cooldown policy. A negative or non-numeric cooldown and a non-positive threshold fail before setup saves any field.
+- A skipped provider is still reported: the attempt has `status=skipped` with the remembered `error_type`, and `provider_notices` carries one deduplicated entry per degraded provider.
 
 ## Intent Router Setup
 

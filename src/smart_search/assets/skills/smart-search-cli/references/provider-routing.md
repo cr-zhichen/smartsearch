@@ -141,7 +141,7 @@ OpenAI-compatible streaming:
 - `OPENAI_COMPATIBLE_STREAM` defaults to `false` and accepts `true`, `1`, or `yes` as true.
 - `search --stream` means "prefer stream first"; stream empty/timeout/retryable protocol failures fall back to the same provider/model with `stream=false`.
 - `search --no-stream` forces `stream=false` for the current invocation.
-- `SMART_SEARCH_TIMEOUT_SECONDS` defines one 180-second default monotonic `search` budget. Hybrid remote routing shares a cap while reserving main-model capacity; explicit `search --timeout` overrides the saved value for one invocation.
+- `SMART_SEARCH_TIMEOUT_SECONDS` defines one 300-second default monotonic `search` budget, and the main-search provider uses the whole remaining budget as its read ceiling rather than a separate fixed cap. Hybrid remote routing shares a cap while reserving main-model capacity (two thirds of the budget, up to 240 seconds); explicit `search --timeout` overrides the saved value for one invocation.
 - `OPENAI_COMPATIBLE_FALLBACK_MODELS` is an optional comma-separated ordered list. It is fail-over after a hard primary-model failure, not a time slice. The current candidate keeps the remaining shared main-search budget; extra fallback models must not shrink that budget. `--fallback off` or `--model MODEL` disables this model fallback for the invocation.
 - `timeout_phase`, `phase_attempts`, elapsed/remaining deadline values, and `partial_success` are scheduler telemetry. Optional extra/supplemental timeout retains primary content and completed sources; strict evidence validation still reports insufficient evidence when no sources remain.
 - OpenAI-compatible attempts may include `model`, `transport`, `fallback_from_transport`, `fallback_from_model`, and `breaker_state`. `transport_fallback_used` records stream-to-non-stream recovery separately from provider/model `fallback_used`.
@@ -152,6 +152,14 @@ Exa domain filters:
 - `--include-domains` and `--exclude-domains` accept comma-separated or whitespace-separated domains.
 - Both `--include-domains docs.python.org,developer.mozilla.org` and `--include-domains docs.python.org developer.mozilla.org` normalize to the same Exa domain list.
 - This normalization is intentional for Windows PowerShell, where an unquoted comma expression can be forwarded through `.ps1` wrappers as a space-separated value.
+
+## Provider Failure Cooldown
+
+- Same-capability fallback assumes a failing provider is worth retrying. A provider whose key is revoked, quota is exhausted, or endpoint is down is not, so its failures are persisted in `provider_health.json` and the provider is skipped for `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS` instead of being called again on every invocation.
+- Hard failures (`auth_error`, `config_error`) open the cooldown immediately for four cooldown windows and are not probed. Soft failures need `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` consecutive failures within one window, and remain probeable once per window when no healthy provider is left in the chain.
+- A skipped provider appears in `provider_attempts` with `status=skipped`, the remembered `error_type`, and a `provider_health` block. It is not a silent drop, and it does not change same-capability fallback order.
+- Zhipu reports several failures inside an HTTP `200` body. Those payloads are classified (`auth_error`, `rate_limited`, `provider_error`) instead of being reported as an empty result set, so a dead Zhipu channel is diagnosable and coolable.
+- Recovery paths: `smart-search providers reset PROVIDER`, a credential change through `smart-search config set`, a successful `smart-search doctor` probe, or waiting out the cooldown.
 
 ## Provider Output Details
 

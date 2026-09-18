@@ -180,13 +180,18 @@ class OpenAICompatibleSearchProvider(BaseSearchProvider):
     def _request_timeout(self) -> httpx.Timeout:
         remaining = self._remaining_search_deadline()
         if remaining is None:
-            return httpx.Timeout(connect=6.0, read=120.0, write=10.0, pool=None)
+            # Standalone calls have no shared deadline, so the configured search
+            # budget is the ceiling. Reasoning models routinely need longer than
+            # the old fixed two minutes before the first token arrives.
+            return httpx.Timeout(connect=6.0, read=config.search_timeout_or_default, write=10.0, pool=None)
         if remaining <= 0:
             raise asyncio.TimeoutError("main_search deadline exhausted")
         bounded = max(0.001, remaining)
+        # The shared main_search deadline already bounds this request; a second,
+        # smaller read cap would only cut the primary model short.
         return httpx.Timeout(
             connect=min(6.0, bounded),
-            read=min(120.0, bounded),
+            read=bounded,
             write=min(10.0, bounded),
             pool=bounded,
         )

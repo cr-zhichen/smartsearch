@@ -285,7 +285,9 @@ smart-search deep "https://example.com/source" --format json
 | `INTENT_CLASSIFIER_API_KEY` | 可选 classifier key；`doctor` 和 config 输出会脱敏 |
 | `INTENT_CLASSIFIER_MODEL` | classifier 模型名 |
 | `INTENT_ROUTER_TIMEOUT_SECONDS` | 可选远程路由调用超时，默认 `8` |
-| `SMART_SEARCH_TIMEOUT_SECONDS` | `search` 的总单调时限，默认 `180`；单次 `search --timeout` 可覆盖 |
+| `SMART_SEARCH_TIMEOUT_SECONDS` | `search` 的总单调时限，默认 `300`；单次 `search --timeout` 可覆盖 |
+| `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS` | 可选 provider 连续失败后被跳过的时长，默认 `900`；设为 `0` 关闭冷却 |
+| `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` | 可选 provider 进入冷却前允许的连续软失败次数，默认 `2` |
 
 默认 `hybrid` 是 fail-open：embeddings 或 classifier 没配置、超时或失败时，会在 `degraded_reason` 里说明，然后自动退回本地规则。语义路由只有在 top1 相似度达到 `INTENT_EMBEDDING_THRESHOLD`，并且 top1 与第二名差值达到 `INTENT_EMBEDDING_MARGIN` 时，才会直接添加 capability；否则只记录 ambiguous 信号。classifier 可以补充 capability，但未知 capability 和 provider 名会被忽略；provider 仍然只能由 capability-first 注册表选择。
 
@@ -303,8 +305,9 @@ smart-search route-calibrate --models "Qwen/Qwen3-Embedding-8B" --format markdow
 
 - xAI 官方联网搜索通过 `XAI_*` 走 `/responses`。OpenAI-compatible 中转默认走 `/chat/completions`；只有中转明确支持文档化的 Responses 子集时才设置 `OPENAI_COMPATIBLE_API_MODE=responses`。
 - `OPENAI_COMPATIBLE_STREAM=true` 或 `smart-search search --stream` 只会给 OpenAI-compatible 的 `search` 和 provider 侧 `fetch` 设置 `stream=true`。它是中转长请求兼容开关，不改变 xAI Responses、URL 描述和来源排序行为。
-- `SMART_SEARCH_TIMEOUT_SECONDS` 是持久化的 `search` 总时限；环境变量覆盖本机配置文件，单次 `search --timeout SECONDS` 覆盖两者，默认 `180` 秒。
-- service 以一个单调 deadline 协调 router、main search、extra sources 和 supplemental evidence。hybrid 远程路由共享一个上限，并为 main search 预留 `min(120 秒, 总时限的三分之二)`；可选工作超时只会产生部分成功，不会清空已有主答案。
+- `SMART_SEARCH_TIMEOUT_SECONDS` 是持久化的 `search` 总时限；环境变量覆盖本机配置文件，单次 `search --timeout SECONDS` 覆盖两者，默认 `300` 秒。
+- service 以一个单调 deadline 协调 router、main search、extra sources 和 supplemental evidence。hybrid 远程路由共享一个上限，并为 main search 预留 `min(240 秒, 总时限的三分之二)`；可选工作超时只会产生部分成功，不会清空已有主答案。
+- 主搜索 provider 直接用剩余的共享预算作为读取上限，不再额外套一层固定的 provider 读超时，因此慢推理模型不会在共享 deadline 之前被提前掐断。
 - `OPENAI_COMPATIBLE_FALLBACK_MODELS` 是失败后接力，不是时间片。主模型会使用剩余的共享 main-search 预算；只有硬失败（例如 `model_not_found`、鉴权失败、空结果、不可重试协议错误）才会换兜底模型。`doctor` 和 `diagnose openai-compatible` 会在兜底模型不在 `/models` 里时给出警告。
 - 旧的 `SMART_SEARCH_API_URL`、`SMART_SEARCH_API_KEY`、`SMART_SEARCH_API_MODE`、`SMART_SEARCH_MODEL`、`SMART_SEARCH_XAI_TOOLS` 不再是受支持配置项。请显式使用 `XAI_*` 或 `OPENAI_COMPATIBLE_*`。
 - 不要给 OpenAI-compatible 任一 API mode 强塞 xAI 的 `web_search` / `x_search` 工具或旧 `search_parameters`。
@@ -333,7 +336,7 @@ smart-search setup --non-interactive `
   --openai-compatible-api-mode "chat-completions" `
   --openai-compatible-stream "false" `
   --validation-level "balanced" `
-  --search-timeout "180" `
+  --search-timeout "300" `
   --fallback-mode "auto" `
   --minimum-profile "standard" `
   --intent-router "hybrid" `
@@ -413,7 +416,9 @@ smart-search sciverse-relations "unique-id-from-search" --relation CITATIONS --p
 | `OPENAI_COMPATIBLE_MODEL` | 兼容模型名 |
 | `OPENAI_COMPATIBLE_API_MODE` | `chat-completions` 或 `responses`，默认 `chat-completions` |
 | `OPENAI_COMPATIBLE_STREAM` | OpenAI-compatible 中转兼容开关，接受 `true/1/yes`，默认 `false` |
-| `SMART_SEARCH_TIMEOUT_SECONDS` | `search` 总时限，默认 `180`；环境变量覆盖配置文件，`search --timeout` 单次覆盖 |
+| `SMART_SEARCH_TIMEOUT_SECONDS` | `search` 总时限，默认 `300`；环境变量覆盖配置文件，`search --timeout` 单次覆盖 |
+| `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS` | 可选 provider 失败冷却时长（秒），默认 `900`，`0` 关闭 |
+| `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` | 进入冷却前的连续软失败次数，默认 `2` |
 | `ANYSEARCH_API_URL` | AnySearch JSON-RPC endpoint，默认 `https://api.anysearch.com/mcp` |
 | `ANYSEARCH_API_KEY` | 可选 AnySearch key |
 | `ANYSEARCH_TIMEOUT_SECONDS` | AnySearch 请求超时，默认 `30` |
@@ -456,6 +461,24 @@ smart-search sciverse-relations "unique-id-from-search" --relation CITATIONS --p
 | `SMART_SEARCH_RESEARCH_DISABLED_PROVIDERS` | `research` 禁用 provider CSV，不能改变 provider capability 边界 |
 | `SMART_SEARCH_CONFIG_DIR` | 指定本机配置和日志根目录 |
 
+## Provider 失败冷却
+
+可选 provider（`web_search`、`docs_search`、`web_fetch`、`vertical_search`）是增量能力。某个渠道一直失败时——比如智谱 key 被吊销、额度用尽、endpoint 挂掉——每次调用都重试它只会浪费时间，并把同一条错误反复弹给用户。smart-search 是短生命周期 CLI 进程，所以这些失败会被记在 `config.json` 旁边的 `provider_health.json` 里：
+
+- 硬失败（`auth_error`、`config_error`）第一次就进入冷却，并且不会再被试探：key 不对不会自己变好。
+- 软失败（超时、`5xx`、限流）需要在一个冷却窗口内连续失败 `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` 次；它们保持可试探，恢复后不需要用户手动操作就会回来。
+- 搜到 0 条结果不算失败，不会触发冷却。
+- 主搜索 provider 永远不会被这样跳过。被冷却的 provider 也不是被静默丢弃：它在 `provider_attempts` 里是 `status=skipped` 并带着记住的 `error_type`，同时 `provider_notices` 每个降级 provider 只给一条去重后的提示，取代反复出现的报错。
+
+常见情况下恢复是自动的：记录绑定在 provider 凭据的指纹上，用 `smart-search config set` 换 key 会自动清除冷却，`smart-search doctor` 探测成功也会清除。
+
+```powershell
+smart-search providers status --format markdown
+smart-search providers reset zhipu --format json
+smart-search providers reset --format json
+smart-search config set SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS "0" --format json
+```
+
 ## 常用命令
 
 | 命令 | 简写 | 用途 |
@@ -490,6 +513,7 @@ smart-search sciverse-relations "unique-id-from-search" --relation CITATIONS --p
 | `setup` | `init` | 配置向导 |
 | `config` | `cfg` | 本机配置读写 |
 | `model` | `mdl` | 查看显式 provider 模型；修改请用 `config set XAI_MODEL` 或 `OPENAI_COMPATIBLE_MODEL` |
+| `providers` | `prov` | 查看（`status`）或清除（`reset`）可选 provider 的失败冷却记录 |
 | `smoke` | `sm` | provider 路由冒烟测试 |
 | `regression` | `reg` | 离线回归测试 |
 
@@ -498,7 +522,7 @@ smart-search sciverse-relations "unique-id-from-search" --relation CITATIONS --p
 示例：
 
 ```powershell
-smart-search search "query" --validation balanced --extra-sources 3 --timeout 180 --format json --output result.json
+smart-search search "query" --validation balanced --extra-sources 3 --timeout 300 --format json --output result.json
 smart-search route "React useEffect API docs" --format markdown
 smart-search route-calibrate --models "Qwen/Qwen3-Embedding-8B" --format markdown
 smart-search research "query" --budget deep --fallback auto --format json --output research.json
@@ -520,6 +544,8 @@ smart-search exa-similar "https://example.com/source" --num-results 5 --format j
 smart-search fetch "https://example.com/source" --format markdown --output page.md
 smart-search map "https://docs.example.com" --instructions "Find API reference pages" --max-depth 1 --limit 50 --format json
 smart-search doctor --format markdown
+smart-search providers status --format markdown
+smart-search providers reset zhipu --format json
 smart-search smoke --mock --format json
 smart-search regression
 ```

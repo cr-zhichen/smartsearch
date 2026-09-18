@@ -91,6 +91,9 @@ def test_each_subcommand_help_exits_successfully(capsys):
         ["model", "--help"],
         ["model", "set", "--help"],
         ["model", "current", "--help"],
+        ["providers", "--help"],
+        ["providers", "status", "--help"],
+        ["providers", "reset", "--help"],
         ["regression", "--help"],
     ]
 
@@ -149,6 +152,7 @@ def test_command_aliases_parse_to_canonical_commands():
         (["init", "--non-interactive"], "setup"),
         (["cfg", "ls"], "config"),
         (["mdl", "cur"], "model"),
+        (["prov", "status"], "providers"),
         (["reg"], "regression"),
     ]
 
@@ -180,6 +184,14 @@ def test_command_aliases_parse_to_canonical_commands():
     ]
     for argv, skills_command in skills_cases:
         assert parser.parse_args(argv).skills_command == skills_command
+
+    providers_cases = [
+        (["providers", "st"], "status"),
+        (["prov", "ls"], "status"),
+        (["providers", "clear"], "reset"),
+    ]
+    for argv, providers_command in providers_cases:
+        assert parser.parse_args(argv).providers_command == providers_command
 
 
 def test_search_help_exposes_timeout(capsys):
@@ -3399,3 +3411,174 @@ def test_regression_uses_mock_smoke_when_packaged_tests_missing(monkeypatch, cap
     assert code == cli.EXIT_OK
     assert "Packaged install has no test files" in captured.err
     assert json.loads(captured.out)["mode"] == "mock"
+
+
+def test_providers_status_reports_cooldown_in_json_and_markdown(monkeypatch, capsys):
+    payload = {
+        "ok": True,
+        "enabled": True,
+        "cooldown_seconds": 900.0,
+        "failure_threshold": 2,
+        "store_path": "/tmp/provider_health.json",
+        "providers": [
+            {
+                "provider": "zhipu",
+                "configured": True,
+                "state": "cooldown",
+                "consecutive_failures": 1,
+                "error_type": "auth_error",
+                "error": "HTTP 401: invalid api key",
+                "cooldown_remaining_seconds": 3540.0,
+                "hard_failure": True,
+            }
+        ],
+        "cooldown_providers": ["zhipu"],
+    }
+    monkeypatch.setattr(cli.service, "provider_health_status", lambda: payload)
+
+    assert cli.main(["providers", "status"]) == cli.EXIT_OK
+    assert json.loads(capsys.readouterr().out)["cooldown_providers"] == ["zhipu"]
+
+    assert cli.main(["providers", "status", "--format", "markdown"]) == cli.EXIT_OK
+    out = capsys.readouterr().out
+    assert "# Provider Health" in out
+    assert "| zhipu | YES | cooldown |" in out
+    assert "auth_error" in out
+
+    assert cli.main(["prov", "status", "--format", "content"]) == cli.EXIT_OK
+    assert "cooldown=zhipu" in capsys.readouterr().out
+
+
+def test_providers_reset_reports_cleared_providers(monkeypatch, capsys):
+    seen = {}
+
+    def fake_reset(providers=None):
+        seen["providers"] = providers
+        return {"ok": True, "error_type": "", "error": "", "cleared": ["zhipu"], "known_providers": ["zhipu"]}
+
+    monkeypatch.setattr(cli.service, "reset_provider_health", fake_reset)
+
+    assert cli.main(["providers", "reset", "zhipu", "--format", "content"]) == cli.EXIT_OK
+    assert seen["providers"] == ["zhipu"]
+    assert "zhipu" in capsys.readouterr().out
+
+    assert cli.main(["providers", "reset", "--format", "content"]) == cli.EXIT_OK
+    assert seen["providers"] is None
+    capsys.readouterr()
+
+
+def test_providers_reset_rejects_unknown_provider(monkeypatch, capsys):
+    monkeypatch.setattr(
+        cli.service,
+        "reset_provider_health",
+        lambda providers=None: {
+            "ok": False,
+            "error_type": "parameter_error",
+            "error": "Unknown provider: nope",
+            "cleared": [],
+        },
+    )
+
+    assert cli.main(["providers", "reset", "nope", "--format", "content"]) == cli.EXIT_PARAMETER_ERROR
+    assert "Unknown provider" in capsys.readouterr().out
+
+
+def test_search_markdown_keeps_steady_cooldowns_out_of_a_successful_answer(monkeypatch, capsys):
+    result = {
+        "ok": True,
+        "content": "Answer",
+        "sources": [],
+        "sources_count": 0,
+        "provider_notices": [
+            {
+                "provider": "zhipu",
+                "capability": "web_search",
+                "status": "cooldown",
+                "error_type": "auth_error",
+                "error": "HTTP 401",
+                "cooldown_remaining_seconds": 3540.0,
+                "hint": "reset it",
+            }
+        ],
+    }
+
+    async def fake_search(query, **kwargs):
+        return result
+
+    monkeypatch.setattr(cli.service, "search", fake_search)
+
+    assert cli.main(["search", "query", "--format", "markdown"]) == cli.EXIT_OK
+    assert "Degraded providers" not in capsys.readouterr().out
+
+    result["ok"] = False
+    result["error_type"] = "network_error"
+    result["error"] = "搜索失败或无结果"
+    assert cli.main(["search", "query", "--format", "markdown"]) == cli.EXIT_NETWORK_ERROR
+    out = capsys.readouterr().out
+    assert "Degraded providers: zhipu (cooldown 3540s, auth_error)" in out
+
+
+def test_search_markdown_reports_a_fresh_provider_failure(monkeypatch, capsys):
+    async def fake_search(query, **kwargs):
+        return {
+            "ok": True,
+            "content": "Answer",
+            "sources": [],
+            "sources_count": 0,
+            "provider_notices": [
+                {
+                    "provider": "tavily",
+                    "capability": "web_search",
+                    "status": "failed",
+                    "error_type": "rate_limited",
+                    "error": "HTTP 429",
+                    "cooldown_remaining_seconds": 0.0,
+                    "hint": "",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(cli.service, "search", fake_search)
+
+    assert cli.main(["search", "query", "--format", "markdown"]) == cli.EXIT_OK
+    assert "Degraded providers: tavily (rate_limited)" in capsys.readouterr().out
+
+
+def test_doctor_reports_providers_on_cooldown(monkeypatch, capsys):
+    payload = {
+        "ok": True,
+        "config_status": "ok: 配置完整",
+        "minimum_profile_ok": True,
+        "capability_status": {},
+        "provider_health": {
+            "cooldown_providers": ["zhipu"],
+            "providers": [
+                {
+                    "provider": "zhipu",
+                    "configured": True,
+                    "state": "cooldown",
+                    "consecutive_failures": 1,
+                    "error_type": "auth_error",
+                    "error": "HTTP 401: invalid api key",
+                    "cooldown_remaining_seconds": 3540.0,
+                    "hard_failure": True,
+                },
+                {"provider": "exa", "configured": True, "state": "closed", "cooldown_remaining_seconds": 0.0},
+            ],
+        },
+    }
+
+    async def fake_doctor():
+        return payload
+
+    monkeypatch.setattr(cli.service, "doctor", fake_doctor)
+
+    assert cli.main(["doctor", "--format", "markdown"]) == cli.EXIT_OK
+    out = capsys.readouterr().out
+    assert "## Providers On Cooldown" in out
+    assert "| zhipu | cooldown |" in out
+    # A healthy provider does not need a row in a cooldown report.
+    assert "| exa |" not in out
+
+    assert cli.main(["doctor", "--format", "content"]) == cli.EXIT_OK
+    assert "Providers on cooldown: zhipu" in capsys.readouterr().out

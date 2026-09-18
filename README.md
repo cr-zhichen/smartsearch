@@ -276,7 +276,9 @@ Intent router configuration:
 | `INTENT_CLASSIFIER_API_KEY` | Optional classifier API key; masked by `doctor` and config output |
 | `INTENT_CLASSIFIER_MODEL` | Classifier model name |
 | `INTENT_ROUTER_TIMEOUT_SECONDS` | Timeout for optional remote router calls, default `8` |
-| `SMART_SEARCH_TIMEOUT_SECONDS` | Total monotonic `search` budget, default `180`; `search --timeout` overrides it for one invocation |
+| `SMART_SEARCH_TIMEOUT_SECONDS` | Total monotonic `search` budget, default `300`; `search --timeout` overrides it for one invocation |
+| `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS` | How long a repeatedly failing optional provider is skipped, default `900`; `0` disables the cooldown |
+| `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` | Consecutive soft failures before an optional provider is put on cooldown, default `2` |
 
 Default `hybrid` is fail-open: if embeddings or classifier settings are missing or fail, routing records `degraded_reason` and falls back to local rules. Semantic routing may add a capability only when the top similarity score is at least `INTENT_EMBEDDING_THRESHOLD` and the top-vs-second score gap is at least `INTENT_EMBEDDING_MARGIN`; otherwise it records an ambiguous signal without adding a capability. The classifier may add capabilities, but unknown capability names and provider names are ignored. Providers are still selected only by capability.
 
@@ -294,8 +296,9 @@ Important boundaries:
 
 - xAI official live search uses `/responses` through `XAI_*`. OpenAI-compatible relays use `/chat/completions` by default; set `OPENAI_COMPATIBLE_API_MODE=responses` only for a relay that explicitly supports the documented Responses subset.
 - `OPENAI_COMPATIBLE_STREAM=true` or `smart-search search --stream` sets `stream=true` only for OpenAI-compatible `search` and provider-side `fetch` calls. It is a relay compatibility switch for long requests and does not change xAI Responses behavior, URL description, or source ranking.
-- `SMART_SEARCH_TIMEOUT_SECONDS` is the persistent total `search` budget. Environment values override the local config file; `search --timeout SECONDS` overrides both. The default is `180` seconds.
-- The service owns one monotonic deadline across router, main search, extra sources, and supplemental evidence. Hybrid remote routing shares a cap and reserves `min(120 seconds, two thirds of the total)` for main search; optional work may finish partially but cannot erase a primary answer.
+- `SMART_SEARCH_TIMEOUT_SECONDS` is the persistent total `search` budget. Environment values override the local config file; `search --timeout SECONDS` overrides both. The default is `300` seconds.
+- The service owns one monotonic deadline across router, main search, extra sources, and supplemental evidence. Hybrid remote routing shares a cap and reserves `min(240 seconds, two thirds of the total)` for main search; optional work may finish partially but cannot erase a primary answer.
+- The main-search provider uses the whole remaining budget as its read ceiling. There is no separate fixed provider read cap to cut a slow reasoning model short before the shared deadline.
 - `OPENAI_COMPATIBLE_FALLBACK_MODELS` is fail-over, not a time slice. The primary model keeps the remaining shared main-search budget. A fallback model is tried only after a hard failure such as `model_not_found`, auth, empty content, or a non-retryable protocol error. `doctor` and `diagnose openai-compatible` warn when a configured fallback id is missing from `/models`.
 - Legacy `SMART_SEARCH_API_URL`, `SMART_SEARCH_API_KEY`, `SMART_SEARCH_API_MODE`, `SMART_SEARCH_MODEL`, and `SMART_SEARCH_XAI_TOOLS` are not supported config keys. Use `XAI_*` or `OPENAI_COMPATIBLE_*` explicitly.
 - Do not force xAI `web_search` / `x_search` tools or legacy `search_parameters` into either OpenAI-compatible API mode.
@@ -324,7 +327,7 @@ smart-search setup --non-interactive `
   --openai-compatible-api-mode "chat-completions" `
   --openai-compatible-stream "false" `
   --validation-level "balanced" `
-  --search-timeout "180" `
+  --search-timeout "300" `
   --fallback-mode "auto" `
   --minimum-profile "standard" `
   --intent-router "hybrid" `
@@ -394,12 +397,30 @@ Local config path:
 
 Provider timeouts:
 
-- `SMART_SEARCH_TIMEOUT_SECONDS` defaults to `180`. It is a shared service deadline, not a separate provider read timeout. JSON output adds `timeout_phase`, `phase_attempts`, elapsed/remaining deadline values, and `partial_success` when optional work is cut short after primary output succeeds.
+- `SMART_SEARCH_TIMEOUT_SECONDS` defaults to `300`. It is a shared service deadline and the main-search read ceiling, not a separate per-provider read timeout. JSON output adds `timeout_phase`, `phase_attempts`, elapsed/remaining deadline values, and `partial_success` when optional work is cut short after primary output succeeds.
 - `TAVILY_ENABLED` accepts `true`, `1`, or `yes` as enabled; any other value disables Tavily without making a Tavily network request.
 - `TAVILY_TIMEOUT_SECONDS` controls the Tavily `doctor` connectivity check timeout and defaults to `30`.
 - `ANYSEARCH_TIMEOUT_SECONDS` controls experimental AnySearch JSON-RPC calls and defaults to `30`.
 - `SCIVERSE_TIMEOUT_SECONDS` controls explicit Sciverse academic API calls and defaults to `30`.
 - Raise it for slower Tavily Hikari / pooled / community endpoints before treating the provider as unhealthy.
+
+## Provider Failure Cooldown
+
+Optional providers (`web_search`, `docs_search`, `web_fetch`, `vertical_search`) are additive. When one of them keeps failing - a revoked Zhipu key, an exhausted quota, a dead endpoint - retrying it on every invocation only costs latency and repeats the same error. Smart Search is a short-lived CLI process, so it remembers those failures in `provider_health.json` next to `config.json`:
+
+- A hard failure (`auth_error`, `config_error`) opens the cooldown on the first occurrence and is not probed again; a bad key does not heal itself.
+- A soft failure (timeout, `5xx`, rate limit) needs `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` consecutive failures inside one cooldown window, and stays probeable so a recovered provider returns without user action.
+- An empty result set is not a failure and never opens a cooldown.
+- Main-search providers are never skipped this way. A cooled-down provider is reported, not hidden: its attempt has `status=skipped` with the remembered `error_type`, and `provider_notices` carries one deduplicated entry per degraded provider instead of a repeated error.
+
+Recovery is automatic in the common cases. The record is keyed to a fingerprint of the provider's credentials, so re-keying with `smart-search config set` clears it, and a successful `smart-search doctor` probe clears it too.
+
+```powershell
+smart-search providers status --format markdown
+smart-search providers reset zhipu --format json
+smart-search providers reset --format json
+smart-search config set SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS "0" --format json
+```
 
 ## Commands
 
@@ -436,6 +457,7 @@ Provider timeouts:
 | `setup` | `init` | Interactive or scripted setup |
 | `config` | `cfg` | Local config read/write |
 | `model` | `mdl` | Show explicit provider model settings; use `config set XAI_MODEL` or `OPENAI_COMPATIBLE_MODEL` to change them |
+| `providers` | `prov` | Inspect (`status`) or clear (`reset`) the persisted failure cooldown for optional providers |
 | `smoke` | `sm` | Provider routing smoke tests |
 | `regression` | `reg` | Offline regression checks |
 
@@ -444,7 +466,7 @@ Smoke output includes `status` (`healthy`, `degraded`, or `failed`) and explicit
 Useful examples:
 
 ```powershell
-smart-search search "query" --validation balanced --extra-sources 3 --timeout 180 --format json --output result.json
+smart-search search "query" --validation balanced --extra-sources 3 --timeout 300 --format json --output result.json
 smart-search route "React useEffect API docs" --format markdown
 smart-search route-calibrate --models "Qwen/Qwen3-Embedding-8B" --format markdown
 smart-search research "query" --budget deep --fallback auto --format json --output research.json
@@ -469,6 +491,8 @@ smart-search fetch "https://example.com/source" --format markdown --output page.
 smart-search map "https://docs.example.com" --instructions "Find API reference pages" --max-depth 1 --limit 50 --format json
 smart-search doctor --format markdown
 smart-search diagnose openai-compatible --format markdown
+smart-search providers status --format markdown
+smart-search providers reset zhipu --format json
 smart-search smoke --mock --format json
 smart-search regression
 ```

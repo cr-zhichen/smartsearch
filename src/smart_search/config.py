@@ -19,7 +19,9 @@ class Config:
     _DEFAULT_MINIMUM_PROFILE = "standard"
     _DEFAULT_INTENT_ROUTER_MODE = "hybrid"
     _DEFAULT_INTENT_ROUTER_TIMEOUT_SECONDS = "8"
-    _DEFAULT_SEARCH_TIMEOUT_SECONDS = "180"
+    _DEFAULT_SEARCH_TIMEOUT_SECONDS = "300"
+    _DEFAULT_PROVIDER_COOLDOWN_SECONDS = "900"
+    _DEFAULT_PROVIDER_FAILURE_THRESHOLD = "2"
     _DEFAULT_INTENT_EMBEDDING_THRESHOLD = "0.74"
     _DEFAULT_INTENT_EMBEDDING_MARGIN = "0.05"
     _ALLOWED_XAI_TOOLS = {"web_search", "x_search"}
@@ -46,6 +48,8 @@ class Config:
         "SMART_SEARCH_RESEARCH_DISABLED_PROVIDERS",
         "SMART_SEARCH_INTENT_ROUTER",
         "SMART_SEARCH_TIMEOUT_SECONDS",
+        "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS",
+        "SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD",
         "INTENT_EMBEDDING_API_URL",
         "INTENT_EMBEDDING_API_KEY",
         "INTENT_EMBEDDING_MODEL",
@@ -457,8 +461,52 @@ class Config:
     def _validate_config_value(self, key: str, value: str) -> None:
         if key == "SMART_SEARCH_TIMEOUT_SECONDS":
             self._parse_positive_float_value(key, value)
+        elif key == "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS":
+            self._parse_non_negative_float_value(key, value)
+        elif key == "SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD":
+            self._parse_positive_int_value(key, value)
         elif key == "OPENAI_COMPATIBLE_API_MODE":
             self._validate_enum_value(key, value, self._ALLOWED_OPENAI_COMPATIBLE_API_MODES)
+
+    def _non_negative_float_value(self, key: str, default: str) -> float:
+        value = self._get_config_value(key, default) or default
+        return self._parse_non_negative_float_value(key, value)
+
+    @staticmethod
+    def _parse_non_negative_float_value(key: str, raw_value: object) -> float:
+        try:
+            value = float(raw_value)
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid {key}: {raw_value}. Expected a non-negative finite number.")
+        if not math.isfinite(value) or value < 0:
+            raise ValueError(f"Invalid {key}: {raw_value}. Expected a non-negative finite number.")
+        return value
+
+    def _non_negative_float_info(self, key: str, default: str) -> tuple[float, str]:
+        try:
+            return self._non_negative_float_value(key, default), ""
+        except ValueError as e:
+            return float(default), str(e)
+
+    def _positive_int_value(self, key: str, default: str) -> int:
+        value = self._get_config_value(key, default) or default
+        return self._parse_positive_int_value(key, value)
+
+    @staticmethod
+    def _parse_positive_int_value(key: str, raw_value: object) -> int:
+        try:
+            value = int(str(raw_value).strip())
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid {key}: {raw_value}. Expected a positive integer.")
+        if value < 1:
+            raise ValueError(f"Invalid {key}: {raw_value}. Expected a positive integer.")
+        return value
+
+    def _positive_int_info(self, key: str, default: str) -> tuple[int, str]:
+        try:
+            return self._positive_int_value(key, default), ""
+        except ValueError as e:
+            return int(default), str(e)
 
     def _positive_float_info(self, key: str, default: str) -> tuple[float, str]:
         try:
@@ -543,6 +591,36 @@ class Config:
     @property
     def search_timeout(self) -> float:
         return self._positive_float_value("SMART_SEARCH_TIMEOUT_SECONDS", self._DEFAULT_SEARCH_TIMEOUT_SECONDS)
+
+    @property
+    def search_timeout_or_default(self) -> float:
+        """Search budget for callers that must not raise on an invalid saved value.
+
+        `search` validates the budget up front and reports `parameter_error`.
+        Provider-level read ceilings run outside that check, so they fall back to
+        the default rather than turning a bad config value into a transport error.
+        """
+        value, _error = self._positive_float_info(
+            "SMART_SEARCH_TIMEOUT_SECONDS",
+            self._DEFAULT_SEARCH_TIMEOUT_SECONDS,
+        )
+        return value
+
+    @property
+    def provider_cooldown_seconds(self) -> float:
+        """Seconds a repeatedly failing optional provider stays skipped. 0 disables cooldown."""
+        return self._non_negative_float_value(
+            "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS",
+            self._DEFAULT_PROVIDER_COOLDOWN_SECONDS,
+        )
+
+    @property
+    def provider_failure_threshold(self) -> int:
+        """Consecutive soft failures before an optional provider is put on cooldown."""
+        return self._positive_int_value(
+            "SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD",
+            self._DEFAULT_PROVIDER_FAILURE_THRESHOLD,
+        )
 
     def _csv_values(self, key: str) -> list[str]:
         raw = self._get_config_value(key, "") or ""
@@ -790,6 +868,14 @@ class Config:
             "SMART_SEARCH_TIMEOUT_SECONDS",
             self._DEFAULT_SEARCH_TIMEOUT_SECONDS,
         )
+        provider_cooldown_seconds, provider_cooldown_error = self._non_negative_float_info(
+            "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS",
+            self._DEFAULT_PROVIDER_COOLDOWN_SECONDS,
+        )
+        provider_failure_threshold, provider_failure_threshold_error = self._positive_int_info(
+            "SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD",
+            self._DEFAULT_PROVIDER_FAILURE_THRESHOLD,
+        )
         intent_embedding_threshold, intent_embedding_threshold_error = self._bounded_float_info(
             "INTENT_EMBEDDING_THRESHOLD",
             self._DEFAULT_INTENT_EMBEDDING_THRESHOLD,
@@ -812,6 +898,8 @@ class Config:
                 openai_compatible_api_mode_error,
                 intent_router_timeout_error,
                 search_timeout_error,
+                provider_cooldown_error,
+                provider_failure_threshold_error,
                 intent_embedding_threshold_error,
                 intent_embedding_margin_error,
             )
@@ -847,6 +935,8 @@ class Config:
             "INTENT_CLASSIFIER_MODEL": self.intent_classifier_model or "未配置",
             "INTENT_ROUTER_TIMEOUT_SECONDS": intent_router_timeout,
             "SMART_SEARCH_TIMEOUT_SECONDS": search_timeout,
+            "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS": provider_cooldown_seconds,
+            "SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD": provider_failure_threshold,
             "SMART_SEARCH_DEBUG": self.debug_enabled,
             "SMART_SEARCH_LOG_LEVEL": self.log_level,
             "SMART_SEARCH_LOG_DIR": self.log_dir_config_value,

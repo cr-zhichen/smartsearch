@@ -11,7 +11,7 @@ Use this spec for any change that touches:
 - environment/config keys for search, docs, or fetch providers;
 - `search`, `doctor`, `setup`, `smoke`, or provider-specific CLI signatures;
 - output fields such as `routing_decision`, `providers_used`,
-  `provider_attempts`, `fallback_used`, or capability status;
+  `provider_attempts`, `provider_notices`, `fallback_used`, or capability status;
 - smoke/regression behavior for provider routing.
 
 This is an infra and cross-layer contract. The implementation must remain
@@ -41,6 +41,8 @@ smart-search route-calibrate
   [--format json|markdown|content]
   [--output PATH]
 
+smart-search providers status --format json|markdown|content
+smart-search providers reset [PROVIDER...] --format json|markdown|content
 smart-search doctor --format json|markdown|content
 smart-search diagnose openai-compatible
   [--timeout SECONDS]
@@ -133,6 +135,8 @@ search(query, platform="", model="", extra_sources=0,
 research(query, budget="deep", evidence_dir="", fallback="auto") -> dict[str, Any]
 route_calibrate(models="") -> dict[str, Any]
 doctor() -> dict[str, Any]
+provider_health_status() -> dict[str, Any]
+reset_provider_health(providers=None) -> dict[str, Any]
 diagnose_openai_compatible(timeout_seconds=30.0) -> dict[str, Any]
 smoke(mode="mock") -> dict[str, Any]
 ```
@@ -252,12 +256,45 @@ Minimum profile:
 - Missing required capability must fail closed before search execution.
 - `SMART_SEARCH_MINIMUM_PROFILE=off` is only for local experiments and tests.
 
+Optional-provider failure cooldown:
+
+- `main_search` providers are never skipped by cooldown. Only the additive
+  capabilities (`web_search`, `docs_search`, `web_fetch`, `vertical_search`)
+  participate.
+- Failures are persisted in `provider_health.json` inside the resolved config
+  directory. The store is best effort: an unreadable, corrupt, or unwritable
+  store must degrade to "no cooldown" and must never fail a search.
+- A hard failure (`auth_error`, `config_error`) opens the cooldown on the first
+  occurrence for four cooldown windows and is not probed. A soft failure needs
+  `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` consecutive failures inside one
+  cooldown window, and stays probeable once per window when no healthy provider
+  remains in the chain.
+- An empty normalized result is not a failure and must not open a cooldown.
+- A skipped provider must be reported, not hidden: record
+  `provider_attempts[].status="skipped"` with the remembered `error_type` and a
+  `provider_health` block. Cooldown must not reorder same-capability fallback
+  or promote a different capability.
+- Each record is keyed to a fingerprint of that provider's configured
+  credentials. Changing the credentials clears the cooldown; the fingerprint is
+  a one-way digest and must never expose key material.
+- Recovery paths are `providers reset`, a credential change, a successful
+  `doctor` probe for that provider, and cooldown expiry. `doctor` probes
+  providers directly and is not itself gated by cooldown.
+
 Provider configuration:
 
 - `SMART_SEARCH_TIMEOUT_SECONDS` configures the total monotonic `search`
-  budget and defaults to `180`. Environment values override the local config
+  budget and defaults to `300`. Environment values override the local config
   file; explicit `search --timeout` overrides both for one invocation. Values
   must be positive finite numbers and invalid values fail before provider work.
+  The budget is also the main-search read ceiling: a main-search provider must
+  not impose a second, smaller fixed read timeout inside the shared deadline.
+- `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS` defaults to `900` and configures how
+  long a repeatedly failing optional provider is skipped. It must be a
+  non-negative finite number; `0` disables the cooldown entirely.
+- `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` defaults to `2` and configures how
+  many consecutive soft failures open a cooldown. It must be a positive
+  integer. Invalid values for either key fail before persistence.
 - `XAI_API_KEY` registers `xai-responses`.
 - `XAI_API_URL` defaults to `https://api.x.ai/v1`.
 - `XAI_MODEL` and `XAI_TOOLS` configure the xAI Responses route.
@@ -660,11 +697,17 @@ Output contracts:
   JSON.
 - `--format content` prints only the `content` field for content-bearing
   commands (`search`, `fetch`, `context7-docs`, `research`). Commands without a
-  `content` field, including `doctor`, `smoke`, `config`, and `model`, must
-  print a compact non-empty text summary rather than empty stdout.
+  `content` field, including `doctor`, `smoke`, `config`, `model`, and
+  `providers`, must print a compact non-empty text summary rather than empty
+  stdout.
 - Include observability fields: `routing_decision`, `providers_used`,
-  `provider_attempts`, `fallback_used`, `validation_level`,
+  `provider_attempts`, `provider_notices`, `fallback_used`, `validation_level`,
   `minimum_profile_ok`, and `capability_status`.
+- `provider_notices` carries one deduplicated entry per degraded optional
+  provider with `provider`, `capability`, `status` (`failed` or `cooldown`),
+  `error_type`, `error`, `cooldown_remaining_seconds`, and `hint`. It
+  summarizes `provider_attempts`; it must not replace or hide them, and
+  `main_search` attempts must not appear in it.
 - `search` must also expose the effective `timeout_seconds`, `timeout_phase`,
   `timed_out_phases`, scheduler-level `phase_attempts`,
   `deadline_elapsed_ms`, `deadline_remaining_ms`, `partial_success`, and a
@@ -677,8 +720,8 @@ Output contracts:
   `evidence_error` when sources are insufficient, while retaining content and
   deadline telemetry.
 - `research` JSON must include `final_answer`, `content`, `citations`,
-  `evidence_items`, `gap_check`, `provider_attempts`, `fallback_used`,
-  `degraded`, `route_policy_version`, and `evidence_dir`.
+  `evidence_items`, `gap_check`, `provider_attempts`, `provider_notices`,
+  `fallback_used`, `degraded`, `route_policy_version`, and `evidence_dir`.
 - `search` must expose the effective OpenAI-compatible stream decision in
   `routing_decision.openai_compatible_stream` when that provider is attempted.
   This is the stream preference, not proof that the final transport was stream.
@@ -923,7 +966,12 @@ smart-search doctor --format json
 | Exa `--include-domains` / `--exclude-domains` receives comma-separated, whitespace-separated, or PowerShell-split values | Normalize to a flat domain list before sending `includeDomains` / `excludeDomains` to Exa |
 | Exa returns HTTP 400 or 422 | Return `error_type: "parameter_error"` and preserve the Exa response body excerpt for diagnosis |
 | Provider HTTP/network/timeout/schema error | Record `provider_attempts[].status="error"` and try next same-capability provider when fallback is `auto` |
-| Provider returns empty normalized result | Record `status="empty"` and try next same-capability provider when fallback is `auto` |
+| Provider returns empty normalized result | Record `status="empty"` and try next same-capability provider when fallback is `auto`; never open a failure cooldown |
+| Optional provider is on failure cooldown | Record `status="skipped"` with the remembered `error_type` and a `provider_health` block, make no network call, and continue same-capability fallback |
+| Every provider in an optional capability is on cooldown | Probe the first soft failure once per cooldown window; a hard failure waits for a credential change, `providers reset`, a successful `doctor` probe, or expiry |
+| `providers reset` names an unknown provider id | Return `error_type: "parameter_error"` with the known provider ids and clear nothing |
+| `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS` is negative, non-finite, or not numeric, or `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` is not a positive integer | `config set` and non-interactive setup return `parameter_error` without persisting it |
+| Zhipu returns a failure inside an HTTP 200 body | Classify it as `auth_error`, `rate_limited`, or `provider_error` instead of reporting an empty result set |
 | `TAVILY_ENABLED=false` with a saved Tavily key | Remove Tavily from configured capability routes; direct Tavily boundaries, doctor, and smoke make no Tavily network call; `map` returns local `config_error` |
 | Tavily or Firecrawl raises while another same-capability provider is available | Record a classified `error` attempt rather than swallowing it; keep fallback within the capability |
 | Live smoke lacks an optional provider/check | Add a skipped case and derive overall `healthy`/`degraded`/`failed` status from case outcomes without changing healthy/degraded exit `0` behavior |
@@ -1053,6 +1101,13 @@ When this contract changes, add or update tests that assert:
 - minimum profile fails closed when any required capability is missing;
 - capability fallback order is fixed and same-capability only;
 - provider error and empty result both trigger fallback;
+- a hard optional-provider failure is skipped on the next invocation instead
+  of being retried, and a soft failure needs the configured threshold;
+- an empty result never opens a cooldown, a success clears one, and changing
+  the provider credentials clears one;
+- `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS=0` disables the cooldown;
+- a corrupt or unwritable health store degrades to "no cooldown";
+- `providers status` reports cooldown state and `providers reset` clears it;
 - `--fallback off` stops after the first provider;
 - provider profiles route `research` by capability first and provider advantage
   second;
