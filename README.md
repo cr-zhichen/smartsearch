@@ -1,16 +1,69 @@
+<div align="center">
+
 # smart-search
+
+**One reproducible command layer for AI agents to search, read and research the live web.**
 
 [简体中文](README.zh-CN.md) | English
 
+[![npm](https://img.shields.io/npm/v/@konbakuyomu/smart-search?label=npm&logo=npm&color=CB3837)](https://www.npmjs.com/package/@konbakuyomu/smart-search)
+[![downloads](https://img.shields.io/npm/dm/@konbakuyomu/smart-search?label=downloads&logo=npm)](https://www.npmjs.com/package/@konbakuyomu/smart-search)
+[![CI](https://github.com/konbakuyomu/smartsearch/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/konbakuyomu/smartsearch/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D18-5FA04E?logo=node.js&logoColor=white)](package.json)
+[![python](https://img.shields.io/badge/python-%3E%3D3.10-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![stars](https://img.shields.io/github/stars/konbakuyomu/smartsearch?style=flat&logo=github)](https://github.com/konbakuyomu/smartsearch/stargazers)
+
+</div>
+
 CLI-first, skill-driven web research for AI agents and terminal users. `smart-search` gives AI tools one reproducible command layer for live search, source discovery, page fetching, site mapping, provider diagnostics, offline Deep Research planning, and live Deep Research execution.
 
-<p>
-  <a href="https://www.npmjs.com/package/@konbakuyomu/smart-search">
-    <img src="https://img.shields.io/npm/v/@konbakuyomu/smart-search?label=npm%20latest" alt="npm latest">
-  </a>
-</p>
+## Contents
 
-![Star History Chart](https://api.star-history.com/svg?repos=konbakuyomu/smartsearch&type=Date)
+[What It Is](#what-it-is) · [Install](#install) · [Quick Start](#quick-start) · [Current Architecture](#current-architecture) · [Deep Research](#deep-research) · [Provider And API Key Guide](#provider-and-api-key-guide) · [Provider Failure Cooldown](#provider-failure-cooldown) · [Commands](#commands) · [Output And Evidence Policy](#output-and-evidence-policy) · [Troubleshooting](#troubleshooting) · [Development](#development) · [Release lanes](#release-lanes)
+
+## Try It Before Configuring Anything
+
+`route` explains which capabilities a query needs and never calls a provider, so it returns exit code `0` on a fresh install with no API key:
+
+```powershell
+smart-search route "React useEffect cleanup function docs" --format markdown
+```
+
+```text
+# Intent Route
+
+Status: OK
+Query: `React useEffect cleanup function docs`
+Mode: `hybrid`
+Executed search: NO
+Required capabilities: `docs_search`
+Confidence: `0.82`
+Engines: `rules`
+Degraded: YES
+Degraded reason: embeddings not configured; classifier not configured
+
+## Reasons
+- rules matched docs/API/library terms
+```
+
+The same call in `--format json` is what an agent consumes:
+
+```json
+{
+  "ok": true,
+  "query": "今天 OpenAI 发布了什么",
+  "executed_search": false,
+  "provider_selection": "not_executed",
+  "required_capabilities": ["docs_search", "web_search"],
+  "confidence": 0.84,
+  "router_engines_used": ["rules"],
+  "reasons": [
+    "rules matched docs/API/library terms",
+    "rules matched current/locale/news terms"
+  ]
+}
+```
 
 ## What It Is
 
@@ -629,6 +682,14 @@ Release closeout checklist:
 3. Treat npm `E409` during parallel backfills as a registry concurrency failure, not a version-design failure. Re-run the affected version serially after checking whether the package already exists.
 4. Do a machine-readable gap check: expected beta versions minus npm versions must be empty, and expected `v*beta*` releases minus GitHub prereleases must be empty.
 5. Install the selected test build explicitly, for example `mise use -g "npm:@konbakuyomu/smart-search@0.1.10-beta.3" -y --pin`, then run `mise reshim`, `where.exe smart-search`, `smart-search --version`, `smart-search regression`, `smart-search smoke --mock --format json`, and a non-ASCII JSON pipe such as `smart-search deep "深度搜索一下最近的比特币行情" --format json | ConvertFrom-Json`.
+
+## Acknowledgements
+
+Thanks to the [LINUX DO](https://linux.do/) community for the feedback and discussion that shaped this tool.
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=konbakuyomu/smartsearch&type=Date)](https://www.star-history.com/#konbakuyomu/smartsearch&Date)
 
 ## License
 

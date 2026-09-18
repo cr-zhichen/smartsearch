@@ -1,16 +1,69 @@
+<div align="center">
+
 # smart-search
+
+**给 AI agent 用的联网检索命令层，一条命令，一份可复现的 JSON**
 
 简体中文 | [English](README.md)
 
+[![npm](https://img.shields.io/npm/v/@konbakuyomu/smart-search?label=npm&logo=npm&color=CB3837)](https://www.npmjs.com/package/@konbakuyomu/smart-search)
+[![downloads](https://img.shields.io/npm/dm/@konbakuyomu/smart-search?label=downloads&logo=npm)](https://www.npmjs.com/package/@konbakuyomu/smart-search)
+[![CI](https://github.com/konbakuyomu/smartsearch/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/konbakuyomu/smartsearch/actions/workflows/ci.yml)
+[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D18-5FA04E?logo=node.js&logoColor=white)](package.json)
+[![python](https://img.shields.io/badge/python-%3E%3D3.10-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![stars](https://img.shields.io/github/stars/konbakuyomu/smartsearch?style=flat&logo=github)](https://github.com/konbakuyomu/smartsearch/stargazers)
+
+</div>
+
 `smart-search` 是一个给 AI 助手和命令行用户使用的 CLI-first 网页研究工具。它把普通联网搜索、来源发现、网页正文抓取、站点 map、配置检查、Deep Research 离线规划和 live Deep Research 执行统一成一个可复现的命令层。
 
-<p>
-  <a href="https://www.npmjs.com/package/@konbakuyomu/smart-search">
-    <img src="https://img.shields.io/npm/v/@konbakuyomu/smart-search?label=npm%20latest" alt="npm latest">
-  </a>
-</p>
+## 目录
 
-![Star History Chart](https://api.star-history.com/svg?repos=konbakuyomu/smartsearch&type=Date)
+[它到底是什么](#它到底是什么) · [安装](#安装) · [快速开始](#快速开始) · [当前架构](#当前架构) · [Deep Research](#deep-research-深度搜索) · [API 和 Key 申请入口](#api-和-key-申请入口) · [Provider 失败冷却](#provider-失败冷却) · [常用命令](#常用命令) · [输出和证据策略](#输出和证据策略) · [排障](#排障) · [开发验证](#开发验证) · [发布通道](#发布通道)
+
+## 先跑一条，不用配 key
+
+`route` 只做能力路由判断，一个 provider 都不会调，所以在什么都没配的新装环境里也能跑通，退出码 `0`：
+
+```powershell
+smart-search route "React useEffect cleanup function docs" --format markdown
+```
+
+```text
+# Intent Route
+
+Status: OK
+Query: `React useEffect cleanup function docs`
+Mode: `hybrid`
+Executed search: NO
+Required capabilities: `docs_search`
+Confidence: `0.82`
+Engines: `rules`
+Degraded: YES
+Degraded reason: embeddings not configured; classifier not configured
+
+## Reasons
+- rules matched docs/API/library terms
+```
+
+同一条命令换成 `--format json`，就是 agent 实际读到的东西：
+
+```json
+{
+  "ok": true,
+  "query": "今天 OpenAI 发布了什么",
+  "executed_search": false,
+  "provider_selection": "not_executed",
+  "required_capabilities": ["docs_search", "web_search"],
+  "confidence": 0.84,
+  "router_engines_used": ["rules"],
+  "reasons": [
+    "rules matched docs/API/library terms",
+    "rules matched current/locale/news terms"
+  ]
+}
+```
 
 ## 它到底是什么
 
@@ -672,6 +725,14 @@ git push origin v0.1.14
 3. 遇到 npm `E409`，先查版本是否已经发布，再串行重跑对应版本。
 4. 最后安装指定版本并运行 `smart-search --version`、`smart-search regression`、`smart-search smoke --mock --format json`。
 5. Windows npm/mise 包装层额外跑中文 JSON 管道：`smart-search deep "深度搜索一下最近的比特币行情" --format json | ConvertFrom-Json`。
+
+## 致谢
+
+感谢 [LINUX DO](https://linux.do/) 社区的反馈和讨论。
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=konbakuyomu/smartsearch&type=Date)](https://www.star-history.com/#konbakuyomu/smartsearch&Date)
 
 ## License
 
