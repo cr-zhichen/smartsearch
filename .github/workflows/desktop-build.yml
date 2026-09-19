@@ -60,7 +60,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: smart-search-windows-${{ matrix.architecture }}-unsigned-test
-          path: .desktop-artifacts/windows-${{ matrix.architecture }}-*/
+          path: .desktop-artifacts/windows-${{ matrix.architecture }}-*/publish/
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
 
@@ -102,7 +103,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: smart-search-macos-${{ matrix.architecture }}-unsigned-test
-          path: .desktop-artifacts/macos-${{ matrix.architecture }}-*/
+          path: .desktop-artifacts/macos-${{ matrix.architecture }}-*/*.dmg
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
 
