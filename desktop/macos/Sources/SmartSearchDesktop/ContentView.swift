@@ -355,24 +355,24 @@ private struct CapabilityStatusRow: View {
 
     private var configurationLabel: String {
         switch status["ok"]?.boolValue {
-        case true: return "配置条件已满足"
-        case false: return "缺少配置"
+        case .some(true): return "配置条件已满足"
+        case .some(false): return "缺少配置"
         case nil: return "状态未报告"
         }
     }
 
     private var configurationSymbol: String {
         switch status["ok"]?.boolValue {
-        case true: return "checkmark.circle"
-        case false: return "exclamationmark.circle"
+        case .some(true): return "checkmark.circle"
+        case .some(false): return "exclamationmark.circle"
         case nil: return "questionmark.circle"
         }
     }
 
     private var configurationColor: Color {
         switch status["ok"]?.boolValue {
-        case true: return .green
-        case false: return .orange
+        case .some(true): return .green
+        case .some(false): return .orange
         case nil: return .secondary
         }
     }
@@ -909,7 +909,7 @@ private struct ActivityDetailView: View {
             HStack {
                 Text("活动详情").font(.title2.weight(.semibold))
                 Spacer()
-                Button("完成", action: dismiss)
+                Button("完成") { dismiss() }
             }
             Text(model.displayLabel(for: run)).font(.headline)
             KeyValueLine(label: "配置版本", value: run.configRevision ?? "活动记录未提供")

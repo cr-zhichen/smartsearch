@@ -105,3 +105,9 @@ jobs:
           path: .desktop-artifacts/macos-${{ matrix.architecture }}-*/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Test macOS protocol models
+        run: >-
+          swift test --package-path desktop/macos --configuration release
+          --arch ${{ matrix.architecture }}
+          --scratch-path .desktop-artifacts/macos-model-tests

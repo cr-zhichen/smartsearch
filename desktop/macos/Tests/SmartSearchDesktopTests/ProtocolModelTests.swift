@@ -2,6 +2,18 @@ import XCTest
 @testable import SmartSearchDesktop
 
 final class ProtocolModelTests: XCTestCase {
+    func testDynamicResponsesUseTypedObjectFields() throws {
+        let value = try JSONDecoder().decode(JSONValue.self, from: Data("""
+        {"ok":true,"run_id":"owned-run","runs":[],"enabled":false}
+        """.utf8))
+        XCTAssertEqual(value["ok"]?.boolValue, true)
+        XCTAssertEqual(value["run_id"]?.stringValue, "owned-run")
+        XCTAssertEqual(value["runs"]?.arrayValue, [])
+        XCTAssertEqual(value["enabled"]?.boolValue, false)
+        XCTAssertNil(value["missing"]?.boolValue)
+        XCTAssertNil(value["run_id"]?.boolValue)
+    }
+
     func testNDJSONValueAndCatalogArgumentsKeepProtocolOrder() throws {
         let payload = Data("""
         {"id":"search","label":"Search","description":"","experimental":false,"fields":[

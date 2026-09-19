@@ -148,16 +148,16 @@ final class AppModel: ObservableObject {
         params["limit"] = .number(1_000)
         do {
             let result = try await backend.request(method: "activity.list", params: .object(params))
-            activityRuns = result.array("runs").compactMap(ActivityRun.init).sorted { lhs, rhs in
+            activityRuns = (result["runs"]?.arrayValue ?? []).compactMap(ActivityRun.init).sorted { lhs, rhs in
                 (lhs.updatedAt ?? .distantPast) > (rhs.updatedAt ?? .distantPast)
             }
-            activityErrors = result.array("errors").compactMap { item in
+            activityErrors = (result["errors"]?.arrayValue ?? []).compactMap { item in
                 let directory = item["config_dir"]?.displayString ?? ""
                 let message = item["error"]?.displayString ?? "活动记录不可读，当前状态未知。"
                 return directory.isEmpty ? message : "\(directory)：\(message)"
             }
-            activityEnabled = result.bool("enabled") ?? activityEnabled
-            if result.bool("ok") == false {
+            activityEnabled = result["enabled"]?.boolValue ?? activityEnabled
+            if result["ok"]?.boolValue == false {
                 errorMessage = "一个或多个配置目录的活动记录不可读；可读取的记录仍已显示，其他状态未知。"
             }
         } catch {
@@ -178,7 +178,7 @@ final class AppModel: ObservableObject {
         guard connection == .ready else { return }
         do {
             let result = try await backend.request(method: "skills.status")
-            skillStatuses = Dictionary(uniqueKeysWithValues: result.array("targets").compactMap { value in
+            skillStatuses = Dictionary(uniqueKeysWithValues: (result["targets"]?.arrayValue ?? []).compactMap { value in
                 guard let target = SkillTarget(value), let status = target.status else { return nil }
                 return (target.id, status)
             })
@@ -336,8 +336,8 @@ final class AppModel: ObservableObject {
         params["revision"] = revision
         do {
             let result = try await backend.request(method: "config.apply", params: .object(params))
-            guard result.bool("ok") == true else {
-                errorMessage = result.string("error_type") == "conflict"
+            guard result["ok"]?.boolValue == true else {
+                errorMessage = result["error_type"]?.stringValue == "conflict"
                     ? "配置已被其他进程修改；草稿已保留，请刷新后核对。"
                     : "后端没有保存配置；草稿已保留。"
                 return
@@ -371,7 +371,7 @@ final class AppModel: ObservableObject {
                 "provider": .string(provider),
                 "overrides": .object(overrides),
             ]))
-            guard result.bool("ok") == true, let runID = result.string("run_id") else {
+            guard result["ok"]?.boolValue == true, let runID = result["run_id"]?.stringValue else {
                 errorMessage = "后端未能开始草稿测试；正式配置没有改变。"
                 return
             }
@@ -431,7 +431,7 @@ final class AppModel: ObservableObject {
                 "command": .string(command.id),
                 "arguments": .array(arguments.map(JSONValue.string)),
             ]))
-            guard result.bool("ok") == true, let runID = result.string("run_id") else {
+            guard result["ok"]?.boolValue == true, let runID = result["run_id"]?.stringValue else {
                 errorMessage = "后端未能开始此操作。"
                 return
             }
@@ -453,7 +453,7 @@ final class AppModel: ObservableObject {
         defer { end("cancel:\(run.runID)") }
         do {
             let result = try await backend.request(method: "run.cancel", params: .object(["run_id": .string(run.runID)]))
-            if result.bool("ok") == true {
+            if result["ok"]?.boolValue == true {
                 noticeMessage = "已请求取消，等待后端确认最终状态。"
             } else {
                 errorMessage = "后端未接受取消请求；任务仍保持原状态。"
@@ -497,7 +497,7 @@ final class AppModel: ObservableObject {
             let result = try await backend.request(method: "skills.install", params: .object([
                 "targets": .array(selectedSkillTargets.sorted().map(JSONValue.string)),
             ]))
-            guard result.bool("ok") == true, let runID = result.string("run_id") else {
+            guard result["ok"]?.boolValue == true, let runID = result["run_id"]?.stringValue else {
                 errorMessage = "后端没有开始 Skills 安装或更新。"
                 return
             }
@@ -520,7 +520,7 @@ final class AppModel: ObservableObject {
         defer { end("cli.enable") }
         do {
             let result = try await backend.request(method: "cli.enable", params: .object(["confirm": .bool(true)]))
-            if result.bool("ok") == true {
+            if result["ok"]?.boolValue == true {
                 noticeMessage = "已按你的确认启用内置 CLI。"
                 await refreshCLIStatus()
             } else {
@@ -537,7 +537,7 @@ final class AppModel: ObservableObject {
         activityEnabled = enabled
         do {
             let result = try await backend.request(method: "activity.enabled", params: .object(["enabled": .bool(enabled)]))
-            if result.bool("ok") != true {
+            if result["ok"]?.boolValue != true {
                 activityEnabled = priorValue
                 errorMessage = "活动记录设置没有改变。"
             }
@@ -553,7 +553,7 @@ final class AppModel: ObservableObject {
         defer { end("clear-activity") }
         do {
             let result = try await backend.request(method: "activity.clear")
-            if result.bool("ok") == true {
+            if result["ok"]?.boolValue == true {
                 noticeMessage = "已清除已结束任务的活动元数据；配置和用户导出未受影响。"
                 await refreshActivity()
             } else {
@@ -725,8 +725,8 @@ final class AppModel: ObservableObject {
                 upsert(run)
             }
         case "run":
-            guard let runID = event.data.string("run_id") else { return }
-            let status = event.data.string("status") ?? "unknown"
+            guard let runID = event.data["run_id"]?.stringValue else { return }
+            let status = event.data["status"]?.stringValue ?? "unknown"
             if let run = ActivityRun(event.data) { upsert(run) }
             if ["finished", "failed", "cancelled", "stale", "interrupted"].contains(status) {
                 ownedActiveRunIDs.remove(runID)
@@ -789,8 +789,8 @@ final class AppModel: ObservableObject {
         alert.addButton(withTitle: "返回")
         let resolve: (NSApplication.ModalResponse) -> Void = { response in
             switch response {
-            case .alertFirstButton: completion(.background)
-            case .alertSecondButton: completion(.stopAndQuit)
+            case .alertFirstButtonReturn: completion(.background)
+            case .alertSecondButtonReturn: completion(.stopAndQuit)
             default: completion(.return)
             }
         }
