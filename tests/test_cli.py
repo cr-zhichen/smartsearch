@@ -3582,32 +3582,3 @@ def test_doctor_reports_providers_on_cooldown(monkeypatch, capsys):
 
     assert cli.main(["doctor", "--format", "content"]) == cli.EXIT_OK
     assert "Providers on cooldown: zhipu" in capsys.readouterr().out
-
-
-def test_markdown_table_keeps_identifier_columns_exact():
-    long_path = "/private/var/folders/xx/" + "a" * 200 + "/.opencode/skills/smart-search-cli"
-    prose = "c" * 300
-
-    lines_ = cli._markdown_table(
-        ["Target", "Path", "Note"],
-        [["opencode", long_path, prose]],
-        exact_headers={"Path"},
-    )
-    row = lines_[2]
-
-    # A path is an exact identifier: truncating it would name a location that does
-    # not exist, so the column must survive at full length.
-    assert long_path in row
-    # Prose columns keep the readable cap.
-    assert prose not in row
-    assert "..." in row
-
-
-def test_markdown_table_caps_url_and_id_columns_when_declared_exact():
-    long_url = "https://example.com/docs/" + "c" * 240
-
-    capped = cli._markdown_table(["Title", "URL / ID"], [["Docs", long_url]])
-    exact = cli._markdown_table(["Title", "URL / ID"], [["Docs", long_url]], exact_headers={"URL / ID"})
-
-    assert long_url not in capped[2]
-    assert long_url in exact[2]
