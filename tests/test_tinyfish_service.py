@@ -137,3 +137,53 @@ def test_tinyfish_credential_fingerprint_tracks_the_api_key(monkeypatch):
     second = service._provider_fingerprint("tinyfish")
 
     assert first and second and first != second
+
+
+@pytest.mark.asyncio
+async def test_correcting_fetch_endpoint_retries_after_auth_cooldown(monkeypatch):
+    monkeypatch.setenv("TINYFISH_API_KEY", "tinyfish-secret")
+    monkeypatch.setenv("TINYFISH_FETCH_API_URL", "https://wrong.example/fetch")
+    calls = []
+
+    async def fetch_from_configured_endpoint(url):
+        endpoint = service.config.tinyfish_fetch_api_url
+        calls.append(endpoint)
+        if endpoint == "https://wrong.example/fetch":
+            return {"ok": False, "error_type": "auth_error", "error": "wrong endpoint"}
+        return {"ok": True, "content": "Recovered page"}
+
+    monkeypatch.setattr(service, "call_tinyfish_fetch", fetch_from_configured_endpoint)
+
+    failed = await service.fetch("https://example.com")
+    assert failed["ok"] is False
+    assert service._provider_health_status("tinyfish")["state"] == "cooldown"
+    await service.fetch("https://example.com")
+    assert calls == ["https://wrong.example/fetch"]
+
+    monkeypatch.setenv("TINYFISH_FETCH_API_URL", "https://fixed.example/fetch")
+    recovered = await service.fetch("https://example.com")
+
+    assert recovered["ok"] is True
+    assert recovered["content"] == "Recovered page"
+    assert calls == ["https://wrong.example/fetch", "https://fixed.example/fetch"]
+    assert service._provider_health_status("tinyfish")["state"] == "closed"
+
+
+@pytest.mark.asyncio
+async def test_research_route_keeps_tinyfish_after_firecrawl(monkeypatch):
+    monkeypatch.setenv("TINYFISH_API_KEY", "tinyfish-secret")
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "firecrawl-secret")
+
+    async def firecrawl_sources(query, max_results=6):
+        return [{"url": "https://example.com/evidence", "description": "Evidence"}]
+
+    monkeypatch.setattr(service, "call_firecrawl_search", firecrawl_sources)
+    routes = service._research_capability_routes("history of printing", {}, "auto")
+    providers = routes["capabilities"]["web_search"]["providers"]
+    sources, attempts = await service._run_web_search_fallback(
+        "history of printing", providers=",".join(providers), fallback="off"
+    )
+
+    assert providers == ["firecrawl", "tinyfish"]
+    assert sources[0]["provider"] == providers[0]
+    assert [attempt["provider"] for attempt in attempts] == [providers[0]]

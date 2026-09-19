@@ -636,7 +636,7 @@ PROVIDER_CREDENTIAL_SOURCES: dict[str, Any] = {
     "zhipu-mcp-reader": lambda: (config.zhipu_mcp_api_key, config.zhipu_mcp_reader_api_url),
     "tavily": lambda: (config.tavily_api_key, config.tavily_api_url),
     "firecrawl": lambda: (config.firecrawl_api_key, config.firecrawl_api_url),
-    "tinyfish": lambda: (config.tinyfish_api_key, config.tinyfish_search_api_url),
+    "tinyfish": lambda: (config.tinyfish_api_key, config.tinyfish_search_api_url, config.tinyfish_fetch_api_url),
     "exa": lambda: (config.exa_api_key, config.exa_base_url),
     "context7": lambda: (config.context7_api_key, config.context7_base_url),
     "jina": lambda: (config.jina_api_key, config.jina_reader_api_url),
@@ -1304,7 +1304,7 @@ def _research_capability_routes(
     if signals["current_or_locale_intent"]:
         ordered = [provider for provider in ["zhipu", "zhipu-mcp", "tavily", "firecrawl", "tinyfish"] if provider in web_search]
     else:
-        ordered = [provider for provider in ["tavily", "tinyfish", "firecrawl", "zhipu", "zhipu-mcp"] if provider in web_search]
+        ordered = [provider for provider in ["tavily", "firecrawl", "zhipu", "zhipu-mcp", "tinyfish"] if provider in web_search]
     routes["capabilities"]["web_search"] = {
         "providers": _apply_research_overrides("web_search", ordered),
         "reason": "current/locale evidence" if signals["current_or_locale_intent"] else "broad source discovery",
@@ -2300,47 +2300,21 @@ def extra_results_to_sources(
     sources: list[dict] = []
     seen: set[str] = set()
 
-    if firecrawl_results:
-        for r in firecrawl_results:
+    for provider, results, description_field in (
+        ("firecrawl", firecrawl_results, "description"),
+        ("tavily", tavily_results, "content"),
+        ("tinyfish", tinyfish_results, "description"),
+    ):
+        for r in results or []:
             url = (r.get("url") or "").strip()
             if not url or url in seen:
                 continue
             seen.add(url)
-            item: dict = {"url": url, "provider": "firecrawl"}
+            item: dict = {"url": url, "provider": provider}
             title = (r.get("title") or "").strip()
             if title:
                 item["title"] = title
-            desc = (r.get("description") or "").strip()
-            if desc:
-                item["description"] = desc
-            sources.append(item)
-
-    if tavily_results:
-        for r in tavily_results:
-            url = (r.get("url") or "").strip()
-            if not url or url in seen:
-                continue
-            seen.add(url)
-            item = {"url": url, "provider": "tavily"}
-            title = (r.get("title") or "").strip()
-            if title:
-                item["title"] = title
-            content = (r.get("content") or "").strip()
-            if content:
-                item["description"] = content
-            sources.append(item)
-
-    if tinyfish_results:
-        for r in tinyfish_results:
-            url = (r.get("url") or "").strip()
-            if not url or url in seen:
-                continue
-            seen.add(url)
-            item = {"url": url, "provider": "tinyfish"}
-            title = (r.get("title") or "").strip()
-            if title:
-                item["title"] = title
-            desc = (r.get("description") or "").strip()
+            desc = (r.get(description_field) or "").strip()
             if desc:
                 item["description"] = desc
             sources.append(item)
