@@ -255,3 +255,52 @@ def test_browser_is_not_opened_on_a_headless_linux_box(monkeypatch):
     assert ui_server._should_open_browser(ui_server.UIServerConfig(open_browser=True)) is False
     monkeypatch.setenv("DISPLAY", ":0")
     assert ui_server._should_open_browser(ui_server.UIServerConfig(open_browser=True)) is True
+
+
+# ---- write path over HTTP ----------------------------------------------
+def test_write_endpoints_require_the_token(running):
+    _httpd, runtime = running
+    for path in ("/api/config", "/api/preview", "/api/skills/install"):
+        response, _ = request(runtime, "POST", path, body={})
+        assert response.status == 403, f"{path} accepted an unauthenticated write"
+
+
+def test_write_endpoints_reject_a_rebound_host(running):
+    _httpd, runtime = running
+    response, _ = request(
+        runtime, "POST", "/api/config", token=runtime.token, host="evil.com",
+        body={"set": {"EXA_API_KEY": "stolen"}},
+    )
+    assert response.status == 403
+    assert "EXA_API_KEY" not in service.config.get_saved_config(masked=True)
+
+
+def test_config_round_trips_over_http(running):
+    _httpd, runtime = running
+    response, raw = request(
+        runtime, "POST", "/api/config", token=runtime.token,
+        body={"set": {"EXA_API_KEY": "exa-round-trip-secret", "CONTEXT7_API_KEY": "c7"}},
+    )
+    assert response.status == 200
+    payload = json.loads(raw)
+    assert payload["ok"] is True
+    # The response echoes what was saved, so it must be masked like any read.
+    assert "exa-round-trip-secret" not in raw.decode("utf-8")
+    assert payload["status"]["capability_status"]["docs_search"]["ok"] is True
+
+
+def test_preview_over_http_does_not_persist(running):
+    _httpd, runtime = running
+    response, raw = request(
+        runtime, "POST", "/api/preview", token=runtime.token,
+        body={"values": {"XAI_API_KEY": "x", "EXA_API_KEY": "y", "TAVILY_API_KEY": "z"}},
+    )
+    assert response.status == 200
+    assert json.loads(raw)["ok"] is True
+    assert not service.config.config_file.exists()
+
+
+def test_malformed_json_body_is_rejected(running):
+    _httpd, runtime = running
+    response, _ = request(runtime, "POST", "/api/config", token=runtime.token, body=b"{not json")
+    assert response.status == 400

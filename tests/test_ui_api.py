@@ -102,3 +102,92 @@ def test_skills_status_is_read_only(isolated):
 
 def test_skills_status_rejects_an_unknown_target(isolated):
     assert ui_api.skills_status("not-an-editor")["error_type"] == "parameter_error"
+
+
+# ---- write path ---------------------------------------------------------
+def test_apply_config_saves_and_returns_fresh_status(isolated):
+    result = ui_api.apply_config({"set": {"EXA_API_KEY": "exa-key", "CONTEXT7_API_KEY": "c7-key"}})
+    assert result["ok"] is True
+    assert sorted(result["saved"]) == ["CONTEXT7_API_KEY", "EXA_API_KEY"]
+    assert "*" in result["saved"]["EXA_API_KEY"], "the echo must be masked too"
+    assert result["status"]["capability_status"] == service.get_capability_status()
+
+
+def test_apply_config_is_all_or_nothing(isolated):
+    ui_api.apply_config({"set": {"EXA_API_KEY": "keep-me"}})
+    before = service.config.config_file.read_bytes()
+
+    result = ui_api.apply_config({"set": {
+        "CONTEXT7_API_KEY": "would-be-saved",
+        "SMART_SEARCH_VALIDATION_LEVEL": "not-a-level",
+    }})
+
+    assert result["ok"] is False
+    assert "SMART_SEARCH_VALIDATION_LEVEL" in result["error"]
+    assert service.config.config_file.read_bytes() == before
+
+
+def test_apply_config_refuses_keys_the_environment_owns(isolated, monkeypatch):
+    # The write would succeed and change nothing the user can see, because
+    # os.getenv wins on every read. Refusing is the honest answer.
+    monkeypatch.setenv("EXA_API_KEY", "from-the-environment")
+    result = ui_api.apply_config({"set": {"EXA_API_KEY": "from-the-page"}})
+    assert result["ok"] is False
+    assert result["shadowed"] == ["EXA_API_KEY"]
+    assert not service.config.config_file.exists()
+
+
+def test_apply_config_refuses_an_env_owned_unset(isolated, monkeypatch):
+    monkeypatch.setenv("EXA_API_KEY", "from-the-environment")
+    result = ui_api.apply_config({"unset": ["EXA_API_KEY"]})
+    assert result["ok"] is False
+    assert result["shadowed"] == ["EXA_API_KEY"]
+
+
+def test_apply_config_unsets(isolated):
+    ui_api.apply_config({"set": {"EXA_API_KEY": "exa-key", "CONTEXT7_API_KEY": "c7-key"}})
+    result = ui_api.apply_config({"unset": ["EXA_API_KEY"]})
+    assert result["ok"] is True
+    assert result["unset"] == ["EXA_API_KEY"]
+    assert "EXA_API_KEY" not in service.config.get_saved_config(masked=True)
+
+
+def test_apply_config_validates_its_argument_types(isolated):
+    assert ui_api.apply_config({"set": "nope"})["error_type"] == "parameter_error"
+    assert ui_api.apply_config({"unset": "nope"})["error_type"] == "parameter_error"
+
+
+def test_preview_is_offline_and_answers_the_minimum_profile(isolated, monkeypatch):
+    monkeypatch.setenv("SMART_SEARCH_MINIMUM_PROFILE", "standard")
+
+    def explode(*args, **kwargs):
+        raise AssertionError("preview must not touch the network")
+
+    monkeypatch.setattr("httpx.AsyncClient", explode)
+
+    empty = ui_api.preview({"values": {}})
+    assert empty["ok"] is True
+    assert empty["minimum_profile_ok"] is False
+    assert empty["missing"] == ["main_search", "docs_search", "web_fetch"]
+
+    full = ui_api.preview({"values": {
+        "XAI_API_KEY": "x", "EXA_API_KEY": "y", "TAVILY_API_KEY": "z",
+    }})
+    assert full["minimum_profile_ok"] is True
+    assert full["missing"] == []
+
+
+def test_preview_saves_nothing(isolated):
+    ui_api.preview({"values": {"EXA_API_KEY": "never-persisted"}})
+    assert not service.config.config_file.exists()
+
+
+def test_preview_honours_a_disabled_minimum_profile(isolated, monkeypatch):
+    monkeypatch.setenv("SMART_SEARCH_MINIMUM_PROFILE", "off")
+    result = ui_api.preview({"values": {}})
+    assert result["required"] == []
+    assert result["minimum_profile_ok"] is True
+
+
+def test_preview_validates_its_argument(isolated):
+    assert ui_api.preview({"values": "nope"})["error_type"] == "parameter_error"

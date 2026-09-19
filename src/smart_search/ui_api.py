@@ -96,6 +96,61 @@ async def test_provider(payload: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def apply_config(payload: dict[str, Any]) -> dict[str, Any]:
+    """Save a batch of edits, all-or-nothing, then hand back the refreshed status.
+
+    A key whose value comes from an environment variable is refused rather than
+    written: the write would succeed and change nothing the user can see, because
+    the environment wins on every read.
+    """
+    set_values = payload.get("set") or {}
+    unset_keys = payload.get("unset") or []
+    if not isinstance(set_values, dict):
+        return _parameter_error("set must be an object")
+    if not isinstance(unset_keys, list):
+        return _parameter_error("unset must be a list")
+
+    normalized = {str(key).strip().upper(): "" if value is None else str(value) for key, value in set_values.items()}
+    unset = [str(key).strip().upper() for key in unset_keys]
+
+    shadowed = sorted(
+        key for key in list(normalized) + unset
+        if key in config._CONFIG_KEYS and config.get_config_source(key) == "environment"
+    )
+    if shadowed:
+        return _parameter_error(
+            "These keys are set by environment variables, which win over the config file: "
+            + ", ".join(shadowed),
+            shadowed=shadowed,
+        )
+
+    result = service.config_update(normalized, unset)
+    result["status"] = status()
+    return result
+
+
+def preview(payload: dict[str, Any]) -> dict[str, Any]:
+    """Answer "would this configuration pass?" without saving or calling anything."""
+    values = payload.get("values")
+    if not isinstance(values, dict):
+        return _parameter_error("values must be an object")
+    merged = {str(key).strip().upper(): "" if value is None else str(value) for key, value in values.items()}
+    capability_status = service.capability_status_from_values(merged)
+    required = ["main_search", "docs_search", "web_fetch"]
+    if config.minimum_profile == "off":
+        required = []
+    missing = [name for name in required if not capability_status.get(name, {}).get("ok")]
+    return {
+        "ok": True,
+        "error_type": "",
+        "error": "",
+        "capability_status": capability_status,
+        "required": required,
+        "missing": missing,
+        "minimum_profile_ok": not missing,
+    }
+
+
 async def run_doctor() -> dict[str, Any]:
     """The full diagnostic. Fires every probe at once, so it is never automatic."""
     return await service.doctor()

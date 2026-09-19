@@ -312,6 +312,21 @@ def _h_reset(handler, body, query):
         return ui_api.reset_health(body)
 
 
+def _h_config(handler, body, query):
+    # One lock for every write, so two open tabs cannot interleave.
+    with handler.runtime.write_lock:
+        return ui_api.apply_config(body)
+
+
+def _h_preview(handler, body, query):
+    return ui_api.preview(body)
+
+
+def _h_skills_install(handler, body, query):
+    with handler.runtime.write_lock:
+        return ui_api.skills_install(body)
+
+
 def _h_skills(handler, body, query):
     return ui_api.skills_status(query.get("targets"))
 
@@ -331,6 +346,9 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("GET", "/api/state"): _h_state,
     ("GET", "/api/status"): _h_status,
     ("GET", "/api/skills"): _h_skills,
+    ("POST", "/api/config"): _h_config,
+    ("POST", "/api/preview"): _h_preview,
+    ("POST", "/api/skills/install"): _h_skills_install,
     ("POST", "/api/test"): _h_test,
     ("POST", "/api/doctor"): _h_doctor,
     ("POST", "/api/providers/reset"): _h_reset,

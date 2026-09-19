@@ -20,7 +20,7 @@ CLI-first, skill-driven web research for AI agents and terminal users. `smart-se
 
 ## Contents
 
-[What It Is](#what-it-is) · [Install](#install) · [Quick Start](#quick-start) · [Current Architecture](#current-architecture) · [Deep Research](#deep-research) · [Provider And API Key Guide](#provider-and-api-key-guide) · [Provider Failure Cooldown](#provider-failure-cooldown) · [Commands](#commands) · [Output And Evidence Policy](#output-and-evidence-policy) · [Troubleshooting](#troubleshooting) · [Development](#development) · [Release lanes](#release-lanes)
+[What It Is](#what-it-is) · [Install](#install) · [Quick Start](#quick-start) · [Configure In A Browser](#configure-in-a-browser) · [Current Architecture](#current-architecture) · [Deep Research](#deep-research) · [Provider And API Key Guide](#provider-and-api-key-guide) · [Provider Failure Cooldown](#provider-failure-cooldown) · [Commands](#commands) · [Output And Evidence Policy](#output-and-evidence-policy) · [Troubleshooting](#troubleshooting) · [Development](#development) · [Release lanes](#release-lanes)
 
 ## Try It Before Configuring Anything
 
@@ -124,10 +124,11 @@ Prerequisites:
 
 ## Quick Start
 
-1. Configure providers:
+1. Configure providers, in a browser or in the terminal:
 
 ```powershell
-smart-search setup
+smart-search ui                  # a temporary local page, see Configure In A Browser
+smart-search setup               # or the interactive terminal wizard
 smart-search doctor --format json
 ```
 
@@ -193,6 +194,45 @@ smart-search skills update --targets codex --format json
 provider keys or create Trellis/hooks/agents/commands. OpenCode status reports a discovered legacy
 `~/.opencode/skills/smart-search-cli` tree as read-only `legacy_locations` metadata; it is never moved or deleted automatically. Setup and update write
 only managed bundled files to the canonical OpenCode target and leave legacy and other extra files untouched.
+
+## Configure In A Browser
+
+68 config keys read badly as a wall of text. `smart-search ui` opens a temporary local page instead, grouped by what each key is for:
+
+```powershell
+smart-search ui
+```
+
+It starts on `127.0.0.1` with a random port, prints a URL carrying a one-time token, and exits once you close the tab. Nothing is left running and nothing is installed — the server is Python's standard library and the page is one HTML file.
+
+What it does:
+
+- a three-step wizard for the only three capabilities you actually need, with a live indicator that turns green when the minimum profile is satisfied
+- every key grouped by provider, with secrets shown masked and never sent to the browser in the clear
+- a **Test** button per provider that checks whether a saved key still works — each click is one real API request, so nothing is tested until you ask
+- which providers are on cooldown, and a button to clear one
+- skill install status for all 15 agent targets
+
+Useful flags:
+
+| Flag | Effect |
+| --- | --- |
+| `--no-browser` | Print the URL without opening a browser |
+| `--port N` | Bind a fixed port instead of a random one |
+| `--idle-timeout SEC` | Exit after this many idle seconds (default `900`, `0` disables) |
+| `--lang zh\|en` | Interface language |
+| `--check` | Verify the bundled page is installed, then exit |
+
+On a remote machine no browser opens; forward the port instead:
+
+```bash
+smart-search ui --no-browser --port 8765
+ssh -L 8765:127.0.0.1:8765 user@host      # then open the printed URL locally
+```
+
+A key set through an environment variable shows as locked and cannot be edited from the page, because environment variables override `config.json` on every read. The page tells you which `unset` to run.
+
+The CLI equivalents remain: `smart-search setup`, `smart-search config set KEY VALUE`, and `smart-search providers test PROVIDER`.
 
 ## Current Architecture
 
