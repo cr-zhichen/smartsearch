@@ -106,6 +106,12 @@ details.more > summary {
 details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary::before { content: "▸ "; }
 details.more[open] > summary::before { content: "▾ "; }
+.links { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+.links a {
+  color: var(--accent); font-size: 12px; text-decoration: none;
+  border-bottom: 1px dotted var(--accent);
+}
+.links a:hover { border-bottom-style: solid; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip {
   border: 1px solid var(--line); background: var(--bg); color: var(--muted);
@@ -182,7 +188,8 @@ details.more[open] > summary::before { content: "▾ "; }
       missingOne: "缺", optionalOne: "未配置", more: "更多设置",
       save: "保存", discard: "放弃修改", clear: "清除", saved: "已保存",
       unsaved: "有 {n} 处未保存", envHint: "想改的话先在终端执行",
-      keepSecret: "留空表示不改动", stepMain: "第一步：主搜索",
+      keepSecret: "留空表示不改动", getKey: "去申请 key", readDocs: "文档",
+      stepMain: "第一步：主搜索",
       stepDocs: "第二步：文档检索", stepFetch: "第三步：网页抓取",
       pickOne: "下面任选一个配好即可。", installSkill: "安装 / 更新",
       runRoute: "看它走哪些能力（免费）", runSearch: "跑一次真实搜索",
@@ -208,7 +215,8 @@ details.more[open] > summary::before { content: "▾ "; }
       missingOne: "missing", optionalOne: "not set", more: "More settings",
       save: "Save", discard: "Discard", clear: "Clear", saved: "Saved",
       unsaved: "{n} unsaved change(s)", envHint: "To change it, first run",
-      keepSecret: "Leave empty to keep the current value", stepMain: "Step 1 - main search",
+      keepSecret: "Leave empty to keep the current value", getKey: "Get a key", readDocs: "Docs",
+      stepMain: "Step 1 - main search",
       stepDocs: "Step 2 - docs lookup", stepFetch: "Step 3 - page fetching",
       pickOne: "Any one of these is enough.", installSkill: "Install / update",
       runRoute: "Show which capabilities (free)", runSearch: "Run a real search",
@@ -583,12 +591,26 @@ details.more[open] > summary::before { content: "▾ "; }
         previewTimer = setTimeout(runPreview, 50);
       }
     }));
+    var links = null;
+    if (field.key_url || field.docs_url) {
+      links = el("div", { class: "links" }, [
+        field.key_url ? el("a", {
+          href: field.key_url, target: "_blank", rel: "noopener noreferrer",
+          text: t("getKey") + " ↗"
+        }) : null,
+        field.docs_url ? el("a", {
+          href: field.docs_url, target: "_blank", rel: "noopener noreferrer",
+          text: t("readDocs") + " ↗"
+        }) : null
+      ]);
+    }
     return el("div", { class: "row" }, [
       el("div", {}, [
         el("label", { text: L(field, "label") }),
         el("span", { class: "help mono", text: field.key }),
         L(field, "help") ? el("span", { class: "help", text: L(field, "help") }) : null,
-        locked ? el("span", { class: "help", text: t("envHint") + " unset " + field.key }) : null
+        locked ? el("span", { class: "help", text: t("envHint") + " unset " + field.key }) : null,
+        links
       ]),
       el("div", {}, [input]),
       el("div", {}, side)

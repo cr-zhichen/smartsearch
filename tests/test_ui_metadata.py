@@ -138,3 +138,67 @@ def test_payload_is_json_serialisable_and_complete():
     assert [section["order"] for section in payload["sections"]] == sorted(
         section["order"] for section in payload["sections"]
     )
+
+
+# ---- provider links -----------------------------------------------------
+def _readme_urls() -> set[str]:
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    text = (root / "README.md").read_text(encoding="utf-8")
+    text += (root / "README.zh-CN.md").read_text(encoding="utf-8")
+    return set(re.findall(r"https://[^\s)\]|`\"']+", text))
+
+
+def test_every_link_is_documented_in_the_readme():
+    """Links must come from the README's provider table, never from memory.
+
+    An invented key page sends someone to a 404 while they are already unsure
+    where the key lives, so the README is the single source and this assertion
+    keeps the two from drifting apart.
+    """
+    documented = _readme_urls()
+    for item in CONFIG_FIELDS:
+        for label, url in (("key_url", item.key_url), ("docs_url", item.docs_url)):
+            if not url:
+                continue
+            assert url in documented, (
+                f"{item.key}.{label} = {url} is not in README.md or README.zh-CN.md. "
+                "Add it to the provider table there first, or remove it here."
+            )
+
+
+def test_links_are_https():
+    for item in CONFIG_FIELDS:
+        for url in (item.key_url, item.docs_url):
+            assert not url or url.startswith("https://"), f"{item.key} has a non-https link: {url}"
+
+
+def test_every_probeable_provider_can_be_signed_up_for():
+    """Each provider the page can test must say where to get its credential."""
+    linked: dict[str, bool] = {}
+    for item in CONFIG_FIELDS:
+        if item.provider and (item.key_url or item.docs_url):
+            linked[item.provider] = True
+    # zhipu-mcp-reader shares zhipu-mcp's credential and is linked through it.
+    shares = {"zhipu-mcp-reader": "zhipu-mcp"}
+    missing = []
+    for provider in service.PROBE_KIND:
+        target = shares.get(provider, provider)
+        if not linked.get(target) and not linked.get(provider):
+            missing.append(provider)
+    assert not missing, f"no key or docs link for: {missing}"
+
+
+def test_secret_fields_for_real_providers_link_somewhere():
+    # Intent routing credentials are deliberately unlinked: the README names a
+    # recommended endpoint but documents no signup page for it.
+    unlinked_ok = {
+        "INTENT_EMBEDDING_API_KEY",
+        "INTENT_CLASSIFIER_API_KEY",
+    }
+    for item in CONFIG_FIELDS:
+        if item.kind != "secret" or item.key in unlinked_ok:
+            continue
+        assert item.key_url or item.docs_url, f"{item.key} is a secret with nowhere to get it"
