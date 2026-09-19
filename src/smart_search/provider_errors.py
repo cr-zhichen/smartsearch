@@ -44,8 +44,10 @@ def sanitize_provider_error_message(
     limit: int = 300,
 ) -> str:
     """Return a compact provider error excerpt without credentials."""
+    from .config import config
+
     text = str(value or "")
-    for secret in additional_secrets:
+    for secret in sorted(set(additional_secrets) | set(config.secret_values()), key=len, reverse=True):
         if secret:
             text = text.replace(str(secret), "[REDACTED]")
     text = _URL_CREDENTIALS_RE.sub(r"\1[REDACTED]@", text)

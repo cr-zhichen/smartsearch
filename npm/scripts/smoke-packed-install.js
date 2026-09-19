@@ -45,12 +45,15 @@ function assertPackContents(files) {
     "README.md",
     "README.zh-CN.md",
     "package.json",
-    "pyproject.toml"
+    "pyproject.toml",
+    "assets/branding/smart-search.png",
+    "assets/branding/README.md"
   ]);
   const allowedPrefixes = [
     "npm/",
     "skills/smart-search-cli/",
-    "src/smart_search/assets/skills/smart-search-cli/"
+    "src/smart_search/assets/skills/smart-search-cli/",
+    "src/smart_search/assets/ui/"
   ];
   const unexpected = files
     .map((file) => file.path)
@@ -62,7 +65,16 @@ function assertPackContents(files) {
     );
 
   assert.deepEqual(unexpected, [], "tarball contains files outside package.json files declarations");
-  for (const requiredPath of ["package.json", "pyproject.toml", "npm/bin/smart-search.js", "src/smart_search/cli.py"]) {
+  for (const requiredPath of [
+    "package.json",
+    "pyproject.toml",
+    "assets/branding/smart-search.png",
+    "npm/bin/smart-search.js",
+    "src/smart_search/cli.py",
+    // Only .py files match the src glob, so the UI page needs its own files entry.
+    // Without this assertion a missing entry is invisible until a user hits a 500.
+    "src/smart_search/assets/ui/index.html"
+  ]) {
     assert.ok(files.some((file) => file.path === requiredPath), `tarball is missing ${requiredPath}`);
   }
 }
@@ -94,6 +106,7 @@ const isolatedEnv = {
   ...process.env,
   HOME: homeDir,
   USERPROFILE: homeDir,
+  SMART_SEARCH_CONFIG_DIR: path.join(tempRoot, "config"),
   INIT_CWD: callerCwd
 };
 const version = run(process.execPath, [wrapperPath, "--version"], {
@@ -109,6 +122,16 @@ const smokeOutput = run(process.execPath, [wrapperPath, "smoke", "--mock", "--fo
   capture: true
 });
 assert.equal(JSON.parse(smokeOutput).ok, true, "packed mock smoke must report ok=true");
+
+const uiCheck = JSON.parse(
+  run(process.execPath, [wrapperPath, "ui", "--check", "--format", "json"], {
+    cwd: callerCwd,
+    env: isolatedEnv,
+    capture: true
+  })
+);
+assert.equal(uiCheck.ok, true, "packed install must be able to resolve the config UI page");
+assert.ok(uiCheck.asset_bytes > 1000, "packed config UI page must not be empty");
 
 const skillsUpdate = JSON.parse(
   run(

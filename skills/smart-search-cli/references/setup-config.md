@@ -5,6 +5,7 @@
 - Config storage
 - Doctor and diagnostics
 - Setup workflow
+- Browser config UI
 - Skill installation sync
 - Provider endpoint setup
 - Intent router setup
@@ -43,6 +44,16 @@
 - Unchecking a configured provider must not delete existing config values; use `smart-search config unset KEY` for deletion.
 - Interactive output should summarize `minimum_profile_ok`, missing required capabilities, and next-step commands.
 - Beginner filling examples for official-service and relay/pooled-endpoint minimum profiles must appear in the grouped wizard on stderr, not stdout. They must cover `main_search`, `docs_search`, and `web_fetch`.
+
+## Browser Config UI
+
+- `smart-search ui` opens a temporary local config page. Suggest it to users who find the 68 config keys or the terminal wizard hard to navigate; it is the browser equivalent of `smart-search setup` plus `smart-search providers status`.
+- It binds `127.0.0.1` on a random port, prints a URL carrying a one-time token, and exits once the browser tab stops sending heartbeats. It is not a daemon and needs no extra install: stdlib `http.server` plus one bundled HTML file.
+- Flags: `--no-browser` (print the URL only), `--port N`, `--idle-timeout SEC` (default `900`, `0` disables), `--lang zh|en`, `--check` (verify the bundled page resolves, then exit), plus the usual `--format`.
+- On a headless host, SSH session, or container the browser is deliberately not opened; the URL is printed and a `ssh -L` forwarding recipe is shown. Use `--port` to pin the port for forwarding.
+- The page never receives unmasked secrets. Keys supplied through environment variables render as locked, because environment variables override `config.json` on every read; the page names the `unset` to run.
+- Per-provider Test buttons call `smart-search providers test PROVIDER` equivalents. Each one is a real, possibly billable API request, so nothing is probed until the user clicks.
+- Do not recommend the UI for scripted or non-interactive work; `smart-search setup --non-interactive` and `smart-search config set` remain the automation path.
 
 ## Skill Installation Sync
 
@@ -88,6 +99,7 @@
 - A hard failure (`auth_error`, `config_error`) opens the cooldown on the first occurrence and is never probed, because a bad key does not heal itself. Soft failures (timeout, `5xx`, rate limit) need `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` consecutive failures and stay probeable, so a recovered provider returns without user action.
 - An empty result set is not a failure and never opens a cooldown.
 - The record is keyed to a fingerprint of the provider's credentials, so re-keying a provider with `smart-search config set` clears its cooldown automatically. A successful `smart-search doctor` probe also clears it.
+- `smart-search providers test PROVIDER [PROVIDER...]` checks whether saved credentials still work for one provider at a time, instead of `doctor`'s all-at-once fan-out. Each run is a real API request. `--timeout` caps each probe. A passing test clears that provider's cooldown, the same way a `doctor` probe does. Firecrawl reports `probe: presence` because only key presence can be checked.
 - Use `smart-search providers status --format json` to see which providers are cooling and why, and `smart-search providers reset PROVIDER` to retry one immediately. `smart-search providers reset` with no argument clears every cooldown.
 - Use `smart-search setup --non-interactive --provider-cooldown 600 --provider-failure-threshold 3`, or `smart-search config set SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS VALUE`, to persist the cooldown policy. A negative or non-numeric cooldown and a non-positive threshold fail before setup saves any field.
 - A skipped provider is still reported: the attempt has `status=skipped` with the remembered `error_type`, and `provider_notices` carries one deduplicated entry per degraded provider.

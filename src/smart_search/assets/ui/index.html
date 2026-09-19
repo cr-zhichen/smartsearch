@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>smart-search</title>
+<link rel="icon" type="image/png" data-smart-search-icon href="data:image/png;base64,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">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #646e7a;
+  --line: #e2e6ea; --accent: #2f6feb; --ok: #1a7f46; --warn: #a3671a; --bad: #c0392b;
+  --chip: #eef1f5; --shadow: 0 1px 2px rgba(16,22,26,.06), 0 4px 16px rgba(16,22,26,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a; --panel: #1c2025; --ink: #e7eaee; --muted: #98a2ad;
+    --line: #2a3039; --accent: #6ea0ff; --ok: #4ec27f; --warn: #d7a34a; --bad: #f0776a;
+    --chip: #252b33; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+}
+code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.layout { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+nav {
+  background: var(--panel); border-right: 1px solid var(--line);
+  padding: 20px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+nav h1 { font-size: 15px; margin: 0 0 4px 8px; letter-spacing: .2px; display: flex; align-items: center; gap: 8px; }
+nav h1 img { width: 36px; height: 36px; padding: 2px; background: white; border-radius: 6px; }
+nav .sub { font-size: 12px; color: var(--muted); margin: 0 0 18px 8px; }
+nav button {
+  display: block; width: 100%; text-align: left; background: none; border: 0;
+  padding: 8px 10px; border-radius: 7px; color: var(--ink); cursor: pointer;
+  font: inherit; font-size: 14px; margin-bottom: 2px;
+}
+nav button:hover { background: var(--chip); }
+nav button[aria-current="true"] { background: var(--accent); color: #fff; }
+main { padding: 28px 32px 80px; max-width: 900px; }
+h2 { font-size: 20px; margin: 0 0 6px; }
+.blurb { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px 18px; margin-bottom: 14px; box-shadow: var(--shadow);
+}
+.card h3 { margin: 0 0 2px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.card .note { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+.banner { border-left: 3px solid var(--accent); }
+.banner.ok { border-left-color: var(--ok); }
+.banner.bad { border-left-color: var(--bad); }
+.pill {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
+  background: var(--chip); color: var(--muted); white-space: nowrap;
+}
+.pill:empty { display: none; }
+.pill.ok { background: rgba(26,127,70,.14); color: var(--ok); }
+.pill.bad { background: rgba(192,57,43,.14); color: var(--bad); }
+.pill.warn { background: rgba(163,103,26,.16); color: var(--warn); }
+.row {
+  display: grid; grid-template-columns: 200px 1fr auto; gap: 10px;
+  align-items: start; padding: 9px 0; border-top: 1px solid var(--line);
+}
+.row:first-of-type { border-top: 0; }
+.row label { font-size: 14px; }
+.row .help { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.row .val { font-size: 13px; word-break: break-all; }
+.row .val .unset { color: var(--muted); }
+button.act {
+  background: var(--accent); color: #fff; border: 0; border-radius: 7px;
+  padding: 6px 13px; font: inherit; font-size: 13px; cursor: pointer;
+}
+button.act.ghost { background: var(--chip); color: var(--ink); }
+button.act[disabled] { opacity: .5; cursor: not-allowed; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px 7px 0; border-top: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; border-top: 0; }
+input[type="text"], input[type="password"], select {
+  width: 100%; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--ink); font: inherit; font-size: 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+input[disabled], select[disabled] { opacity: .6; cursor: not-allowed; }
+input.dirty, select.dirty { border-color: var(--accent); }
+.savebar {
+  position: sticky; bottom: 0; margin: 20px -32px -80px; padding: 12px 32px;
+  background: var(--panel); border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 12px; z-index: 5;
+}
+.savebar .grow { flex: 1; font-size: 13px; color: var(--muted); }
+.steps { counter-reset: step; }
+.step > h3::before {
+  counter-increment: step; content: counter(step);
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; background: var(--accent);
+  color: #fff; font-size: 12px; margin-right: 2px;
+}
+.step.done > h3::before { background: var(--ok); content: "✓"; }
+details.more { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+details.more > summary {
+  cursor: pointer; color: var(--muted); font-size: 13px; list-style: none;
+  padding: 2px 0; user-select: none;
+}
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "▸ "; }
+details.more[open] > summary::before { content: "▾ "; }
+.links { display: flex; gap: 10px; margin-top: 4px; flex-wrap: wrap; }
+.links a {
+  color: var(--accent); font-size: 12px; text-decoration: none;
+  border-bottom: 1px dotted var(--accent);
+}
+.links a:hover { border-bottom-style: solid; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  border-radius: 999px; padding: 3px 11px; font: inherit; font-size: 12px; cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip[disabled] { cursor: not-allowed; opacity: .5; }
+.chips.dirty .chip.on { outline: 1px solid var(--accent); }
+.chain { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.chain .arrow { color: var(--muted); font-size: 12px; }
+.cost {
+  font-size: 12px; color: var(--warn); background: rgba(163,103,26,.1);
+  border-radius: 6px; padding: 7px 10px; margin-bottom: 12px;
+}
+.toast {
+  position: fixed; right: 20px; bottom: 20px; background: var(--panel);
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 10px 14px; box-shadow: var(--shadow);
+  font-size: 13px; max-width: 380px; opacity: 0; transition: opacity .15s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.bad { border-left-color: var(--bad); }
+.lang { float: right; }
+.lang button { display: inline; width: auto; padding: 2px 8px; font-size: 12px; }
+@media (max-width: 720px) {
+  .layout { grid-template-columns: 1fr; }
+  nav { position: static; height: auto; }
+  main { padding: 20px 16px 60px; }
+  .row { grid-template-columns: 1fr; }
+  .savebar { margin: 20px -16px -60px; padding: 12px 16px; flex-wrap: wrap; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav>
+    <h1><img data-smart-search-icon src="data:image/png;base64,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" alt="">smart-search</h1>
+    <p class="sub" id="subtitle"></p>
+    <div id="nav"></div>
+    <p class="sub" style="margin-top:18px">
+      <span class="lang">
+        <button class="act ghost" id="langToggle" type="button">EN / 中文</button>
+      </span>
+    </p>
+  </nav>
+  <main id="main"></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script nonce="__SS_UI_NONCE__">
+(function () {
+  "use strict";
+  var TOKEN = "__SS_UI_TOKEN__";
+  var lang = "__SS_UI_LANG__" === "en" ? "en" : "zh";
+  var state = null;
+  var current = "status";
+  var testing = {};
+
+  var T = {
+    zh: {
+      sub: "本地配置页", ready: "最低配置已满足", notReady: "最低配置还差一点",
+      missing: "还缺", configFile: "配置文件", source: "来源",
+      env: "环境变量", file: "配置文件", def: "默认值",
+      unset: "未配置", test: "测试", testing: "测试中…", testAll: "全部测试",
+      cost: "每点一次「测试」都会向对应服务商发一次真实请求，可能计费。",
+      capabilities: "能力", chain: "兜底顺序", configured: "已配置",
+      cooldown: "冷却中", provider: "数据源", status: "状态", message: "说明",
+      remaining: "剩余", reset: "解除冷却", resetAll: "全部解除",
+      noCooldown: "当前没有数据源在冷却。", envLocked: "由环境变量接管，改这里不生效",
+      doctor: "运行完整体检", doctorCost: "体检会一次性调用所有已配置的服务商。",
+      confirmAll: "这会对所有已配置的数据源各发一次真实请求，继续？",
+      skills: "已安装", skillsNot: "未安装", refresh: "刷新",
+      skillsCurrent: "已是当前版本", skillsStale: "可更新", skillsExtra: "已安装（含额外文件）",
+      required: "必需", optional: "可选",
+      missingOne: "缺", optionalOne: "未配置", more: "更多设置",
+      save: "保存", discard: "放弃修改", clear: "清除", saved: "已保存",
+      unsaved: "有 {n} 处未保存", envHint: "想改的话先在终端执行",
+      keepSecret: "留空表示不改动", getKey: "去申请 key", readDocs: "文档",
+      stepMain: "第一步：主搜索",
+      stepDocs: "第二步：文档检索", stepFetch: "第三步：网页抓取",
+      pickOne: "下面任选一个配好即可。", installSkill: "安装 / 更新",
+      runRoute: "看它走哪些能力（免费）", runSearch: "跑一次真实搜索",
+      queryPlaceholder: "比如：React useEffect 清理函数怎么写",
+      running: "运行中…", searchCost: "真实搜索会调用主搜索模型并可能计费，确定继续？",
+      needQuery: "先输入一个问题。", result: "结果", chain: "兜底顺序",
+      chainNote: "每类能力按这个顺序往下试，绿色的是你已经配好的。",
+    },
+    en: {
+      sub: "local config", ready: "Minimum profile met", notReady: "Minimum profile not met",
+      missing: "Missing", configFile: "Config file", source: "Source",
+      env: "environment", file: "config file", def: "default",
+      unset: "not set", test: "Test", testing: "Testing…", testAll: "Test all",
+      cost: "Every Test makes one real request to that provider and may cost money.",
+      capabilities: "Capabilities", chain: "Fallback order", configured: "Configured",
+      cooldown: "Cooling down", provider: "Provider", status: "Status", message: "Message",
+      remaining: "Remaining", reset: "Clear cooldown", resetAll: "Clear all",
+      noCooldown: "No provider is cooling down.", envLocked: "Taken over by an environment variable",
+      doctor: "Run full doctor", doctorCost: "Doctor calls every configured provider at once.",
+      confirmAll: "This makes one real request to every configured provider. Continue?",
+      skills: "installed", skillsNot: "not installed", refresh: "Refresh",
+      skillsCurrent: "up to date", skillsStale: "update available", skillsExtra: "installed (extra files)",
+      required: "required", optional: "optional",
+      missingOne: "missing", optionalOne: "not set", more: "More settings",
+      save: "Save", discard: "Discard", clear: "Clear", saved: "Saved",
+      unsaved: "{n} unsaved change(s)", envHint: "To change it, first run",
+      keepSecret: "Leave empty to keep the current value", getKey: "Get a key", readDocs: "Docs",
+      stepMain: "Step 1 - main search",
+      stepDocs: "Step 2 - docs lookup", stepFetch: "Step 3 - page fetching",
+      pickOne: "Any one of these is enough.", installSkill: "Install / update",
+      runRoute: "Show which capabilities (free)", runSearch: "Run a real search",
+      queryPlaceholder: "e.g. how do I write a React useEffect cleanup function",
+      running: "Running…", searchCost: "A real search calls the main model and may cost money. Continue?",
+      needQuery: "Type a question first.", result: "Result", chain: "Fallback order",
+      chainNote: "Each capability is tried in this order; green ones are configured.",
+    }
+  };
+  function t(key) { return T[lang][key] || key; }
+  function L(obj, base) { return obj[base + "_" + lang] || obj[base + "_en"] || ""; }
+
+  function el(tag, attrs, kids) {
+    var node = document.createElement(tag);
+    attrs = attrs || {};
+    Object.keys(attrs).forEach(function (name) {
+      if (name === "class") node.className = attrs[name];
+      else if (name === "text") node.textContent = attrs[name];
+      else if (name.indexOf("on") === 0) node.addEventListener(name.slice(2), attrs[name]);
+      else if (attrs[name] !== null && attrs[name] !== undefined) node.setAttribute(name, attrs[name]);
+    });
+    (kids || []).forEach(function (kid) { if (kid) node.appendChild(kid); });
+    return node;
+  }
+
+  var toastTimer = null;
+  function toast(message, bad) {
+    var node = document.getElementById("toast");
+    node.textContent = message;
+    node.className = "toast show" + (bad ? " bad" : "");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { node.className = "toast"; }, 4200);
+  }
+
+  function api(method, path, body) {
+    return fetch(path, {
+      method: method,
+      headers: body
+        ? { "X-Smart-Search-Token": TOKEN, "Content-Type": "application/json" }
+        : { "X-Smart-Search-Token": TOKEN },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (response) {
+      return response.json().catch(function () { return { ok: false, error: "HTTP " + response.status }; });
+    });
+  }
+
+  function sourceLabel(source) {
+    if (source === "environment") return t("env");
+    if (source === "config_file") return t("file");
+    return t("def");
+  }
+
+  function seconds(value) {
+    var n = Number(value || 0);
+    if (n <= 0) return "-";
+    if (n < 60) return Math.round(n) + "s";
+    if (n < 3600) return Math.round(n / 60) + "m";
+    return (n / 3600).toFixed(1) + "h";
+  }
+
+  // ---- views ------------------------------------------------------------
+  function viewStatus() {
+    var main = document.getElementById("main");
+    var minimum = state.minimum_profile || {};
+    var ok = !!minimum.ok;
+    main.appendChild(el("h2", { text: L(sectionById("status"), "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(sectionById("status"), "blurb") }));
+
+    var missing = (minimum.missing || []).join(", ");
+    main.appendChild(el("div", { class: "card banner " + (ok ? "ok" : "bad") }, [
+      el("h3", {}, [
+        el("span", { text: ok ? t("ready") : t("notReady") }),
+        el("span", { class: "pill " + (ok ? "ok" : "bad"), text: ok ? "OK" : "FAIL" })
+      ]),
+      missing ? el("p", { class: "note", text: t("missing") + ": " + missing }) : null,
+      el("p", { class: "note mono", text: t("configFile") + ": " + (state.config_path || {}).config_file })
+    ]));
+
+    var caps = state.capability_status || {};
+    var requiredCaps = minimum.required || [];
+    var rows = Object.keys(caps).map(function (name) {
+      var item = caps[name] || {};
+      var configured = (item.configured || []).join(", ") || "-";
+      var needed = requiredCaps.indexOf(name) >= 0;
+      var cls = item.ok ? "ok" : (needed ? "bad" : "");
+      var label = item.ok ? "OK" : (needed ? t("missingOne") : t("optionalOne"));
+      return el("tr", {}, [
+        el("td", {}, [
+          el("span", { class: "mono", text: name }),
+          needed ? el("span", { class: "pill", text: t("required") }) : null
+        ]),
+        el("td", {}, [el("span", { class: "pill " + cls, text: label })]),
+        el("td", { class: "mono", text: configured }),
+        el("td", { class: "mono", text: (item.fallback_chain || []).join(" → ") })
+      ]);
+    });
+    main.appendChild(el("div", { class: "card" }, [
+      el("h3", { text: t("capabilities") }),
+      el("table", {}, [
+        el("thead", {}, [el("tr", {}, [
+          el("th", { text: t("capabilities") }), el("th", { text: t("status") }),
+          el("th", { text: t("configured") }), el("th", { text: t("chain") })
+        ])]),
+        el("tbody", {}, rows)
+      ])
+    ]));
+
+    main.appendChild(chainCard());
+    main.appendChild(cooldownCard());
+  }
+
+  function cooldownCard() {
+    var health = state.provider_health || {};
+    var cooling = (health.providers || []).filter(function (item) { return item.state === "cooldown"; });
+    var kids = [el("h3", { text: t("cooldown") })];
+    if (!cooling.length) {
+      kids.push(el("p", { class: "note", text: t("noCooldown") }));
+      return el("div", { class: "card" }, kids);
+    }
+    kids.push(el("table", {}, [
+      el("thead", {}, [el("tr", {}, [
+        el("th", { text: t("provider") }), el("th", { text: t("remaining") }),
+        el("th", { text: t("message") }), el("th", {})
+      ])]),
+      el("tbody", {}, cooling.map(function (item) {
+        return el("tr", {}, [
+          el("td", { class: "mono", text: item.provider }),
+          el("td", { text: seconds(item.cooldown_remaining_seconds) }),
+          el("td", { text: item.error || item.error_type || "-" }),
+          el("td", {}, [el("button", {
+            class: "act ghost", type: "button", text: t("reset"),
+            onclick: function () { resetCooldown([item.provider]); }
+          })])
+        ]);
+      }))
+    ]));
+    kids.push(el("p", { class: "note", style: "margin-top:12px" }, [
+      el("button", {
+        class: "act ghost", type: "button", text: t("resetAll"),
+        onclick: function () { resetCooldown(null); }
+      })
+    ]));
+    return el("div", { class: "card" }, kids);
+  }
+
+  function resetCooldown(providers) {
+    api("POST", "/api/providers/reset", { providers: providers }).then(function (data) {
+      if (!data.ok) { toast(data.error || "failed", true); return; }
+      toast((data.cleared || []).join(", ") || t("noCooldown"));
+      refresh();
+    });
+  }
+
+  function viewProviders() {
+    var main = document.getElementById("main");
+    var section = sectionById("providers");
+    main.appendChild(el("h2", { text: L(section, "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(section, "blurb") }));
+    main.appendChild(el("div", { class: "cost", text: t("cost") }));
+
+    var groups = {};
+    var order = [];
+    state.metadata.fields.forEach(function (field) {
+      if (field.section !== "providers") return;
+      var name = field.provider || "other";
+      if (!groups[name]) { groups[name] = []; order.push(name); }
+      groups[name].push(field);
+    });
+    order.forEach(function (provider) {
+      main.appendChild(providerCard(provider, groups[provider]));
+    });
+    main.appendChild(el("div", { class: "card" }, [
+      el("h3", { text: t("doctor") }),
+      el("p", { class: "note", text: t("doctorCost") }),
+      el("button", { class: "act ghost", type: "button", text: t("doctor"), onclick: runDoctor })
+    ]));
+    main.appendChild(saveBar());
+    updateSaveBar();
+  }
+
+  function providerCard(provider, fields) {
+    var health = ((state.provider_health || {}).providers || []).filter(function (item) {
+      return item.provider === provider;
+    })[0];
+    var probe = (state.probe_kinds || {})[provider] || "";
+    var testable = !!probe;
+    var badge = null;
+    if (health && health.state === "cooldown") badge = el("span", { class: "pill bad", text: t("cooldown") });
+    else if (probe === "presence") badge = el("span", { class: "pill warn", text: "presence" });
+
+    var kids = [
+      el("h3", {}, [
+        el("span", { class: "mono", text: provider }),
+        badge,
+        el("span", { class: "pill", id: "res-" + provider, text: "" })
+      ])
+    ];
+    var upfront = fields.filter(function (f) { return f.tier !== "advanced"; });
+    var advanced = fields.filter(function (f) { return f.tier === "advanced"; });
+    if (!upfront.length) { upfront = advanced; advanced = []; }
+    upfront.forEach(function (field) { kids.push(editableRow(field)); });
+    if (advanced.length) {
+      kids.push(el("details", { class: "more" }, [
+        el("summary", { text: t("more") + " (" + advanced.length + ")" })
+      ].concat(advanced.map(editableRow))));
+    }
+    if (testable) {
+      kids.push(el("p", { class: "note", style: "margin-top:12px;margin-bottom:0" }, [
+        el("button", {
+          class: "act", type: "button", id: "btn-" + provider, text: t("test"),
+          onclick: function () { runTest(provider); }
+        })
+      ]));
+    }
+    return el("div", { class: "card" }, kids);
+  }
+
+  var pending = {};          // KEY -> new string value ("" means clear)
+  var previewTimer = null;
+
+  function isDirty() { return Object.keys(pending).length > 0; }
+
+  function effectiveValues() {
+    // Truthiness is all capability_status_from_values looks at, so a masked
+    // placeholder stands in fine for a secret we are not allowed to read back.
+    var merged = {};
+    Object.keys(state.values || {}).forEach(function (key) { merged[key] = state.values[key]; });
+    Object.keys(pending).forEach(function (key) { merged[key] = pending[key]; });
+    return merged;
+  }
+
+  function markDirty(field, input, value) {
+    var saved = (state.values || {})[field.key] || "";
+    if (value === saved || (value === "" && (!saved || field.kind === "secret"))) delete pending[field.key];
+    else pending[field.key] = value;
+    input.className = pending.hasOwnProperty(field.key) ? "dirty" : "";
+    updateSaveBar();
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(runPreview, 350);
+  }
+
+  function runPreview() {
+    api("POST", "/api/preview", { values: effectiveValues() }).then(function (data) {
+      if (!data || !data.ok) return;
+      var node = document.getElementById("previewMeter");
+      if (!node) return;
+      node.className = "pill " + (data.minimum_profile_ok ? "ok" : "bad");
+      node.textContent = data.minimum_profile_ok
+        ? t("ready")
+        : t("notReady") + (data.missing.length ? " · " + data.missing.join(", ") : "");
+      document.querySelectorAll("[data-step]").forEach(function (card) {
+        var name = card.getAttribute("data-step");
+        var ok = (data.capability_status[name] || {}).ok;
+        card.className = "card step" + (ok ? " done" : "");
+      });
+    });
+  }
+
+  function updateSaveBar() {
+    var bar = document.getElementById("saveBar");
+    if (!bar) return;
+    var count = Object.keys(pending).length;
+    bar.style.display = count ? "flex" : "none";
+    var label = document.getElementById("saveCount");
+    if (label) label.textContent = count ? t("unsaved").replace("{n}", count) : "";
+  }
+
+  function saveChanges() {
+    if (!isDirty()) return;
+    var setValues = {}, unsetKeys = [];
+    Object.keys(pending).forEach(function (key) {
+      if (pending[key] === "") unsetKeys.push(key);
+      else setValues[key] = pending[key];
+    });
+    var button = document.getElementById("saveBtn");
+    if (button) button.disabled = true;
+    api("POST", "/api/config", { set: setValues, unset: unsetKeys, revision: state.revision }).then(function (data) {
+      if (!data.ok) { toast(data.error || "failed", true); return; }
+      pending = {};
+      if (data.status) { Object.keys(data.status).forEach(function (k) { state[k] = data.status[k]; }); }
+      toast(t("saved"));
+      render();
+    }).catch(function (e) {
+      toast(String(e), true);
+    }).then(function () {
+      if (button) button.disabled = false;
+    });
+  }
+
+  function saveBar() {
+    return el("div", { class: "savebar", id: "saveBar", style: "display:none" }, [
+      el("span", { class: "grow", id: "saveCount" }),
+      el("button", {
+        class: "act ghost", type: "button", text: t("discard"),
+        onclick: function () { pending = {}; render(); }
+      }),
+      el("button", { class: "act", type: "button", id: "saveBtn", text: t("save"), onclick: saveChanges })
+    ]);
+  }
+
+  function fieldInput(field) {
+    var source = (state.sources || {})[field.key] || "default";
+    var saved = (state.values || {})[field.key] || "";
+    var locked = source === "environment";
+    var value = pending.hasOwnProperty(field.key) ? pending[field.key] : saved;
+
+    if (field.kind === "enum" || field.kind === "bool") {
+      var options = field.kind === "bool" ? ["true", "false"] : field.choices;
+      var select = el("select", locked ? { disabled: "disabled" } : {});
+      select.appendChild(el("option", { value: "", text: "(" + t("def") + (field.default ? " " + field.default : "") + ")" }));
+      options.forEach(function (option) {
+        select.appendChild(el("option", { value: option, text: option }));
+      });
+      select.value = value;
+      if (!locked) select.addEventListener("change", function () { markDirty(field, select, select.value); });
+      if (pending.hasOwnProperty(field.key)) select.className = "dirty";
+      return select;
+    }
+
+    if (field.kind === "csv" && field.key.indexOf("RESEARCH_") >= 0) {
+      var chosen = {};
+      value.split(",").forEach(function (item) {
+        item = item.trim();
+        if (item) chosen[item] = true;
+      });
+      var wrap = el("div", { class: "chips" });
+      Object.keys(state.provider_profiles || {}).sort().forEach(function (provider) {
+        var on = !!chosen[provider];
+        var chip = el("button", {
+          type: "button", class: "chip" + (on ? " on" : ""), text: provider,
+          disabled: locked ? "disabled" : null
+        });
+        chip.addEventListener("click", function () {
+          if (locked) return;
+          if (chosen[provider]) delete chosen[provider]; else chosen[provider] = true;
+          chip.className = "chip" + (chosen[provider] ? " on" : "");
+          markDirty(field, wrap, Object.keys(chosen).sort().join(","));
+        });
+        wrap.appendChild(chip);
+      });
+      return wrap;
+    }
+
+    var secret = field.kind === "secret";
+    var input = el("input", {
+      type: secret ? "password" : "text",
+      autocomplete: secret ? "new-password" : "off",
+      spellcheck: "false",
+      placeholder: secret && saved ? saved : (field.placeholder || field.default || "")
+    });
+    // A saved secret is only ever shown masked; leaving the box empty keeps it.
+    input.value = secret ? (pending.hasOwnProperty(field.key) ? pending[field.key] : "") : value;
+    if (locked) { input.disabled = true; input.value = secret ? "" : saved; }
+    else input.addEventListener("input", function () { markDirty(field, input, input.value); });
+    if (pending.hasOwnProperty(field.key)) input.className = "dirty";
+    return input;
+  }
+
+  function editableRow(field) {
+    var source = (state.sources || {})[field.key] || "default";
+    var saved = (state.values || {})[field.key] || "";
+    var locked = source === "environment";
+    var input = fieldInput(field);
+    var side = [el("span", { class: "pill", text: sourceLabel(source) })];
+    if (locked) side.push(el("span", { class: "pill warn", text: t("envLocked") }));
+    else if (saved) side.push(el("button", {
+      class: "act ghost", type: "button", text: t("clear"),
+      onclick: function () {
+        pending[field.key] = "";
+        render();
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(runPreview, 50);
+      }
+    }));
+    var links = null;
+    if (field.key_url || field.docs_url) {
+      links = el("div", { class: "links" }, [
+        field.key_url ? el("a", {
+          href: field.key_url, target: "_blank", rel: "noopener noreferrer",
+          text: t("getKey") + " ↗"
+        }) : null,
+        field.docs_url ? el("a", {
+          href: field.docs_url, target: "_blank", rel: "noopener noreferrer",
+          text: t("readDocs") + " ↗"
+        }) : null
+      ]);
+    }
+    return el("div", { class: "row" }, [
+      el("div", {}, [
+        el("label", { text: L(field, "label") }),
+        el("span", { class: "help mono", text: field.key }),
+        L(field, "help") ? el("span", { class: "help", text: L(field, "help") }) : null,
+        locked ? el("span", { class: "help", text: t("envHint") + " unset " + field.key }) : null,
+        links
+      ]),
+      el("div", {}, [input]),
+      el("div", {}, side)
+    ]);
+  }
+
+  function runTest(provider) {
+    if (testing[provider]) return;
+    testing[provider] = true;
+    var button = document.getElementById("btn-" + provider);
+    var result = document.getElementById("res-" + provider);
+    if (button) { button.disabled = true; button.textContent = t("testing"); }
+    if (result) { result.className = "pill"; result.textContent = "…"; }
+    var shared = (state.probe_kinds[provider] || "").replace(/^shared:/, "");
+    var overrides = {};
+    state.metadata.fields.forEach(function (field) {
+      if ((field.provider === provider || field.provider === shared) && pending.hasOwnProperty(field.key)) {
+        overrides[field.key] = pending[field.key];
+      }
+    });
+    api("POST", "/api/test", { provider: provider, overrides: overrides }).then(function (data) {
+      var good = data.status === "ok";
+      var neutral = data.status === "configured" || data.status === "not_configured";
+      if (result) {
+        result.className = "pill " + (good ? "ok" : (neutral ? "warn" : "bad"));
+        result.textContent = data.status + (data.response_time_ms ? " · " + Math.round(data.response_time_ms) + "ms" : "");
+      }
+      toast(provider + ": " + (data.message || data.status), !good && !neutral);
+      return api("GET", "/api/status");
+    }).then(function (fresh) {
+      if (fresh && fresh.ok) { Object.keys(fresh).forEach(function (k) { state[k] = fresh[k]; }); }
+    }).catch(function (e) {
+      toast(String(e), true);
+    }).then(function () {
+      testing[provider] = false;
+      if (button) { button.disabled = false; button.textContent = t("test"); }
+    });
+  }
+
+  function runDoctor() {
+    if (!window.confirm(t("confirmAll"))) return;
+    toast(t("testing"));
+    api("POST", "/api/doctor").then(function (data) {
+      toast(data.ok ? "doctor: OK" : "doctor: " + (data.error || "FAIL"), !data.ok);
+      refresh();
+    });
+  }
+
+  var STEPS = [
+    { capability: "main_search", title: "stepMain",
+      providers: ["xai-responses", "openai-compatible"] },
+    { capability: "docs_search", title: "stepDocs",
+      providers: ["context7", "exa"] },
+    { capability: "web_fetch", title: "stepFetch",
+      providers: ["tavily", "jina", "zhipu-mcp-reader", "zhipu-mcp", "firecrawl"] }
+  ];
+
+  function viewGettingStarted() {
+    var main = document.getElementById("main");
+    var section = sectionById("getting_started");
+    main.appendChild(el("h2", {}, [
+      el("span", { text: L(section, "label") + " " }),
+      el("span", { class: "pill", id: "previewMeter", text: "" })
+    ]));
+    main.appendChild(el("p", { class: "blurb", text: L(section, "blurb") }));
+
+    var wrap = el("div", { class: "steps" });
+    STEPS.forEach(function (step) {
+      var fields = state.metadata.fields.filter(function (field) {
+        return step.providers.indexOf(field.provider) >= 0
+          && field.capabilities.indexOf(step.capability) >= 0;
+      }).sort(function (a, b) {
+        return step.providers.indexOf(a.provider) - step.providers.indexOf(b.provider);
+      });
+      var essential = fields.filter(function (f) { return f.tier !== "advanced"; });
+      var advanced = fields.filter(function (f) { return f.tier === "advanced"; });
+      var ok = ((state.capability_status || {})[step.capability] || {}).ok;
+      var kids = [
+        el("h3", {}, [
+          el("span", { text: " " + t(step.title) }),
+          el("span", { class: "mono pill", text: step.capability })
+        ]),
+        el("p", { class: "note", text: t("pickOne") })
+      ];
+      essential.forEach(function (field) { kids.push(editableRow(field)); });
+      if (advanced.length) {
+        kids.push(el("details", { class: "more" }, [
+          el("summary", { text: t("more") + " (" + advanced.length + ")" })
+        ].concat(advanced.map(editableRow))));
+      }
+      step.providers.filter(function (provider) { return state.probe_kinds[provider]; }).forEach(function (provider) {
+        kids.push(el("p", { class: "note" }, [
+          el("button", { class: "act ghost", type: "button", id: "btn-" + provider,
+            text: t("test") + " " + provider, onclick: function () { runTest(provider); } }),
+          el("span", { class: "pill", id: "res-" + provider })
+        ]));
+      });
+      wrap.appendChild(el("div", { class: "card step" + (ok ? " done" : ""), "data-step": step.capability }, kids));
+    });
+    main.appendChild(wrap);
+    main.appendChild(saveBar());
+    updateSaveBar();
+    runPreview();
+  }
+
+  function viewSection(id) {
+    var main = document.getElementById("main");
+    var section = sectionById(id);
+    main.appendChild(el("h2", { text: L(section, "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(section, "blurb") }));
+    var fields = state.metadata.fields.filter(function (field) { return field.section === id; });
+    var essential = fields.filter(function (f) { return f.tier === "essential"; });
+    var rest = fields.filter(function (f) { return f.tier !== "essential"; });
+    if (essential.length) {
+      main.appendChild(el("div", { class: "card" }, [el("h3", { text: t("required") })].concat(
+        essential.map(editableRow))));
+    }
+    if (rest.length) {
+      main.appendChild(el("div", { class: "card" }, [
+        el("h3", { text: t("optional") }),
+        el("details", { class: "more", open: essential.length ? null : "open" }, [
+          el("summary", { text: t("more") + " (" + rest.length + ")" })
+        ].concat(rest.map(editableRow)))
+      ]));
+    }
+    main.appendChild(saveBar());
+    updateSaveBar();
+  }
+
+  function viewSkills() {
+    var main = document.getElementById("main");
+    var section = sectionById("skills");
+    main.appendChild(el("h2", { text: L(section, "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(section, "blurb") }));
+    var card = el("div", { class: "card" }, [el("p", { class: "note", text: "…" })]);
+    main.appendChild(card);
+    api("GET", "/api/skills?targets=" + encodeURIComponent(
+      state.skill_targets.map(function (item) { return item.id; }).join(",")
+    )).then(function (data) {
+      card.textContent = "";
+      if (!data.ok) { card.appendChild(el("p", { class: "note", text: data.error || "failed" })); return; }
+      card.appendChild(el("table", {}, [
+        el("thead", {}, [el("tr", {}, [
+          el("th", { text: t("provider") }), el("th", { text: t("status") }), el("th", { text: t("message") })
+        ])]),
+        el("tbody", {}, (data.targets || []).map(function (item) {
+          var installed = ["up_to_date", "stale", "extra_files"].indexOf(item.status) >= 0;
+          var statusLabel = { up_to_date: "skillsCurrent", stale: "skillsStale", extra_files: "skillsExtra" }[item.status];
+          return el("tr", {}, [
+            el("td", { text: item.label || item.target }),
+            el("td", {}, [el("span", {
+              class: "pill " + (installed ? "ok" : ""), text: statusLabel ? t(statusLabel) : t("skillsNot")
+            })]),
+            el("td", { class: "mono", text: item.status || "" })
+          ]);
+        }))
+      ]));
+      card.appendChild(el("p", { class: "note", style: "margin-top:12px;margin-bottom:0" }, [
+        el("button", {
+          class: "act", type: "button", text: t("installSkill"),
+          onclick: function (event) {
+            var button = event.target;
+            button.disabled = true;
+            api("POST", "/api/skills/install", {
+              targets: (data.targets || []).map(function (item) { return item.target; })
+            }).then(function (result) {
+              toast(result.ok ? t("saved") + " (" + (result.installed_count || 0) + ")"
+                              : (result.error || "failed"), !result.ok);
+              render();
+            }).then(function () { button.disabled = false; });
+          }
+        })
+      ]));
+    });
+  }
+
+  function viewTryIt() {
+    var main = document.getElementById("main");
+    var section = sectionById("tryit");
+    main.appendChild(el("h2", { text: L(section, "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(section, "blurb") }));
+
+    var box = el("input", { type: "text", placeholder: t("queryPlaceholder"), spellcheck: "false" });
+    var output = el("pre", {
+      class: "mono", style: "white-space:pre-wrap;word-break:break-word;margin:0;font-size:12px"
+    });
+    var outputCard = el("div", { class: "card", style: "display:none" }, [
+      el("h3", { text: t("result") }), output
+    ]);
+
+    function run(command) {
+      var query = box.value.trim();
+      if (!query) { toast(t("needQuery"), true); return; }
+      if (command === "search" && !window.confirm(t("searchCost"))) return;
+      outputCard.style.display = "";
+      output.textContent = t("running");
+      api("POST", "/api/run", { command: command, query: query }).then(function (data) {
+        output.textContent = JSON.stringify(data, null, 2);
+        if (!data.ok) toast(data.error || "failed", true);
+      }).catch(function (e) { output.textContent = String(e); });
+    }
+
+    main.appendChild(el("div", { class: "card" }, [
+      el("div", { class: "row", style: "grid-template-columns:1fr" }, [el("div", {}, [box])]),
+      el("p", { class: "note", style: "margin:12px 0 0;display:flex;gap:8px;flex-wrap:wrap" }, [
+        el("button", { class: "act", type: "button", text: t("runRoute"), onclick: function () { run("route"); } }),
+        el("button", { class: "act ghost", type: "button", text: t("runSearch"), onclick: function () { run("search"); } })
+      ])
+    ]));
+    main.appendChild(outputCard);
+    box.addEventListener("keydown", function (event) { if (event.key === "Enter") run("route"); });
+  }
+
+  function chainCard() {
+    var chains = state.capability_chains || {};
+    var caps = state.capability_status || {};
+    var cooling = {};
+    ((state.provider_health || {}).providers || []).forEach(function (item) {
+      if (item.state === "cooldown") cooling[item.provider] = true;
+    });
+    var rows = Object.keys(chains).filter(function (name) { return caps[name]; }).map(function (name) {
+      var configured = (caps[name] || {}).configured || [];
+      var steps = [];
+      chains[name].forEach(function (provider, index) {
+        if (index) steps.push(el("span", { class: "arrow", text: "→" }));
+        var cls = cooling[provider] ? "bad" : (configured.indexOf(provider) >= 0 ? "ok" : "");
+        steps.push(el("span", {
+          class: "pill " + cls,
+          title: cooling[provider] ? t("cooldown") : "",
+          text: provider + (cooling[provider] ? " ✕" : "")
+        }));
+      });
+      return el("tr", {}, [
+        el("td", { class: "mono", text: name }),
+        el("td", { class: "chain" }, steps)
+      ]);
+    });
+    return el("div", { class: "card" }, [
+      el("h3", { text: t("chain") }),
+      el("p", { class: "note", text: t("chainNote") }),
+      el("table", {}, [el("tbody", {}, rows)])
+    ]);
+  }
+
+  function sectionById(id) {
+    var found = state.metadata.sections.filter(function (item) { return item.id === id; })[0];
+    return found || { label_zh: id, label_en: id, blurb_zh: "", blurb_en: "" };
+  }
+
+  // ---- shell ------------------------------------------------------------
+  function renderNav() {
+    var nav = document.getElementById("nav");
+    nav.textContent = "";
+    document.getElementById("subtitle").textContent = t("sub");
+    state.metadata.sections.forEach(function (section) {
+      nav.appendChild(el("button", {
+        type: "button", text: L(section, "label"),
+        "aria-current": section.id === current ? "true" : "false",
+        onclick: function () {
+          if (isDirty() && !window.confirm(t("discard") + "?")) return;
+          pending = {};
+          current = section.id;
+          render();
+        }
+      }));
+    });
+  }
+
+  function render() {
+    renderNav();
+    var main = document.getElementById("main");
+    main.textContent = "";
+    if (current === "status") viewStatus();
+    else if (current === "getting_started") viewGettingStarted();
+    else if (current === "providers") viewProviders();
+    else if (current === "skills") viewSkills();
+    else if (current === "tryit") viewTryIt();
+    else viewSection(current);
+    window.scrollTo(0, 0);
+  }
+
+  function refresh() {
+    return api("GET", "/api/status").then(function (data) {
+      if (data && data.ok) {
+        Object.keys(data).forEach(function (key) { state[key] = data[key]; });
+        render();
+      }
+    });
+  }
+
+  document.getElementById("langToggle").addEventListener("click", function () {
+    lang = lang === "zh" ? "en" : "zh";
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+    render();
+  });
+
+  window.setInterval(function () { api("POST", "/api/heartbeat", {}); }, 30000);
+
+  api("GET", "/api/state").then(function (data) {
+    if (!data || !data.ok) {
+      document.getElementById("main").textContent = (data && data.error) || "failed to load";
+      return;
+    }
+    state = data;
+    current = "status";
+    render();
+  });
+})();
+</script>
+</body>
+</html>

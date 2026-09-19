@@ -1,6 +1,6 @@
 {
   "name": "@konbakuyomu/smart-search",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "CLI-first multi-source web research with xAI/OpenAI-compatible search, Exa, Context7, Zhipu, Tavily, Firecrawl, and Deep Research planning.",
   "license": "MIT",
   "homepage": "https://github.com/konbakuyomu/smartsearch#readme",
@@ -15,10 +15,13 @@
     "smart-search": "npm/bin/smart-search.js"
   },
   "files": [
+    "assets/branding/smart-search.png",
+    "assets/branding/README.md",
     "npm/",
     "skills/smart-search-cli/**",
     "src/smart_search/**/*.py",
     "src/smart_search/assets/skills/smart-search-cli/**",
+    "src/smart_search/assets/ui/**",
     "pyproject.toml",
     "README.md",
     "README.zh-CN.md",

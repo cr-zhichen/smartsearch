@@ -1,0 +1,115 @@
+name: Desktop test packages
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/desktop-build.yml"
+      - "desktop/**"
+      - "pyproject.toml"
+      - "src/smart_search/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows ${{ matrix.architecture }} test package
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: x64
+            runner: windows-latest
+            python_architecture: x64
+          - architecture: arm64
+            runner: windows-11-arm
+            python_architecture: arm64
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          architecture: ${{ matrix.python_architecture }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Install build dependencies
+        run: python -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"
+
+      - name: Build self-contained test package
+        shell: pwsh
+        run: >-
+          .\desktop\scripts\Build-Windows.ps1
+          -Architecture ${{ matrix.architecture }}
+          -PythonPath "${{ steps.python.outputs.python-path }}"
+          -InstallerMode Skip
+
+      - name: Upload unsigned test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-search-windows-${{ matrix.architecture }}-unsigned-test
+          path: .desktop-artifacts/windows-${{ matrix.architecture }}-*/publish/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+  macos:
+    name: macOS ${{ matrix.architecture }} test package
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - architecture: x86_64
+            runner: macos-15-intel
+            python_architecture: x64
+          - architecture: arm64
+            runner: macos-15
+            python_architecture: arm64
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        id: python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          architecture: ${{ matrix.python_architecture }}
+
+      - name: Install build dependencies
+        env:
+          PYTHON_BIN: ${{ steps.python.outputs.python-path }}
+        run: '"$PYTHON_BIN" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"'
+
+      - name: Build unsigned test app and DMG
+        run: >-
+          bash desktop/scripts/build-macos.sh
+          --architecture ${{ matrix.architecture }}
+          --python "${{ steps.python.outputs.python-path }}"
+
+      - name: Upload unsigned test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-search-macos-${{ matrix.architecture }}-unsigned-test
+          path: .desktop-artifacts/macos-${{ matrix.architecture }}-*/*.dmg
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Test macOS protocol models
+        run: >-
+          swift test --package-path desktop/macos --configuration release
+          --arch ${{ matrix.architecture }}
+          --scratch-path .desktop-artifacts/macos-model-tests

@@ -19,3 +19,11 @@ node_modules/
 .codex/
 .codestable/
 .trellis/
+.desktop-artifacts/
+.playwright-cli/
+.comet/runtime/
+.comet/current-change.json
+desktop/windows/**/bin/
+desktop/windows/**/obj/
+desktop/macos/.build/
+desktop/macos/.swiftpm/

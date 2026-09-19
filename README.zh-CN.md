@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/branding/smart-search.png" alt="Smart Search" width="112">
+
 # smart-search
 
 **给 AI agent 用的联网检索命令层，一条命令，一份可复现的 JSON**
@@ -20,7 +22,7 @@
 
 ## 目录
 
-[它到底是什么](#它到底是什么) · [安装](#安装) · [快速开始](#快速开始) · [当前架构](#当前架构) · [Deep Research](#deep-research-深度搜索) · [API 和 Key 申请入口](#api-和-key-申请入口) · [Provider 失败冷却](#provider-失败冷却) · [常用命令](#常用命令) · [输出和证据策略](#输出和证据策略) · [排障](#排障) · [开发验证](#开发验证) · [发布通道](#发布通道)
+[它到底是什么](#它到底是什么) · [安装](#安装) · [快速开始](#快速开始) · [在浏览器里配置](#在浏览器里配置) · [当前架构](#当前架构) · [Deep Research](#deep-research-深度搜索) · [API 和 Key 申请入口](#api-和-key-申请入口) · [Provider 失败冷却](#provider-失败冷却) · [常用命令](#常用命令) · [输出和证据策略](#输出和证据策略) · [排障](#排障) · [开发验证](#开发验证) · [发布通道](#发布通道)
 
 ## 先跑一条，不用配 key
 
@@ -100,6 +102,16 @@ smart-search research "OpenAI Responses API web_search 和 Chat Completions 联�
 
 ## 安装
 
+### Windows 桌面端
+
+[下载 Windows x64 安装包](https://github.com/konbakuyomu/smartsearch/releases/download/v0.1.19/SmartSearch-0.1.19-win-x64-Setup-unsigned-test.exe)。
+原生 App 提供配置、搜索、研究、活动和 Skills 页面，自带运行环境，无需另装 Python 或 Node。
+安装器未签名；macOS 和 Windows ARM64 实机验收仍待完成。详见[桌面端使用说明](docs/desktop.md)。
+
+CLI 仍可独立安装，并在 App 关闭时正常运行。
+
+### CLI
+
 稳定版：
 
 ```powershell
@@ -124,10 +136,11 @@ npm 包安装时会自动创建隔离的 Python 运行环境。你平时只需�
 
 ## 快速开始
 
-1. 配置 provider：
+1. 配置 provider，浏览器或终端二选一：
 
 ```powershell
-smart-search setup
+smart-search ui                  # 临时的本地配置页，见「在浏览器里配置」
+smart-search setup               # 或者走终端交互向导
 smart-search doctor --format json
 ```
 
@@ -186,6 +199,45 @@ smart-search skills update --targets codex --format json
 Trellis、hooks、agents 或 commands。OpenCode status 会将已发现的旧路径
 `~/.opencode/skills/smart-search-cli` 作为只读 `legacy_locations` 元数据报告，绝不会自动移动或删除它。Setup 和 update 只会向规范的
 OpenCode 路径写入托管内置文件，旧树和其他额外文件都会保持不变。
+
+## 在浏览器里配置
+
+68 个配置项堆成文字墙很难读。`smart-search ui` 会开一个临时的本地页面，按用途分好组：
+
+```powershell
+smart-search ui
+```
+
+它绑在 `127.0.0.1` 的随机端口上，打印一个带一次性 token 的地址，关掉页面就自己退出。不留常驻服务，也不用额外安装 —— 服务端是 Python 标准库，页面是单个 HTML 文件。
+
+它能做什么：
+
+- 三步向导，只问你真正需要的那三类能力，填够了实时指示器就转绿
+- 所有配置项按服务商分组，密钥一律掩码显示，明文不会发给浏览器
+- 每个服务商一个「测试」按钮，验证已保存的 key 是否还有效。每点一次都是一次真实 API 请求，所以不点就不测
+- 哪些服务商在冷却中，以及一键解除
+- 15 个 agent 目标的 skill 安装状态
+
+常用参数：
+
+| 参数 | 作用 |
+| --- | --- |
+| `--no-browser` | 只打印地址，不自动开浏览器 |
+| `--port N` | 绑定固定端口 |
+| `--idle-timeout SEC` | 空闲多少秒后退出（默认 `900`，`0` 表示不退出） |
+| `--lang zh\|en` | 界面语言 |
+| `--check` | 检查页面资源是否装好，然后退出 |
+
+远程机器上不会自动开浏览器，转发端口即可：
+
+```bash
+smart-search ui --no-browser --port 8765
+ssh -L 8765:127.0.0.1:8765 用户@主机      # 然后在本地打开打印出来的地址
+```
+
+用环境变量设置的 key 会显示为锁定且不可编辑，因为环境变量在每次读取时都覆盖 `config.json`。页面会告诉你该执行哪条 `unset`。
+
+命令行的方式仍然可用：`smart-search setup`、`smart-search config set KEY VALUE`、`smart-search providers test PROVIDER`。
 
 ## 当前架构
 

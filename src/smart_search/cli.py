@@ -4,6 +4,7 @@ import contextlib
 import getpass
 import inspect
 import json
+import os
 from importlib import metadata
 import subprocess
 import sys
@@ -11,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from . import service
+from . import activity, service
 from .embedding_presets import (
     QWEN3_EMBEDDING_8B_PRESET,
     embedding_preset_for_model,
@@ -77,9 +78,11 @@ COMMAND_ALIASES = {
     "regression": ["reg"],
 }
 
+UI_COMMAND_ALIASES = ["web"]
 PROVIDERS_COMMAND_ALIASES = {
     "status": ["st", "ls"],
     "reset": ["clear"],
+    "test": ["check", "probe"],
 }
 
 CONFIG_COMMAND_ALIASES = {
@@ -405,6 +408,26 @@ def _format_result_markdown(command: str, data: dict[str, Any], title: str) -> s
 
 
 def _format_providers_markdown(data: dict[str, Any]) -> str:
+    if "results" in data:
+        rows = [
+            [
+                item.get("provider", ""),
+                item.get("status", ""),
+                item.get("probe", ""),
+                f"{item.get('response_time_ms', 0)}",
+                _one_line(item.get("message", "") or "-", 80),
+            ]
+            for item in (data.get("results") or [])
+        ]
+        return "\n".join(
+            [
+                "# Provider Connection Test",
+                "",
+                f"Status: {_status_label(data.get('ok'))}",
+                "",
+                *_markdown_table(["Provider", "Status", "Probe", "ms", "Message"], rows),
+            ]
+        ).strip() + "\n"
     if data.get("error"):
         lines = ["# Provider Health", "", f"Status: {_status_label(data.get('ok'))}"]
         lines.extend(_error_lines(data))
@@ -1227,6 +1250,12 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
         ]
         return "\n".join(lines) + "\n"
     if command == "providers":
+        if "results" in data:
+            lines = [
+                f"{item.get('provider', '')}: {item.get('status', '')} - {_one_line(item.get('message', '') or '-', 100)}"
+                for item in (data.get("results") or [])
+            ]
+            return "\n".join(lines) + "\n" if lines else "No provider tested\n"
         if data.get("error"):
             return f"Providers {_status_label(data.get('ok'))}: {_error_summary(data)}\n"
         if "cleared" in data:
@@ -1442,6 +1471,7 @@ def _exit_code(data: dict[str, Any]) -> int:
 
 
 def _print_result(command: str, data: dict[str, Any], fmt: str, output: str = "") -> int:
+    activity.result(data)
     rendered = _render(command, data, fmt)
     if output:
         service.write_output(output, rendered)
@@ -1665,75 +1695,7 @@ def _is_interactive_setup_stream() -> bool:
 
 
 def _setup_status_from_values(values: dict[str, str]) -> dict[str, Any]:
-    def has(key: str) -> bool:
-        return bool(values.get(key))
-
-    main_configured: set[str] = set()
-    if has("XAI_API_KEY"):
-        main_configured.add("xai-responses")
-    if has("OPENAI_COMPATIBLE_API_URL") and has("OPENAI_COMPATIBLE_API_KEY"):
-        main_configured.add("openai-compatible")
-
-    status = {
-        "main_search": {
-            "configured": [provider for provider in ("xai-responses", "openai-compatible") if provider in main_configured],
-            "fallback_chain": ["xai-responses", "openai-compatible"],
-        },
-        "web_search": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("zhipu", has("ZHIPU_API_KEY")),
-                    ("zhipu-mcp", has("ZHIPU_MCP_API_KEY")),
-                    ("tavily", has("TAVILY_API_KEY")),
-                    ("firecrawl", has("FIRECRAWL_API_KEY")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["zhipu", "zhipu-mcp", "tavily", "firecrawl"],
-        },
-        "docs_search": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("context7", has("CONTEXT7_API_KEY")),
-                    ("exa", has("EXA_API_KEY")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["context7", "exa"],
-        },
-        "web_fetch": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("tavily", has("TAVILY_API_KEY")),
-                    ("jina", has("JINA_API_KEY")),
-                    ("zhipu-mcp-reader", has("ZHIPU_MCP_API_KEY")),
-                    ("firecrawl", has("FIRECRAWL_API_KEY")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["tavily", "jina", "zhipu-mcp-reader", "firecrawl"],
-        },
-        "vertical_search": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("anysearch", has("ANYSEARCH_API_KEY")),
-                    ("sciverse", has("SCIVERSE_API_TOKEN")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["anysearch"],
-            "experimental": True,
-            "explicit_only": ["sciverse"],
-            "route_enabled": {"anysearch": True, "sciverse": False},
-        },
-    }
-    for item in status.values():
-        item["ok"] = bool(item["configured"])
-    return status
+    return service.capability_status_from_values(values)
 
 
 def _merge_setup_values(current: dict[str, str], values: dict[str, str]) -> dict[str, str]:
@@ -2618,6 +2580,12 @@ def _run_advanced_setup_prompts(values: dict[str, str], current: dict[str, str],
 
 
 async def _run_async(args: argparse.Namespace) -> int:
+    with service.config.snapshot():
+        return await _run_async_impl(args)
+
+
+async def _run_async_impl(args: argparse.Namespace) -> int:
+    activity.progress(args.command)
     if args.command == "search":
         search_kwargs = {
             "platform": args.platform,
@@ -2845,14 +2813,74 @@ def _run_config(args: argparse.Namespace) -> int:
     return _print_result("config", data, args.format, args.output)
 
 
+async def _run_providers_test(providers: list[str], timeout_seconds: float) -> dict[str, Any]:
+    """Probe the named providers one at a time; each one costs a real API call."""
+    results = []
+    for provider in providers:
+        results.append(
+            await service.test_provider_connection(provider, timeout_seconds=timeout_seconds)
+        )
+    failed = [item for item in results if not item.get("ok")]
+    unknown = [item for item in failed if item.get("error_type") == "parameter_error"]
+    data: dict[str, Any] = {
+        "ok": not failed,
+        "error_type": "parameter_error" if unknown else ("provider_error" if failed else ""),
+        "error": "; ".join(str(item.get("error") or item.get("message") or "") for item in failed),
+        "results": results,
+    }
+    return data
+
+
 def _run_providers(args: argparse.Namespace) -> int:
     if args.providers_command == "status":
         data = service.provider_health_status()
     elif args.providers_command == "reset":
         data = service.reset_provider_health(list(args.providers) or None)
+    elif args.providers_command == "test":
+        data = asyncio.run(_run_providers_test(list(args.providers), args.timeout))
     else:
         data = {"ok": False, "error_type": "parameter_error", "error": "Unknown providers command"}
     return _print_result("providers", data, args.format, args.output)
+
+
+def _default_ui_lang() -> str:
+    """Guess from the locale; the page has a toggle either way, so never prompt."""
+    locale_text = (os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or "").lower()
+    if locale_text and not locale_text.startswith("zh"):
+        return "en"
+    return "zh"
+
+
+def _run_ui(args: argparse.Namespace) -> int:
+    from . import ui_server
+
+    lang = getattr(args, "lang", "") or _default_ui_lang()
+    if getattr(args, "check", False):
+        # Resolves and reads the bundled page without binding a port, so a packaging
+        # mistake shows up in CI instead of as a 500 for a user.
+        try:
+            page = ui_server.load_page_source()
+        except (OSError, FileNotFoundError, ModuleNotFoundError) as e:
+            data = {"ok": False, "error_type": "runtime_error", "error": f"UI asset missing: {e}"}
+            return _print_result("ui", data, args.format, args.output)
+        data = {"ok": True, "error_type": "", "error": "", "asset_bytes": len(page.encode("utf-8"))}
+        return _print_result("ui", data, args.format, args.output)
+
+    options = ui_server.UIServerConfig(
+        port=getattr(args, "port", 0) or 0,
+        idle_timeout=getattr(args, "idle_timeout", ui_server.DEFAULT_IDLE_TIMEOUT),
+        lang=lang,
+        open_browser=not getattr(args, "no_browser", False),
+    )
+    try:
+        data = ui_server.serve(options, announce=_write_stderr_line)
+    except OSError as e:
+        data = {"ok": False, "error_type": "runtime_error", "error": f"无法启动本地服务: {e}"}
+    return _print_result("ui", data, args.format, args.output)
+
+
+def _write_stderr_line(line: str) -> None:
+    _write_stderr(line + "\n")
 
 
 def _skill_targets_from_args(args: argparse.Namespace) -> list[str]:
@@ -3512,6 +3540,42 @@ def build_parser() -> argparse.ArgumentParser:
         help="Provider ids to clear, e.g. zhipu zhipu-mcp. Omit to clear every cooldown.",
     )
     _add_format_args(providers_reset)
+    providers_test = providers_sub.add_parser(
+        "test",
+        aliases=PROVIDERS_COMMAND_ALIASES["test"],
+        help="Check whether a provider's saved credentials still work. Makes a real API request.",
+    )
+    providers_test.set_defaults(providers_command="test")
+    providers_test.add_argument(
+        "providers",
+        nargs="+",
+        help=f"Provider ids to check, e.g. exa zhipu. Known: {', '.join(sorted(service.PROBE_KIND))}.",
+    )
+    providers_test.add_argument(
+        "--timeout",
+        type=float,
+        default=service.PROBE_TIMEOUT_CEILING,
+        help="Per-provider ceiling in seconds (default: %(default)s).",
+    )
+    _add_format_args(providers_test)
+
+    ui_parser = sub.add_parser(
+        "ui",
+        aliases=UI_COMMAND_ALIASES,
+        help="Open a temporary local page to review configuration and test provider keys.",
+    )
+    ui_parser.set_defaults(command="ui")
+    ui_parser.add_argument("--port", type=int, default=0, help="Port to bind on 127.0.0.1 (default: a free one).")
+    ui_parser.add_argument("--no-browser", action="store_true", help="Print the URL without opening a browser.")
+    ui_parser.add_argument(
+        "--idle-timeout",
+        type=float,
+        default=900.0,
+        help="Exit after this many idle seconds; 0 keeps it running (default: %(default)s).",
+    )
+    ui_parser.add_argument("--lang", choices=["zh", "en"], default="", help="Interface language.")
+    ui_parser.add_argument("--check", action="store_true", help="Verify the bundled page is installed, then exit.")
+    _add_format_args(ui_parser)
 
     setup_parser = sub.add_parser(
         "setup", aliases=COMMAND_ALIASES["setup"], help="Interactively save local provider configuration."
@@ -3628,7 +3692,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
@@ -3642,11 +3706,28 @@ def main(argv: list[str] | None = None) -> int:
             return _run_config(args)
         if args.command == "providers":
             return _run_providers(args)
+        if args.command == "ui":
+            return _run_ui(args)
         if args.command == "model":
             return _run_model(args)
         return asyncio.run(_run_async(args))
     except KeyboardInterrupt:
+        activity.cancelled()
         return EXIT_RUNTIME_ERROR
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments == ["--desktop-capabilities"]:
+        print(json.dumps({"version": _get_version(), "activity_protocol_version": 1}))
+        return EXIT_OK
+    first = arguments[0] if arguments else ""
+    command = next((name for name, aliases in COMMAND_ALIASES.items() if first in [name, *aliases]), "unknown")
+    command = {"--help": "help", "-h": "help", "--version": "version", "ui": "ui", "web": "ui"}.get(first, command)
+    with activity.observe(command, version=_get_version()) as run:
+        code = _main(argv)
+        run.finish(code)
+        return code
 
 
 if __name__ == "__main__":

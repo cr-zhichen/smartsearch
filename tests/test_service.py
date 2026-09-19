@@ -1020,9 +1020,10 @@ def test_xai_tools_validation(monkeypatch, tmp_path):
     service.config_set("XAI_TOOLS", "web_search,x_search,web_search")
     assert service.config.parse_xai_tools() == ["web_search", "x_search"]
 
-    service.config_set("XAI_TOOLS", "web_search,bad_tool")
-    with pytest.raises(ValueError, match="Invalid XAI_TOOLS"):
-        service.config.parse_xai_tools()
+    rejected = service.config_set("XAI_TOOLS", "web_search,bad_tool")
+    assert rejected["ok"] is False
+    assert "Invalid XAI_TOOLS" in rejected["error"]
+    assert service.config.parse_xai_tools() == ["web_search", "x_search"]
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "smart-search"
-version = "0.1.18"
+version = "0.1.19"
 description = "CLI-first multi-source web research with xAI/OpenAI-compatible search, Exa, Context7, Zhipu, Tavily, Firecrawl, and Deep Research planning."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -31,6 +31,7 @@ smart_search = [
     "assets/skills/smart-search-cli/SKILL.md",
     "assets/skills/smart-search-cli/agents/*.yaml",
     "assets/skills/smart-search-cli/references/*.md",
+    "assets/ui/*.html",
 ]
 
 [project.scripts]
