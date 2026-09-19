@@ -25,6 +25,7 @@ import hmac
 import json
 import os
 import secrets
+import socket
 import sys
 import threading
 import time
@@ -107,6 +108,9 @@ class SmartSearchUIHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     server_version = "smart-search-ui"
     sys_version = ""
+    # Without this a client that promises a body and never sends it pins a handler
+    # thread for good. StreamRequestHandler turns it into a socket timeout.
+    timeout = 30
 
     runtime: UIRuntime
     page_source: str
@@ -184,7 +188,13 @@ class SmartSearchUIHandler(BaseHTTPRequestHandler):
         if length == 0:
             return {}, ""
         try:
-            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            raw = self.rfile.read(length)
+        except (OSError, socket.timeout, TimeoutError):
+            return None, "incomplete"
+        if len(raw) != length:
+            return None, "incomplete"
+        try:
+            payload = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeDecodeError):
             return None, "bad-json"
         if not isinstance(payload, dict):
@@ -276,7 +286,8 @@ class SmartSearchUIHandler(BaseHTTPRequestHandler):
                 self._json(404, {"ok": False, "error_type": "parameter_error", "error": "not found"})
                 return
             self._json(200, handler(self, body, query))
-        except (BrokenPipeError, ConnectionResetError):
+        except (BrokenPipeError, ConnectionResetError, socket.timeout, TimeoutError):
+            self.close_connection = True
             return
         except Exception:
             # Never leak a traceback to the page.
@@ -338,8 +349,14 @@ def _h_skills(handler, body, query):
 
 def _h_heartbeat(handler, body, query):
     runtime = handler.runtime
-    remaining = runtime.idle_timeout
-    return {"ok": True, "idle_deadline_seconds": remaining}
+    if runtime.idle_timeout <= 0:
+        return {"ok": True, "idle_deadline_seconds": 0, "idle_timeout": 0}
+    remaining = runtime.idle_timeout - (time.monotonic() - runtime.last_seen)
+    return {
+        "ok": True,
+        "idle_deadline_seconds": round(max(0.0, remaining), 1),
+        "idle_timeout": runtime.idle_timeout,
+    }
 
 
 def _h_shutdown(handler, body, query):

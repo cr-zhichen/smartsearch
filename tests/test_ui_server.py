@@ -331,3 +331,64 @@ def test_every_route_is_reachable_and_token_gated(running):
     for (method, path) in ui_server.ROUTES:
         response, _ = request(runtime, method, path, body={} if method == "POST" else None)
         assert response.status == 403, f"{method} {path} is not token-gated"
+
+
+def test_a_stalled_body_does_not_pin_a_thread_forever(running, monkeypatch):
+    """A client that promises a body and never sends it must not hold a handler."""
+    _httpd, runtime = running
+    import socket as _socket
+
+    conn = _socket.create_connection(("127.0.0.1", runtime.port), timeout=5)
+    try:
+        conn.sendall(
+            f"POST /api/heartbeat HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{runtime.port}\r\n"
+            f"{ui_server.TOKEN_HEADER}: {runtime.token}\r\n"
+            f"Content-Type: application/json\r\n"
+            f"Content-Length: 500\r\n\r\n".encode()
+        )
+        # Send nothing more. The handler's socket timeout must end this.
+        assert ui_server.SmartSearchUIHandler.timeout > 0
+    finally:
+        conn.close()
+
+    # The server must still answer a normal request afterwards.
+    response, _ = request(runtime, "GET", "/api/state", token=runtime.token)
+    assert response.status == 200
+
+
+def test_heartbeat_reports_the_remaining_idle_budget(tmp_path, monkeypatch):
+    monkeypatch.setattr(service.config, "_config_file", tmp_path / "config.json")
+    httpd, runtime = ui_server.build_server(
+        UIServerConfig(port=0, idle_timeout=600, open_browser=False)
+    )
+    thread = threading.Thread(target=httpd.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
+    thread.start()
+    try:
+        _response, raw = request(runtime, "POST", "/api/heartbeat", token=runtime.token, body={})
+        payload = json.loads(raw)
+        assert payload["idle_timeout"] == 600
+        assert 0 < payload["idle_deadline_seconds"] <= 600
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+
+def test_a_truncated_body_is_rejected(running):
+    _httpd, runtime = running
+    import socket as _socket
+
+    conn = _socket.create_connection(("127.0.0.1", runtime.port), timeout=10)
+    try:
+        conn.sendall(
+            f"POST /api/heartbeat HTTP/1.1\r\n"
+            f"Host: 127.0.0.1:{runtime.port}\r\n"
+            f"{ui_server.TOKEN_HEADER}: {runtime.token}\r\n"
+            f"Content-Length: 100\r\n\r\n".encode() + b'{"a":1}'
+        )
+        conn.shutdown(_socket.SHUT_WR)
+        raw = conn.recv(4096).decode("utf-8", "replace")
+        assert " 400 " in raw.split("\r\n")[0], raw.split("\r\n")[0]
+    finally:
+        conn.close()
