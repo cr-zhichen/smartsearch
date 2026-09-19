@@ -304,3 +304,30 @@ def test_malformed_json_body_is_rejected(running):
     _httpd, runtime = running
     response, _ = request(runtime, "POST", "/api/config", token=runtime.token, body=b"{not json")
     assert response.status == 400
+
+
+def test_run_endpoint_requires_the_token(running):
+    _httpd, runtime = running
+    response, _ = request(runtime, "POST", "/api/run", body={"query": "x"})
+    assert response.status == 403
+
+
+def test_run_endpoint_executes_route(running, monkeypatch):
+    _httpd, runtime = running
+    response, raw = request(
+        runtime, "POST", "/api/run", token=runtime.token,
+        body={"command": "route", "query": "React useEffect cleanup function docs"},
+    )
+    assert response.status == 200
+    payload = json.loads(raw)
+    # route is offline, so it succeeds even with nothing configured.
+    assert payload["ok"] is True
+    assert payload["required_capabilities"]
+
+
+def test_every_route_is_reachable_and_token_gated(running):
+    """No endpoint may be added without the token check applying to it."""
+    _httpd, runtime = running
+    for (method, path) in ui_server.ROUTES:
+        response, _ = request(runtime, method, path, body={} if method == "POST" else None)
+        assert response.status == 403, f"{method} {path} is not token-gated"

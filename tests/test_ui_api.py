@@ -191,3 +191,53 @@ def test_preview_honours_a_disabled_minimum_profile(isolated, monkeypatch):
 
 def test_preview_validates_its_argument(isolated):
     assert ui_api.preview({"values": "nope"})["error_type"] == "parameter_error"
+
+
+# ---- try it -------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_run_query_defaults_to_the_free_command(isolated, monkeypatch):
+    seen = {}
+
+    async def fake_route(query, **kwargs):
+        seen["query"] = query
+        return {"ok": True, "required_capabilities": ["docs_search"]}
+
+    monkeypatch.setattr(service, "route", fake_route)
+    result = await ui_api.run_query({"query": "React useEffect cleanup"})
+    assert result["ok"] is True
+    assert seen["query"] == "React useEffect cleanup"
+
+
+@pytest.mark.asyncio
+async def test_run_query_rejects_an_unknown_command(isolated):
+    result = await ui_api.run_query({"command": "deep", "query": "x"})
+    assert result["error_type"] == "parameter_error"
+    assert result["known_commands"] == ["route", "search"]
+
+
+@pytest.mark.asyncio
+async def test_run_query_requires_a_query(isolated):
+    assert (await ui_api.run_query({"command": "route"}))["error_type"] == "parameter_error"
+    assert (await ui_api.run_query({"query": "   "}))["error_type"] == "parameter_error"
+
+
+@pytest.mark.asyncio
+async def test_run_query_caps_the_query_length(isolated):
+    result = await ui_api.run_query({"query": "x" * 2001})
+    assert result["error_type"] == "parameter_error"
+
+
+@pytest.mark.asyncio
+async def test_run_query_passes_the_search_timeout(isolated, monkeypatch):
+    seen = {}
+
+    async def fake_search(query, **kwargs):
+        seen.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(service, "search", fake_search)
+    await ui_api.run_query({"command": "search", "query": "news", "timeout_seconds": 42})
+    assert seen["timeout_seconds"] == 42.0
+    assert (await ui_api.run_query({
+        "command": "search", "query": "news", "timeout_seconds": "soon"
+    }))["error_type"] == "parameter_error"

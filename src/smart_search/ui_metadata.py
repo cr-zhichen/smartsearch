@@ -110,6 +110,14 @@ SECTIONS: tuple[Section, ...] = (
         blurb_en="Only worth touching when something is wrong.",
     ),
     Section(
+        id="tryit",
+        order=8,
+        label_zh="试跑一条",
+        label_en="Try it",
+        blurb_zh="先用不花钱的 route 看它打算走哪几类能力，确认配置对了再跑真实搜索。",
+        blurb_en="Start with route, which costs nothing and just shows which capabilities a query needs, then run a real search once the config looks right.",
+    ),
+    Section(
         id="skills",
         order=7,
         label_zh="Skill 安装",

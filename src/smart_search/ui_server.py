@@ -322,6 +322,11 @@ def _h_preview(handler, body, query):
     return ui_api.preview(body)
 
 
+def _h_run(handler, body, query):
+    with handler.runtime.probe_slots:
+        return _run_async(ui_api.run_query(body))
+
+
 def _h_skills_install(handler, body, query):
     with handler.runtime.write_lock:
         return ui_api.skills_install(body)
@@ -349,6 +354,7 @@ ROUTES: dict[tuple[str, str], Handler] = {
     ("POST", "/api/config"): _h_config,
     ("POST", "/api/preview"): _h_preview,
     ("POST", "/api/skills/install"): _h_skills_install,
+    ("POST", "/api/run"): _h_run,
     ("POST", "/api/test"): _h_test,
     ("POST", "/api/doctor"): _h_doctor,
     ("POST", "/api/providers/reset"): _h_reset,

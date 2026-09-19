@@ -156,6 +156,38 @@ async def run_doctor() -> dict[str, Any]:
     return await service.doctor()
 
 
+RUNNABLE_COMMANDS = ("route", "search")
+
+
+async def run_query(payload: dict[str, Any]) -> dict[str, Any]:
+    """Run one query from the page.
+
+    `route` is offline and free, so it is the default and the safe thing to try
+    first. `search` is a real, billable search and the page asks before sending it.
+    """
+    command = str(payload.get("command") or "route").strip().lower()
+    if command not in RUNNABLE_COMMANDS:
+        return _parameter_error(
+            f"command must be one of {', '.join(RUNNABLE_COMMANDS)}",
+            known_commands=list(RUNNABLE_COMMANDS),
+        )
+    query = str(payload.get("query") or "").strip()
+    if not query:
+        return _parameter_error("query is required")
+    if len(query) > 2000:
+        return _parameter_error("query is too long")
+
+    if command == "route":
+        return await service.route(query)
+
+    timeout = payload.get("timeout_seconds")
+    try:
+        timeout_seconds = float(timeout) if timeout is not None else None
+    except (TypeError, ValueError):
+        return _parameter_error("timeout_seconds must be a number")
+    return await service.search(query, timeout_seconds=timeout_seconds)
+
+
 def reset_health(payload: dict[str, Any]) -> dict[str, Any]:
     providers = payload.get("providers")
     if providers is None:

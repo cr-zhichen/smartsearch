@@ -106,6 +106,17 @@ details.more > summary {
 details.more > summary::-webkit-details-marker { display: none; }
 details.more > summary::before { content: "▸ "; }
 details.more[open] > summary::before { content: "▾ "; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  border: 1px solid var(--line); background: var(--bg); color: var(--muted);
+  border-radius: 999px; padding: 3px 11px; font: inherit; font-size: 12px; cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip[disabled] { cursor: not-allowed; opacity: .5; }
+.chips.dirty .chip.on { outline: 1px solid var(--accent); }
+.chain { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.chain .arrow { color: var(--muted); font-size: 12px; }
 .cost {
   font-size: 12px; color: var(--warn); background: rgba(163,103,26,.1);
   border-radius: 6px; padding: 7px 10px; margin-bottom: 12px;
@@ -175,6 +186,11 @@ details.more[open] > summary::before { content: "▾ "; }
       keepSecret: "留空表示不改动", stepMain: "第一步：主搜索",
       stepDocs: "第二步：文档检索", stepFetch: "第三步：网页抓取",
       pickOne: "下面任选一个配好即可。", installSkill: "安装 / 更新",
+      runRoute: "看它走哪些能力（免费）", runSearch: "跑一次真实搜索",
+      queryPlaceholder: "比如：React useEffect 清理函数怎么写",
+      running: "运行中…", searchCost: "真实搜索会调用主搜索模型并可能计费，确定继续？",
+      needQuery: "先输入一个问题。", result: "结果", chain: "兜底顺序",
+      chainNote: "每类能力按这个顺序往下试，绿色的是你已经配好的。",
     },
     en: {
       sub: "local config", ready: "Minimum profile met", notReady: "Minimum profile not met",
@@ -197,6 +213,11 @@ details.more[open] > summary::before { content: "▾ "; }
       keepSecret: "Leave empty to keep the current value", stepMain: "Step 1 - main search",
       stepDocs: "Step 2 - docs lookup", stepFetch: "Step 3 - page fetching",
       pickOne: "Any one of these is enough.", installSkill: "Install / update",
+      runRoute: "Show which capabilities (free)", runSearch: "Run a real search",
+      queryPlaceholder: "e.g. how do I write a React useEffect cleanup function",
+      running: "Running…", searchCost: "A real search calls the main model and may cost money. Continue?",
+      needQuery: "Type a question first.", result: "Result", chain: "Fallback order",
+      chainNote: "Each capability is tried in this order; green ones are configured.",
     }
   };
   function t(key) { return T[lang][key] || key; }
@@ -297,6 +318,7 @@ details.more[open] > summary::before { content: "▾ "; }
       ])
     ]));
 
+    main.appendChild(chainCard());
     main.appendChild(cooldownCard());
   }
 
@@ -508,6 +530,30 @@ details.more[open] > summary::before { content: "▾ "; }
       return select;
     }
 
+    if (field.kind === "csv" && field.key.indexOf("RESEARCH_") >= 0) {
+      var chosen = {};
+      value.split(",").forEach(function (item) {
+        item = item.trim();
+        if (item) chosen[item] = true;
+      });
+      var wrap = el("div", { class: "chips" });
+      Object.keys(state.provider_profiles || {}).sort().forEach(function (provider) {
+        var on = !!chosen[provider];
+        var chip = el("button", {
+          type: "button", class: "chip" + (on ? " on" : ""), text: provider,
+          disabled: locked ? "disabled" : null
+        });
+        chip.addEventListener("click", function () {
+          if (locked) return;
+          if (chosen[provider]) delete chosen[provider]; else chosen[provider] = true;
+          chip.className = "chip" + (chosen[provider] ? " on" : "");
+          markDirty(field, wrap, Object.keys(chosen).sort().join(","));
+        });
+        wrap.appendChild(chip);
+      });
+      return wrap;
+    }
+
     var secret = field.kind === "secret";
     var input = el("input", {
       type: secret ? "password" : "text",
@@ -706,6 +752,67 @@ details.more[open] > summary::before { content: "▾ "; }
     });
   }
 
+  function viewTryIt() {
+    var main = document.getElementById("main");
+    var section = sectionById("tryit");
+    main.appendChild(el("h2", { text: L(section, "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(section, "blurb") }));
+
+    var box = el("input", { type: "text", placeholder: t("queryPlaceholder"), spellcheck: "false" });
+    var output = el("pre", {
+      class: "mono", style: "white-space:pre-wrap;word-break:break-word;margin:0;font-size:12px"
+    });
+    var outputCard = el("div", { class: "card", style: "display:none" }, [
+      el("h3", { text: t("result") }), output
+    ]);
+
+    function run(command) {
+      var query = box.value.trim();
+      if (!query) { toast(t("needQuery"), true); return; }
+      if (command === "search" && !window.confirm(t("searchCost"))) return;
+      outputCard.style.display = "";
+      output.textContent = t("running");
+      api("POST", "/api/run", { command: command, query: query }).then(function (data) {
+        output.textContent = JSON.stringify(data, null, 2);
+        if (!data.ok) toast(data.error || "failed", true);
+      }).catch(function (e) { output.textContent = String(e); });
+    }
+
+    main.appendChild(el("div", { class: "card" }, [
+      el("div", { class: "row", style: "grid-template-columns:1fr" }, [el("div", {}, [box])]),
+      el("p", { class: "note", style: "margin:12px 0 0;display:flex;gap:8px;flex-wrap:wrap" }, [
+        el("button", { class: "act", type: "button", text: t("runRoute"), onclick: function () { run("route"); } }),
+        el("button", { class: "act ghost", type: "button", text: t("runSearch"), onclick: function () { run("search"); } })
+      ])
+    ]));
+    main.appendChild(outputCard);
+    box.addEventListener("keydown", function (event) { if (event.key === "Enter") run("route"); });
+  }
+
+  function chainCard() {
+    var chains = state.capability_chains || {};
+    var caps = state.capability_status || {};
+    var rows = Object.keys(chains).filter(function (name) { return caps[name]; }).map(function (name) {
+      var configured = (caps[name] || {}).configured || [];
+      var steps = [];
+      chains[name].forEach(function (provider, index) {
+        if (index) steps.push(el("span", { class: "arrow", text: "→" }));
+        steps.push(el("span", {
+          class: "pill " + (configured.indexOf(provider) >= 0 ? "ok" : ""), text: provider
+        }));
+      });
+      return el("tr", {}, [
+        el("td", { class: "mono", text: name }),
+        el("td", { class: "chain" }, steps)
+      ]);
+    });
+    return el("div", { class: "card" }, [
+      el("h3", { text: t("chain") }),
+      el("p", { class: "note", text: t("chainNote") }),
+      el("table", {}, [el("tbody", {}, rows)])
+    ]);
+  }
+
   function sectionById(id) {
     var found = state.metadata.sections.filter(function (item) { return item.id === id; })[0];
     return found || { label_zh: id, label_en: id, blurb_zh: "", blurb_en: "" };
@@ -738,6 +845,7 @@ details.more[open] > summary::before { content: "▾ "; }
     else if (current === "getting_started") viewGettingStarted();
     else if (current === "providers") viewProviders();
     else if (current === "skills") viewSkills();
+    else if (current === "tryit") viewTryIt();
     else viewSection(current);
     window.scrollTo(0, 0);
   }
