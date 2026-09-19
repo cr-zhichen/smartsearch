@@ -45,7 +45,9 @@ function assertPackContents(files) {
     "README.md",
     "README.zh-CN.md",
     "package.json",
-    "pyproject.toml"
+    "pyproject.toml",
+    "assets/branding/smart-search.png",
+    "assets/branding/README.md"
   ]);
   const allowedPrefixes = [
     "npm/",
@@ -66,6 +68,7 @@ function assertPackContents(files) {
   for (const requiredPath of [
     "package.json",
     "pyproject.toml",
+    "assets/branding/smart-search.png",
     "npm/bin/smart-search.js",
     "src/smart_search/cli.py",
     // Only .py files match the src glob, so the UI page needs its own files entry.
@@ -103,6 +106,7 @@ const isolatedEnv = {
   ...process.env,
   HOME: homeDir,
   USERPROFILE: homeDir,
+  SMART_SEARCH_CONFIG_DIR: path.join(tempRoot, "config"),
   INIT_CWD: callerCwd
 };
 const version = run(process.execPath, [wrapperPath, "--version"], {

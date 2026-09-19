@@ -12,6 +12,7 @@ and ``config_list(show_secrets=True)`` is never called from here.
 from __future__ import annotations
 
 from typing import Any
+import math
 
 from . import service
 from .config import config
@@ -40,13 +41,20 @@ def _capability_chains() -> dict[str, list[str]]:
 
 def status() -> dict[str, Any]:
     """Everything the page shows, computed locally. Makes no network calls."""
+    with config.snapshot():
+        return _status()
+
+
+def _status() -> dict[str, Any]:
     info = config.get_config_info()
     minimum = service.validate_minimum_profile()
     return {
         "ok": True,
         "error_type": "",
         "error": "",
-        "values": config.get_saved_config(masked=True),
+        "values": config.effective_values(masked=True),
+        "saved_values": config.get_saved_config(masked=True),
+        "revision": config.snapshot_revision(),
         "sources": config.get_config_sources(),
         "resolved": {
             "config_status": info.get("config_status", ""),
@@ -89,6 +97,8 @@ async def test_provider(payload: dict[str, Any]) -> dict[str, Any]:
         timeout_seconds = float(timeout) if timeout is not None else None
     except (TypeError, ValueError):
         return _parameter_error("timeout_seconds must be a number")
+    if timeout_seconds is not None and (not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
+        return _parameter_error("timeout_seconds must be a positive finite number")
     return await service.test_provider_connection(
         provider,
         overrides={str(k): str(v) for k, v in (overrides or {}).items()} or None,
@@ -103,8 +113,8 @@ def apply_config(payload: dict[str, Any]) -> dict[str, Any]:
     written: the write would succeed and change nothing the user can see, because
     the environment wins on every read.
     """
-    set_values = payload.get("set") or {}
-    unset_keys = payload.get("unset") or []
+    set_values = payload.get("set", {})
+    unset_keys = payload.get("unset", [])
     if not isinstance(set_values, dict):
         return _parameter_error("set must be an object")
     if not isinstance(unset_keys, list):
@@ -124,8 +134,12 @@ def apply_config(payload: dict[str, Any]) -> dict[str, Any]:
             shadowed=shadowed,
         )
 
-    result = service.config_update(normalized, unset)
-    result["status"] = status()
+    revision = payload.get("revision")
+    if revision is not None and not isinstance(revision, str):
+        return _parameter_error("revision must be a string")
+    result = service.config_update(normalized, unset, expected_revision=revision)
+    with config.snapshot(directory=str(config.config_file.parent)):
+        result["status"] = status()
     return result
 
 
@@ -135,10 +149,9 @@ def preview(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(values, dict):
         return _parameter_error("values must be an object")
     merged = {str(key).strip().upper(): "" if value is None else str(value) for key, value in values.items()}
-    capability_status = service.capability_status_from_values(merged)
-    required = ["main_search", "docs_search", "web_fetch"]
-    if config.minimum_profile == "off":
-        required = []
+    with config.snapshot(merged):
+        capability_status = service.get_capability_status()
+        required = [] if config.minimum_profile == "off" else ["main_search", "docs_search", "web_fetch"]
     missing = [name for name in required if not capability_status.get(name, {}).get("ok")]
     return {
         "ok": True,

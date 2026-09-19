@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 import httpx
 
 from .config import config
+from . import activity
 from .intent_router import (
     CAPABILITY_UTTERANCES,
     CURRENT_INTENT_KEYWORDS as ROUTER_CURRENT_INTENT_KEYWORDS,
@@ -383,6 +384,7 @@ class SearchExecutionState:
         if details:
             attempt.update(details)
         self.phase_attempts.append(attempt)
+        activity.progress(f"{phase}:{status}")
         if status == "timeout" and phase not in self._timed_out_phases:
             self._timed_out_phases.append(phase)
         return attempt
@@ -444,6 +446,7 @@ async def _run_budgeted_phase(
         execution.record(phase, "skipped", phase_start, 0.0, timeout_reason, details)
         return False, None
     try:
+        activity.progress(phase)
         result = await asyncio.wait_for(operation(), timeout=available)
     except asyncio.TimeoutError:
         execution.record(phase, "timeout", phase_start, available, timeout_reason, details)
@@ -581,6 +584,7 @@ def _attempt(
     error: str = "",
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    activity.progress(f"{capability}:{status}", provider, (extra or {}).get("model", ""), error_type)
     data = {
         "capability": capability,
         "provider": provider,
@@ -2317,6 +2321,7 @@ async def _run_web_fetch_fallback(
 
     for provider in providers:
         start = time.time()
+        activity.progress("web_fetch", provider)
         try:
             if provider == "tavily":
                 content = await call_tavily_extract(url)
@@ -2380,6 +2385,7 @@ async def _run_web_search_fallback(
 
     for provider in configured:
         start = time.time()
+        activity.progress("web_search", provider)
         try:
             if provider == "zhipu":
                 data = await zhipu_search(query, count=count)
@@ -2446,6 +2452,7 @@ async def _run_docs_search_fallback(
 
     for provider in configured:
         start = time.time()
+        activity.progress("docs_search", provider)
         try:
             if provider == "exa":
                 data = await exa_search(query, num_results=5, include_highlights=True)
@@ -2971,6 +2978,7 @@ async def search(
             set_deadline = getattr(search_provider, "set_search_deadline", None)
             if callable(set_deadline):
                 set_deadline(budget.deadline)
+            activity.progress("main_search", candidate_config["provider"], candidate_config.get("model", ""))
             candidate_task = asyncio.create_task(search_provider.search(query, platform))
             try:
                 candidate_result = await asyncio.wait_for(candidate_task, timeout=attempt_timeout)
@@ -3896,6 +3904,7 @@ async def exa_search(
     include_domain_list = _normalize_domain_filter(include_domains)
     exclude_domain_list = _normalize_domain_filter(exclude_domains)
 
+    activity.progress("provider_request", "exa")
     raw = await provider.search(
         query=query,
         num_results=num_results,
@@ -3917,10 +3926,12 @@ async def exa_search(
 
 
 def _anysearch_provider() -> AnySearchProvider:
+    activity.progress("provider_preparing", "anysearch")
     return AnySearchProvider(config.anysearch_api_url, config.anysearch_api_key, config.anysearch_timeout)
 
 
 def _sciverse_provider() -> SciverseProvider:
+    activity.progress("provider_preparing", "sciverse")
     return SciverseProvider(config.sciverse_api_url, config.sciverse_api_token, config.sciverse_timeout)
 
 
@@ -3928,7 +3939,7 @@ async def _decode_provider_json(raw: str, provider: str = "anysearch") -> dict[s
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
-        return {"ok": False, "provider": provider, "error_type": "parse_error", "error": raw}
+        return {"ok": False, "provider": provider, "error_type": "parse_error", "error": sanitize_provider_error_message(raw)}
 
 
 def _sciverse_parameter_error(tool: str, error: str, **extra: Any) -> dict[str, Any]:
@@ -4099,6 +4110,7 @@ async def sciverse_relations(
 
 
 def _zhipu_mcp_search_provider() -> ZhipuMCPProvider:
+    activity.progress("provider_preparing", "zhipu-mcp")
     return ZhipuMCPProvider(
         config.zhipu_mcp_search_api_url,
         config.zhipu_mcp_api_key or "",
@@ -4108,6 +4120,7 @@ def _zhipu_mcp_search_provider() -> ZhipuMCPProvider:
 
 
 def _zhipu_mcp_reader_provider() -> ZhipuMCPProvider:
+    activity.progress("provider_preparing", "zhipu-mcp-reader")
     return ZhipuMCPProvider(
         config.zhipu_mcp_reader_api_url,
         config.zhipu_mcp_api_key or "",
@@ -4117,6 +4130,7 @@ def _zhipu_mcp_reader_provider() -> ZhipuMCPProvider:
 
 
 def _zhipu_mcp_zread_provider() -> ZhipuMCPProvider:
+    activity.progress("provider_preparing", "zhipu-mcp-zread")
     return ZhipuMCPProvider(
         config.zhipu_mcp_zread_api_url,
         config.zhipu_mcp_api_key or "",
@@ -4159,11 +4173,12 @@ async def exa_find_similar(url: str, num_results: int = 5) -> dict[str, Any]:
         }
 
     provider = ExaSearchProvider(config.exa_base_url, api_key, config.exa_timeout)
+    activity.progress("provider_request", "exa")
     raw = await provider.find_similar(url=url, num_results=num_results)
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return {"ok": False, "error_type": "parse_error", "error": raw}
+        return {"ok": False, "error_type": "parse_error", "error": sanitize_provider_error_message(raw)}
     if not data.get("ok", False):
         data.setdefault("error_type", "network_error")
     return data
@@ -4190,6 +4205,7 @@ async def zhipu_search(
         search_engine or config.zhipu_search_engine,
         config.zhipu_timeout,
     )
+    activity.progress("provider_request", "zhipu")
     raw = await provider.search(
         query=query,
         count=count,
@@ -4201,7 +4217,7 @@ async def zhipu_search(
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return {"ok": False, "error_type": "parse_error", "error": raw}
+        return {"ok": False, "error_type": "parse_error", "error": sanitize_provider_error_message(raw)}
     if not data.get("ok", False):
         data.setdefault("error_type", "network_error")
     return data
@@ -4216,11 +4232,12 @@ async def context7_library(name: str, query: str = "") -> dict[str, Any]:
             "error": "CONTEXT7_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set CONTEXT7_API_KEY <key>`。",
         }
     provider = Context7Provider(config.context7_base_url, api_key, config.context7_timeout)
+    activity.progress("provider_request", "context7")
     raw = await provider.library(name, query)
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return {"ok": False, "error_type": "parse_error", "error": raw}
+        return {"ok": False, "error_type": "parse_error", "error": sanitize_provider_error_message(raw)}
     if not data.get("ok", False):
         data.setdefault("error_type", "network_error")
     return data
@@ -4235,11 +4252,12 @@ async def context7_docs(library_id: str, query: str) -> dict[str, Any]:
             "error": "CONTEXT7_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set CONTEXT7_API_KEY <key>`。",
         }
     provider = Context7Provider(config.context7_base_url, api_key, config.context7_timeout)
+    activity.progress("provider_request", "context7")
     raw = await provider.docs(library_id, query)
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return {"ok": False, "error_type": "parse_error", "error": raw}
+        return {"ok": False, "error_type": "parse_error", "error": sanitize_provider_error_message(raw)}
     if not data.get("ok", False):
         data.setdefault("error_type", "network_error")
     return data
@@ -4938,12 +4956,23 @@ async def test_provider_connection(
 ) -> dict[str, Any]:
     """Check one provider's credentials without firing every probe `doctor` runs.
 
-    `overrides` tests candidate credentials that are not saved yet; it is only
-    honoured for main_search, whose probes already take a config dict. Health is
+    `overrides` tests candidate settings in an isolated snapshot for any provider. Health is
     not recorded for an override run: a success would clear a real cooldown under a
     fingerprint that does not match what is stored, and a failure would cool down a
     key that is actually fine.
     """
+    if overrides is not None:
+        try:
+            normalized = {str(key).strip().upper(): str(value) for key, value in overrides.items()}
+            for key, value in normalized.items():
+                if key not in config._CONFIG_KEYS:
+                    raise ValueError(f"Unsupported config key: {key}")
+                config._validate_config_value(key, value)
+            with config.snapshot(normalized):
+                return await test_provider_connection(provider, record_health=False, timeout_seconds=timeout_seconds)
+        except ValueError as error:
+            return {"ok": False, "provider": provider, "status": "parameter_error", "error_type": "parameter_error",
+                    "message": str(error), "error": str(error), "recorded_as": "", "probe": "none"}
     provider = (provider or "").strip().lower()
     kind = PROBE_KIND.get(provider)
     if kind is None:
@@ -5225,7 +5254,7 @@ def config_set(key: str, value: str) -> dict[str, Any]:
         config.set_config_value(key, value)
     except ValueError as e:
         return {"ok": False, "error_type": "parameter_error", "error": str(e), "config_file": str(config.config_file)}
-    saved = config.get_saved_config(masked=True)
+    saved = config.get_saved_config(masked=True, data=config._load_config_file())
     return {
         "ok": True,
         "config_file": str(config.config_file),
@@ -5237,10 +5266,12 @@ def config_set(key: str, value: str) -> dict[str, Any]:
 def config_update(
     set_values: dict[str, str] | None = None,
     unset_keys: list[str] | None = None,
+    *,
+    expected_revision: str | None = None,
 ) -> dict[str, Any]:
     """Apply a batch of config changes in one validated, atomic write."""
     try:
-        result = config.update_config_values(set_values, unset_keys)
+        result = config.update_config_values(set_values, unset_keys, expected_revision=expected_revision)
     except ValueError as e:
         return {
             "ok": False,
@@ -5254,14 +5285,14 @@ def config_update(
     if not result["ok"]:
         return {
             "ok": False,
-            "error_type": "parameter_error",
+            "error_type": "config_conflict" if result.get("conflict") else "parameter_error",
             "error": "; ".join(f"{item['key']}: {item['error']}" for item in result["errors"]),
             "config_file": str(config.config_file),
             "errors": result["errors"],
             "saved": {},
             "unset": [],
         }
-    saved = config.get_saved_config(masked=True)
+    saved = config.get_saved_config(masked=True, data=config._load_config_file())
     return {
         "ok": True,
         "error_type": "",
@@ -5274,80 +5305,9 @@ def config_update(
 
 
 def capability_status_from_values(values: dict[str, str]) -> dict[str, Any]:
-    """Capability status computed from a plain values dict, with no network calls.
-
-    Lets a form answer "would this configuration pass the minimum profile?" while
-    the user is still typing, before anything is saved.
-    """
-    def has(key: str) -> bool:
-        return bool(values.get(key))
-
-    main_configured: set[str] = set()
-    if has("XAI_API_KEY"):
-        main_configured.add("xai-responses")
-    if has("OPENAI_COMPATIBLE_API_URL") and has("OPENAI_COMPATIBLE_API_KEY"):
-        main_configured.add("openai-compatible")
-
-    status: dict[str, Any] = {
-        "main_search": {
-            "configured": [provider for provider in ("xai-responses", "openai-compatible") if provider in main_configured],
-            "fallback_chain": ["xai-responses", "openai-compatible"],
-        },
-        "web_search": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("zhipu", has("ZHIPU_API_KEY")),
-                    ("zhipu-mcp", has("ZHIPU_MCP_API_KEY")),
-                    ("tavily", has("TAVILY_API_KEY")),
-                    ("firecrawl", has("FIRECRAWL_API_KEY")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["zhipu", "zhipu-mcp", "tavily", "firecrawl"],
-        },
-        "docs_search": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("context7", has("CONTEXT7_API_KEY")),
-                    ("exa", has("EXA_API_KEY")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["context7", "exa"],
-        },
-        "web_fetch": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("tavily", has("TAVILY_API_KEY")),
-                    ("jina", has("JINA_API_KEY")),
-                    ("zhipu-mcp-reader", has("ZHIPU_MCP_API_KEY")),
-                    ("firecrawl", has("FIRECRAWL_API_KEY")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["tavily", "jina", "zhipu-mcp-reader", "firecrawl"],
-        },
-        "vertical_search": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("anysearch", has("ANYSEARCH_API_KEY")),
-                    ("sciverse", has("SCIVERSE_API_TOKEN")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["anysearch"],
-            "experimental": True,
-            "explicit_only": ["sciverse"],
-            "route_enabled": {"anysearch": True, "sciverse": False},
-        },
-    }
-    for item in status.values():
-        item["ok"] = bool(item["configured"])
-    return status
+    """Use the runtime capability rules for unsaved configuration too."""
+    with config.snapshot(values, merge=False):
+        return get_capability_status()
 
 
 def config_unset(key: str) -> dict[str, Any]:

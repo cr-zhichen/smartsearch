@@ -143,11 +143,29 @@ class SmartSearchUIHandler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if self.close_connection:
+            self.send_header("Connection", "close")
         for name, value in self._security_headers():
             self.send_header(name, value)
         self.end_headers()
         if self.command != "HEAD":
             self.wfile.write(body)
+        if getattr(self, "_body_rejected", False):
+            # Send FIN after the response, then briefly drain the transport. On
+            # Windows closing with unread upload bytes can discard the 413/411.
+            # This is not HTTP parsing: this connection will never be reused.
+            self.wfile.flush()
+            self.connection.shutdown(socket.SHUT_WR)
+            deadline, remaining = time.monotonic() + 0.25, MAX_BODY_BYTES * 2
+            while remaining > 0 and time.monotonic() < deadline:
+                self.connection.settimeout(max(0.001, deadline - time.monotonic()))
+                try:
+                    chunk = self.connection.recv(min(65536, remaining))
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                remaining -= len(chunk)
 
     def _json(self, code: int, payload: dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
@@ -270,6 +288,7 @@ class SmartSearchUIHandler(BaseHTTPRequestHandler):
                     # The body was refused unread, so the connection can no longer be
                     # reused: whatever is still in flight would look like a new request.
                     self.close_connection = True
+                    self._body_rejected = True
                 if problem == "chunked":
                     self._json(411, {"ok": False, "error_type": "parameter_error", "error": "length required"})
                     return
@@ -286,7 +305,7 @@ class SmartSearchUIHandler(BaseHTTPRequestHandler):
                 self._json(404, {"ok": False, "error_type": "parameter_error", "error": "not found"})
                 return
             self._json(200, handler(self, body, query))
-        except (BrokenPipeError, ConnectionResetError, socket.timeout, TimeoutError):
+        except (BrokenPipeError, ConnectionResetError, ConnectionAbortedError, socket.timeout, TimeoutError):
             self.close_connection = True
             return
         except Exception:

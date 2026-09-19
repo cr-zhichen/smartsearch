@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/branding/smart-search.png" alt="Smart Search" width="112">
+
 # smart-search
 
 **One reproducible command layer for AI agents to search, read and research the live web.**
@@ -99,6 +101,18 @@ user query
 `smart-search route "query"` explains this decision without calling search, docs, fetch, or provider APIs. `smart-search deep` keeps the offline planner contract and uses local/rules signals only.
 
 ## Install
+
+### Windows desktop app
+
+[Download the Windows x64 installer](https://github.com/konbakuyomu/smartsearch/releases/download/v0.1.19/SmartSearch-0.1.19-win-x64-Setup-unsigned-test.exe).
+The native app includes its own runtime and provides configuration, search,
+research, activity and Skills pages. No separate Python or Node installation is
+required for the app. The installer is unsigned; macOS and Windows ARM64 device
+validation are pending. See the [desktop guide](docs/desktop.md).
+
+The CLI remains independently installable and works while the app is closed.
+
+### CLI
 
 Stable channel:
 

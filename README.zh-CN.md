@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/branding/smart-search.png" alt="Smart Search" width="112">
+
 # smart-search
 
 **给 AI agent 用的联网检索命令层，一条命令，一份可复现的 JSON**
@@ -99,6 +101,16 @@ smart-search research "OpenAI Responses API web_search 和 Chat Completions 联�
 `smart-search route "query"` 只解释这次会需要哪些能力，不执行搜索、文档查询、网页抓取或 provider 调用。`smart-search deep` 仍保持离线 planner 契约，只使用本地/rules 信号。
 
 ## 安装
+
+### Windows 桌面端
+
+[下载 Windows x64 安装包](https://github.com/konbakuyomu/smartsearch/releases/download/v0.1.19/SmartSearch-0.1.19-win-x64-Setup-unsigned-test.exe)。
+原生 App 提供配置、搜索、研究、活动和 Skills 页面，自带运行环境，无需另装 Python 或 Node。
+安装器未签名；macOS 和 Windows ARM64 实机验收仍待完成。详见[桌面端使用说明](docs/desktop.md)。
+
+CLI 仍可独立安装，并在 App 关闭时正常运行。
+
+### CLI
 
 稳定版：
 

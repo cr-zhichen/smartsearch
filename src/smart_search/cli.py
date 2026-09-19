@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
-from . import service
+from . import activity, service
 from .embedding_presets import (
     QWEN3_EMBEDDING_8B_PRESET,
     embedding_preset_for_model,
@@ -1471,6 +1471,7 @@ def _exit_code(data: dict[str, Any]) -> int:
 
 
 def _print_result(command: str, data: dict[str, Any], fmt: str, output: str = "") -> int:
+    activity.result(data)
     rendered = _render(command, data, fmt)
     if output:
         service.write_output(output, rendered)
@@ -2579,6 +2580,12 @@ def _run_advanced_setup_prompts(values: dict[str, str], current: dict[str, str],
 
 
 async def _run_async(args: argparse.Namespace) -> int:
+    with service.config.snapshot():
+        return await _run_async_impl(args)
+
+
+async def _run_async_impl(args: argparse.Namespace) -> int:
+    activity.progress(args.command)
     if args.command == "search":
         search_kwargs = {
             "platform": args.platform,
@@ -3685,7 +3692,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> int:
+def _main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     try:
@@ -3705,7 +3712,22 @@ def main(argv: list[str] | None = None) -> int:
             return _run_model(args)
         return asyncio.run(_run_async(args))
     except KeyboardInterrupt:
+        activity.cancelled()
         return EXIT_RUNTIME_ERROR
+
+
+def main(argv: list[str] | None = None) -> int:
+    arguments = list(sys.argv[1:] if argv is None else argv)
+    if arguments == ["--desktop-capabilities"]:
+        print(json.dumps({"version": _get_version(), "activity_protocol_version": 1}))
+        return EXIT_OK
+    first = arguments[0] if arguments else ""
+    command = next((name for name, aliases in COMMAND_ALIASES.items() if first in [name, *aliases]), "unknown")
+    command = {"--help": "help", "-h": "help", "--version": "version", "ui": "ui", "web": "ui"}.get(first, command)
+    with activity.observe(command, version=_get_version()) as run:
+        code = _main(argv)
+        run.finish(code)
+        return code
 
 
 if __name__ == "__main__":

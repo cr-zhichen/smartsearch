@@ -2,7 +2,14 @@ import json
 import math
 import os
 import sys
+import hashlib
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
+
+from .state_files import file_lock
+
+_snapshot = ContextVar("smart_search_config_snapshot", default=None)
 
 class Config:
     _instance = None
@@ -206,6 +213,9 @@ class Config:
 
     @property
     def config_file(self) -> Path:
+        snapshot = _snapshot.get()
+        if snapshot is not None:
+            return snapshot["path"]
         if self._config_file is None:
             config_dir, config_dir_source = self._resolve_config_dir()
             ok = self._safe_mkdir(config_dir)
@@ -220,17 +230,102 @@ class Config:
 
     @property
     def config_dir_source(self) -> str:
+        snapshot = _snapshot.get()
+        if snapshot is not None:
+            return snapshot["source"]
         if self._config_file is None:
             _ = self.config_file
         return self._config_dir_source or "override"
 
-    def _load_config_file(self) -> dict:
+    def _load_config_file(self, *, strict: bool = False) -> dict:
         try:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-                return data if isinstance(data, dict) else {}
-        except (FileNotFoundError, PermissionError, OSError, json.JSONDecodeError):
+                if not isinstance(data, dict):
+                    if strict:
+                        raise ValueError("配置文件不是 JSON 对象；请先修复，原文件未修改。")
+                    return {}
+                return data
+        except FileNotFoundError:
             return {}
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            if strict:
+                raise ValueError("无法读取有效配置；请检查文件和权限，原文件未修改。") from None
+            return {}
+
+    def revision(self) -> str:
+        try:
+            raw = self.config_file.read_bytes()
+        except FileNotFoundError:
+            raw = b""
+        return hashlib.sha256(raw).hexdigest()
+
+    def snapshot_revision(self) -> str:
+        snapshot = _snapshot.get()
+        if snapshot is not None and snapshot.get("revision") is not None:
+            return snapshot["revision"]
+        return self.revision()
+
+    def effective_values(self, masked: bool = True) -> dict[str, str]:
+        snapshot = _snapshot.get()
+        if snapshot is not None:
+            values = dict(snapshot["values"])
+        else:
+            values = self.get_saved_config(masked=False)
+            values.update({key: os.environ[key] for key in self._CONFIG_KEYS if key in os.environ})
+        return {key: self._mask_if_secret(key, value) for key, value in values.items()} if masked else values
+
+    @contextmanager
+    def snapshot(self, values: dict[str, str] | None = None, *, merge: bool = True, directory: str = "",
+                 source_overrides: dict[str, str] | None = None):
+        """Freeze one invocation without changing process-wide environment variables."""
+        previous = _snapshot.get()
+        if directory:
+            path = Path(directory).expanduser()
+            if not path.is_absolute():
+                raise ValueError("配置目录必须是绝对路径。")
+            path = path / "config.json"
+            source = self.config_dir_source if self._config_file is not None and path == self._config_file else "override"
+        else:
+            path, source = self.config_file, self.config_dir_source
+        if previous is not None and not directory:
+            resolved, sources = dict(previous["values"]), dict(previous["sources"])
+            revision = previous.get("revision")
+            saved = dict(previous.get("saved", {}))
+        else:
+            # Values and optimistic revision must describe the very same bytes.
+            # Read atomically replaced files once; read-only profiles need no lock file.
+            try:
+                raw = path.read_bytes()
+            except FileNotFoundError:
+                raw = b""
+            except OSError:
+                raw = None
+            try:
+                data = json.loads(raw or b"{}")
+            except (ValueError, UnicodeError):
+                data = {}
+            saved = self.get_saved_config(masked=False, data=data if isinstance(data, dict) else {})
+            revision = hashlib.sha256(raw).hexdigest() if raw is not None else None
+            resolved = dict(saved)
+            resolved.update({key: os.environ[key] for key in self._CONFIG_KEYS if key in os.environ})
+            sources = {key: "environment" if key in os.environ else "config_file" if key in saved else "default"
+                       for key in self._CONFIG_KEYS}
+        if not merge:
+            resolved = {}
+        resolved.update({key: str(value) for key, value in (values or {}).items()})
+        if source_overrides is not None:
+            sources = {key: source_overrides.get(key, "default") for key in self._CONFIG_KEYS}
+        token = _snapshot.set({"path": path, "source": source, "values": resolved, "sources": sources,
+                               "revision": revision, "saved": saved})
+        try:
+            yield
+        finally:
+            _snapshot.reset(token)
+
+    def secret_values(self) -> tuple[str, ...]:
+        return tuple(value for key, value in self.effective_values(masked=False).items()
+                     if value and any(part in key for part in ("KEY", "TOKEN", "SECRET")))
 
     def _save_config_file(self, config_data: dict) -> None:
         """Write config.json atomically.
@@ -268,6 +363,9 @@ class Config:
             raise ValueError(f"无法保存配置文件: {str(e)}{hint}")
 
     def _get_config_value(self, key: str, default: str | None = None) -> str | None:
+        snapshot = _snapshot.get()
+        if snapshot is not None:
+            return snapshot["values"].get(key, default)
         env_value = os.getenv(key)
         if env_value is not None:
             return env_value
@@ -282,8 +380,13 @@ class Config:
             return default
         return str(value)
 
-    def get_saved_config(self, masked: bool = True) -> dict:
-        data = self._load_config_file()
+    def get_saved_config(self, masked: bool = True, *, data: dict | None = None) -> dict:
+        if data is None:
+            snapshot = _snapshot.get()
+            if snapshot is not None and "saved" in snapshot:
+                normalized = dict(snapshot["saved"])
+                return {key: self._mask_if_secret(key, value) for key, value in normalized.items()} if masked else normalized
+            data = self._load_config_file()
         normalized: dict[str, str] = {}
         for old_key, new_key in self._LEGACY_CONFIG_KEYS.items():
             if old_key in data and new_key not in data:
@@ -296,6 +399,9 @@ class Config:
         return {key: self._mask_if_secret(key, value) for key, value in normalized.items()}
 
     def get_config_source(self, key: str) -> str:
+        snapshot = _snapshot.get()
+        if snapshot is not None:
+            return snapshot["sources"].get(key, "default")
         if os.getenv(key) is not None:
             return "environment"
         data = self._load_config_file()
@@ -313,6 +419,8 @@ class Config:
         self,
         set_values: dict[str, str] | None = None,
         unset_keys: list[str] | None = None,
+        *,
+        expected_revision: str | None = None,
     ) -> dict:
         """Apply many config changes in one validated, atomic write.
 
@@ -348,15 +456,22 @@ class Config:
         if errors:
             return {"ok": False, "errors": errors, "saved": [], "unset": []}
 
-        config_data = self._load_config_file()
-        for key, value in normalized_set.items():
-            config_data[key] = value
-        for key in normalized_unset:
-            config_data.pop(key, None)
-            for old_key, new_key in self._LEGACY_CONFIG_KEYS.items():
-                if new_key == key:
-                    config_data.pop(old_key, None)
-        self._save_config_file(config_data)
+        try:
+            with file_lock(self.config_file):
+                if expected_revision is not None and expected_revision != self.revision():
+                    return {"ok": False, "errors": [{"key": "config", "error": "配置已被其他进程修改，请刷新后重试。"}],
+                            "saved": [], "unset": [], "conflict": True}
+                config_data = self._load_config_file(strict=True)
+                for key, value in normalized_set.items():
+                    config_data[key] = value
+                for key in normalized_unset:
+                    config_data.pop(key, None)
+                    for old_key, new_key in self._LEGACY_CONFIG_KEYS.items():
+                        if new_key == key:
+                            config_data.pop(old_key, None)
+                self._save_config_file(config_data)
+        except OSError:
+            raise ValueError("无法锁定或保存配置文件，请检查权限或稍后重试。") from None
 
         if (set(normalized_set) | set(normalized_unset)) & self._MODEL_CACHE_KEYS:
             self._cached_model = None
@@ -555,6 +670,9 @@ class Config:
             return
         if key == "OPENAI_COMPATIBLE_API_MODE":
             self._validate_enum_value(key, value, self._ALLOWED_OPENAI_COMPATIBLE_API_MODES)
+            return
+        if key == "XAI_TOOLS":
+            self.parse_xai_tools(value or self._DEFAULT_XAI_TOOLS)
             return
         # Every getter below falls back to its default on an empty value, so an
         # empty string is how a key is cleared rather than a value to check.
