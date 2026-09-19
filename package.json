@@ -19,6 +19,7 @@
     "skills/smart-search-cli/**",
     "src/smart_search/**/*.py",
     "src/smart_search/assets/skills/smart-search-cli/**",
+    "src/smart_search/assets/ui/**",
     "pyproject.toml",
     "README.md",
     "README.zh-CN.md",

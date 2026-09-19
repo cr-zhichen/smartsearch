@@ -1,0 +1,139 @@
+"""Request handlers for the local config UI.
+
+Every function here is a thin adapter over an existing ``service`` / ``config`` /
+``skill_installer`` call and returns a plain dict. Nothing in this module knows about
+HTTP, so the whole API surface is unit-testable without opening a socket, and the
+"no business logic in the server" rule is structural rather than a convention.
+
+Secrets never leave the process: reads go through ``config.get_saved_config(masked=True)``
+and ``config_list(show_secrets=True)`` is never called from here.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from . import service
+from .config import config
+from .skill_installer import (
+    DEFAULT_SKILL_TARGET_IDS,
+    SKILL_TARGETS,
+    SkillInstallError,
+    install_skill_targets,
+    parse_skill_targets,
+    status_skill_targets,
+)
+from .ui_metadata import metadata_payload
+
+
+def _parameter_error(message: str, **extra: Any) -> dict[str, Any]:
+    return {"ok": False, "error_type": "parameter_error", "error": message, **extra}
+
+
+def _capability_chains() -> dict[str, list[str]]:
+    """The declared fallback order per capability, straight from the router's table."""
+    return {
+        capability: list(providers)
+        for capability, providers in service.RESEARCH_PROFILE_ORDER.items()
+    }
+
+
+def status() -> dict[str, Any]:
+    """Everything the page shows, computed locally. Makes no network calls."""
+    info = config.get_config_info()
+    minimum = service.validate_minimum_profile()
+    return {
+        "ok": True,
+        "error_type": "",
+        "error": "",
+        "values": config.get_saved_config(masked=True),
+        "sources": config.get_config_sources(),
+        "resolved": {
+            "config_status": info.get("config_status", ""),
+            "config_parameter_errors": info.get("config_parameter_errors", []),
+            "primary_api_mode": info.get("primary_api_mode", ""),
+            "resolved_log_dir": info.get("resolved_log_dir", ""),
+            "file_logging_enabled": info.get("file_logging_enabled", False),
+        },
+        "capability_status": service.get_capability_status(),
+        "capability_chains": _capability_chains(),
+        "minimum_profile": minimum,
+        "provider_health": service.provider_health_status(),
+        "provider_profiles": service.provider_profiles(),
+        "probe_kinds": dict(service.PROBE_KIND),
+        "config_path": service.config_path(),
+    }
+
+
+def state() -> dict[str, Any]:
+    """`status` plus the field metadata the page only needs to fetch once."""
+    payload = status()
+    payload["metadata"] = metadata_payload()
+    payload["skill_targets"] = [
+        {"id": target.target_id, "label": target.label, "default": target.target_id in DEFAULT_SKILL_TARGET_IDS}
+        for target in SKILL_TARGETS
+    ]
+    return payload
+
+
+async def test_provider(payload: dict[str, Any]) -> dict[str, Any]:
+    """Probe one provider. Every call costs a real request, so the page asks first."""
+    provider = str(payload.get("provider") or "").strip()
+    if not provider:
+        return _parameter_error("provider is required", known_providers=sorted(service.PROBE_KIND))
+    overrides = payload.get("overrides")
+    if overrides is not None and not isinstance(overrides, dict):
+        return _parameter_error("overrides must be an object")
+    timeout = payload.get("timeout_seconds")
+    try:
+        timeout_seconds = float(timeout) if timeout is not None else None
+    except (TypeError, ValueError):
+        return _parameter_error("timeout_seconds must be a number")
+    return await service.test_provider_connection(
+        provider,
+        overrides={str(k): str(v) for k, v in (overrides or {}).items()} or None,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+async def run_doctor() -> dict[str, Any]:
+    """The full diagnostic. Fires every probe at once, so it is never automatic."""
+    return await service.doctor()
+
+
+def reset_health(payload: dict[str, Any]) -> dict[str, Any]:
+    providers = payload.get("providers")
+    if providers is None:
+        return service.reset_provider_health(None)
+    if not isinstance(providers, list):
+        return _parameter_error("providers must be a list or null")
+    return service.reset_provider_health([str(item) for item in providers])
+
+
+def _resolve_targets(raw: Any) -> list[str]:
+    if raw in (None, "", []):
+        return list(DEFAULT_SKILL_TARGET_IDS)
+    if isinstance(raw, list):
+        raw = ",".join(str(item) for item in raw)
+    return parse_skill_targets(str(raw))
+
+
+def skills_status(targets: Any = None) -> dict[str, Any]:
+    try:
+        target_ids = _resolve_targets(targets)
+        return status_skill_targets(target_ids)
+    except SkillInstallError as e:
+        return _parameter_error(str(e), selected=[])
+
+
+def skills_install(payload: dict[str, Any]) -> dict[str, Any]:
+    try:
+        target_ids = _resolve_targets(payload.get("targets"))
+    except SkillInstallError as e:
+        return _parameter_error(str(e), selected=[])
+    if not target_ids:
+        return _parameter_error("no skill targets selected", selected=[])
+    try:
+        return install_skill_targets(target_ids)
+    except SkillInstallError as e:
+        return {"ok": False, "error_type": "runtime_error", "error": str(e), "selected": target_ids}

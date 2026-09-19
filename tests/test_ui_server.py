@@ -1,0 +1,257 @@
+"""The UI server edits API keys, so these are mostly security assertions."""
+
+import http.client
+import json
+import threading
+
+import pytest
+
+from smart_search import service, ui_server
+from smart_search.ui_server import UIServerConfig
+
+
+@pytest.fixture
+def running(tmp_path, monkeypatch):
+    monkeypatch.setattr(service.config, "_config_file", tmp_path / "config.json")
+    monkeypatch.setattr(service.config, "_cached_model", None)
+    httpd, runtime = ui_server.build_server(UIServerConfig(port=0, idle_timeout=0, open_browser=False))
+    thread = threading.Thread(target=httpd.serve_forever, kwargs={"poll_interval": 0.02}, daemon=True)
+    thread.start()
+    try:
+        yield httpd, runtime
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        thread.join(timeout=5)
+
+
+def request(runtime, method, path, *, token=None, headers=None, body=None, host=None):
+    conn = http.client.HTTPConnection("127.0.0.1", runtime.port, timeout=5)
+    sent = {"Host": host or f"127.0.0.1:{runtime.port}"}
+    if token:
+        sent[ui_server.TOKEN_HEADER] = token
+    sent.update(headers or {})
+    payload = None
+    if body is not None:
+        payload = body if isinstance(body, bytes) else json.dumps(body).encode()
+        sent["Content-Type"] = "application/json"
+    conn.request(method, path, body=payload, headers=sent)
+    response = conn.getresponse()
+    raw = response.read()
+    conn.close()
+    return response, raw
+
+
+def test_binds_loopback_only(running):
+    httpd, _runtime = running
+    assert httpd.server_address[0] == "127.0.0.1"
+
+
+def test_page_requires_the_token(running):
+    _httpd, runtime = running
+    response, _ = request(runtime, "GET", "/")
+    assert response.status == 403
+    response, _ = request(runtime, "GET", "/?token=wrong")
+    assert response.status == 403
+
+
+def test_page_renders_with_the_token_and_leaves_no_placeholders(running):
+    _httpd, runtime = running
+    response, raw = request(runtime, "GET", f"/?token={runtime.token}")
+    assert response.status == 200
+    body = raw.decode("utf-8")
+    assert "__SS_UI_TOKEN__" not in body
+    assert "__SS_UI_NONCE__" not in body
+    assert "__SS_UI_LANG__" not in body
+    assert runtime.nonce in body
+
+
+def test_api_requires_the_token_header(running):
+    _httpd, runtime = running
+    response, _ = request(runtime, "GET", "/api/state")
+    assert response.status == 403
+    response, _ = request(runtime, "GET", "/api/state", token="nope")
+    assert response.status == 403
+    response, _ = request(runtime, "GET", "/api/state", token=runtime.token)
+    assert response.status == 200
+
+
+def test_rebound_host_is_rejected(running):
+    # A DNS-rebinding page reaches the socket but cannot forge a loopback Host.
+    _httpd, runtime = running
+    response, _ = request(runtime, "GET", "/api/state", token=runtime.token, host="evil.com")
+    assert response.status == 403
+
+
+def test_cross_origin_is_rejected(running):
+    _httpd, runtime = running
+    response, _ = request(
+        runtime, "GET", "/api/state", token=runtime.token, headers={"Origin": "http://evil.com"}
+    )
+    assert response.status == 403
+    response, _ = request(
+        runtime, "GET", "/api/state", token=runtime.token, headers={"Sec-Fetch-Site": "cross-site"}
+    )
+    assert response.status == 403
+
+
+def test_same_origin_is_accepted(running):
+    _httpd, runtime = running
+    response, _ = request(
+        runtime,
+        "GET",
+        "/api/state",
+        token=runtime.token,
+        headers={"Origin": f"http://127.0.0.1:{runtime.port}", "Sec-Fetch-Site": "same-origin"},
+    )
+    assert response.status == 200
+
+
+def test_never_emits_cors_headers(running):
+    _httpd, runtime = running
+    for method, path in (("GET", "/api/state"), ("OPTIONS", "/api/state")):
+        response, _ = request(runtime, method, path, token=runtime.token)
+        assert response.getheader("Access-Control-Allow-Origin") is None
+        assert response.getheader("Access-Control-Allow-Headers") is None
+
+
+def test_options_is_not_allowed(running):
+    _httpd, runtime = running
+    response, _ = request(runtime, "OPTIONS", "/api/state", token=runtime.token)
+    assert response.status == 405
+
+
+def test_security_headers_are_present(running):
+    _httpd, runtime = running
+    response, _ = request(runtime, "GET", "/api/state", token=runtime.token)
+    assert response.getheader("Cache-Control") == "no-store"
+    assert response.getheader("X-Content-Type-Options") == "nosniff"
+    assert response.getheader("X-Frame-Options") == "DENY"
+    csp = response.getheader("Content-Security-Policy")
+    assert f"'nonce-{runtime.nonce}'" in csp
+    assert "frame-ancestors 'none'" in csp
+    assert "default-src 'none'" in csp
+
+
+def test_oversized_body_is_refused(running):
+    _httpd, runtime = running
+    response, _ = request(
+        runtime, "POST", "/api/heartbeat", token=runtime.token, body=b"x" * (ui_server.MAX_BODY_BYTES + 1)
+    )
+    assert response.status == 413
+
+
+def test_chunked_body_is_refused(running):
+    _httpd, runtime = running
+    response, _ = request(
+        runtime,
+        "POST",
+        "/api/heartbeat",
+        token=runtime.token,
+        headers={"Transfer-Encoding": "chunked"},
+        body=b"{}",
+    )
+    assert response.status in (400, 411)
+
+
+def test_unknown_path_gives_a_bare_404(running):
+    _httpd, runtime = running
+    response, raw = request(runtime, "GET", "/api/../../etc/passwd", token=runtime.token)
+    assert response.status == 404
+    body = raw.decode("utf-8")
+    assert "passwd" not in body
+    assert "Traceback" not in body
+
+
+def test_state_never_contains_a_raw_secret(running):
+    """The single most valuable regression test in this file."""
+    _httpd, runtime = running
+    service.config.set_config_value("EXA_API_KEY", "exa-super-secret-value-1234")
+    service.config.set_config_value("OPENAI_COMPATIBLE_API_KEY", "sk-live-do-not-leak-9876")
+
+    response, raw = request(runtime, "GET", "/api/state", token=runtime.token)
+    assert response.status == 200
+    body = raw.decode("utf-8")
+    assert "exa-super-secret-value-1234" not in body
+    assert "sk-live-do-not-leak-9876" not in body
+    payload = json.loads(body)
+    assert "*" in payload["values"]["EXA_API_KEY"]
+
+
+def test_state_reports_environment_shadowing(running, monkeypatch):
+    # A value the user cannot change from here must be labelled as such.
+    _httpd, runtime = running
+    monkeypatch.setenv("EXA_API_KEY", "from-the-environment")
+    _response, raw = request(runtime, "GET", "/api/state", token=runtime.token)
+    payload = json.loads(raw)
+    assert payload["sources"]["EXA_API_KEY"] == "environment"
+
+
+def test_state_makes_no_network_calls(running, monkeypatch):
+    _httpd, runtime = running
+
+    def explode(*args, **kwargs):
+        raise AssertionError("/api/state must not touch the network")
+
+    monkeypatch.setattr("httpx.AsyncClient", explode)
+    response, _ = request(runtime, "GET", "/api/state", token=runtime.token)
+    assert response.status == 200
+
+
+def test_state_carries_the_full_field_metadata(running, monkeypatch):
+    # conftest pins the profile to "off" for isolation; the page must show the real one.
+    monkeypatch.setenv("SMART_SEARCH_MINIMUM_PROFILE", "standard")
+    _httpd, runtime = running
+    _response, raw = request(runtime, "GET", "/api/state", token=runtime.token)
+    payload = json.loads(raw)
+    assert len(payload["metadata"]["fields"]) == len(service.config._CONFIG_KEYS)
+    assert payload["minimum_profile"]["required"] == ["main_search", "docs_search", "web_fetch"]
+    assert set(payload["capability_status"]) >= {"main_search", "docs_search", "web_fetch"}
+    assert payload["probe_kinds"]["exa"] == "live"
+
+
+def test_shutdown_stops_the_server(running):
+    httpd, runtime = running
+    response, _ = request(runtime, "POST", "/api/shutdown", token=runtime.token, body={})
+    assert response.status == 200
+    assert runtime.stopping.is_set()
+    httpd.shutdown()
+
+
+def test_asset_resolves_through_importlib(running):
+    # Catches a missing package-data glob or npm `files` entry.
+    assert "<html" in ui_server.load_page_source()
+
+
+def test_cli_parses_the_ui_command():
+    from smart_search.cli import build_parser
+
+    args = build_parser().parse_args(["ui", "--no-browser", "--port", "0"])
+    assert args.command == "ui"
+    assert args.no_browser is True
+    assert build_parser().parse_args(["web", "--check"]).command == "ui"
+
+
+def test_cli_check_reports_the_bundled_asset(capsys):
+    from smart_search.cli import main
+
+    assert main(["ui", "--check", "--format", "json"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["ok"] is True
+    assert payload["asset_bytes"] > 1000
+
+
+def test_browser_is_not_opened_over_ssh(monkeypatch):
+    monkeypatch.setenv("SSH_CONNECTION", "10.0.0.1 22 10.0.0.2 2222")
+    options = ui_server.UIServerConfig(open_browser=True)
+    assert ui_server._should_open_browser(options) is False
+
+
+def test_browser_is_not_opened_on_a_headless_linux_box(monkeypatch):
+    # webbrowser would otherwise launch a terminal browser and hijack the TTY.
+    monkeypatch.setattr("sys.platform", "linux")
+    for name in ("SSH_CONNECTION", "SSH_TTY", "DISPLAY", "WAYLAND_DISPLAY", "WSL_DISTRO_NAME", "WSL_INTEROP"):
+        monkeypatch.delenv(name, raising=False)
+    assert ui_server._should_open_browser(ui_server.UIServerConfig(open_browser=True)) is False
+    monkeypatch.setenv("DISPLAY", ":0")
+    assert ui_server._should_open_browser(ui_server.UIServerConfig(open_browser=True)) is True

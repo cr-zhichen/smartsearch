@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>smart-search</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #646e7a;
+  --line: #e2e6ea; --accent: #2f6feb; --ok: #1a7f46; --warn: #a3671a; --bad: #c0392b;
+  --chip: #eef1f5; --shadow: 0 1px 2px rgba(16,22,26,.06), 0 4px 16px rgba(16,22,26,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a; --panel: #1c2025; --ink: #e7eaee; --muted: #98a2ad;
+    --line: #2a3039; --accent: #6ea0ff; --ok: #4ec27f; --warn: #d7a34a; --bad: #f0776a;
+    --chip: #252b33; --shadow: none;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Hiragino Sans GB", "Microsoft YaHei", Roboto, Helvetica, Arial, sans-serif;
+}
+code, pre, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.layout { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+nav {
+  background: var(--panel); border-right: 1px solid var(--line);
+  padding: 20px 12px; position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+nav h1 { font-size: 15px; margin: 0 0 4px 8px; letter-spacing: .2px; }
+nav .sub { font-size: 12px; color: var(--muted); margin: 0 0 18px 8px; }
+nav button {
+  display: block; width: 100%; text-align: left; background: none; border: 0;
+  padding: 8px 10px; border-radius: 7px; color: var(--ink); cursor: pointer;
+  font: inherit; font-size: 14px; margin-bottom: 2px;
+}
+nav button:hover { background: var(--chip); }
+nav button[aria-current="true"] { background: var(--accent); color: #fff; }
+main { padding: 28px 32px 80px; max-width: 900px; }
+h2 { font-size: 20px; margin: 0 0 6px; }
+.blurb { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 16px 18px; margin-bottom: 14px; box-shadow: var(--shadow);
+}
+.card h3 { margin: 0 0 2px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
+.card .note { color: var(--muted); font-size: 13px; margin: 0 0 12px; }
+.banner { border-left: 3px solid var(--accent); }
+.banner.ok { border-left-color: var(--ok); }
+.banner.bad { border-left-color: var(--bad); }
+.pill {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px;
+  background: var(--chip); color: var(--muted); white-space: nowrap;
+}
+.pill:empty { display: none; }
+.pill.ok { background: rgba(26,127,70,.14); color: var(--ok); }
+.pill.bad { background: rgba(192,57,43,.14); color: var(--bad); }
+.pill.warn { background: rgba(163,103,26,.16); color: var(--warn); }
+.row {
+  display: grid; grid-template-columns: 200px 1fr auto; gap: 10px;
+  align-items: start; padding: 9px 0; border-top: 1px solid var(--line);
+}
+.row:first-of-type { border-top: 0; }
+.row label { font-size: 14px; }
+.row .help { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.row .val { font-size: 13px; word-break: break-all; }
+.row .val .unset { color: var(--muted); }
+button.act {
+  background: var(--accent); color: #fff; border: 0; border-radius: 7px;
+  padding: 6px 13px; font: inherit; font-size: 13px; cursor: pointer;
+}
+button.act.ghost { background: var(--chip); color: var(--ink); }
+button.act[disabled] { opacity: .5; cursor: not-allowed; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 7px 10px 7px 0; border-top: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; border-top: 0; }
+details.more { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+details.more > summary {
+  cursor: pointer; color: var(--muted); font-size: 13px; list-style: none;
+  padding: 2px 0; user-select: none;
+}
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: "▸ "; }
+details.more[open] > summary::before { content: "▾ "; }
+.cost {
+  font-size: 12px; color: var(--warn); background: rgba(163,103,26,.1);
+  border-radius: 6px; padding: 7px 10px; margin-bottom: 12px;
+}
+.toast {
+  position: fixed; right: 20px; bottom: 20px; background: var(--panel);
+  border: 1px solid var(--line); border-left: 3px solid var(--accent);
+  border-radius: 8px; padding: 10px 14px; box-shadow: var(--shadow);
+  font-size: 13px; max-width: 380px; opacity: 0; transition: opacity .15s; pointer-events: none;
+}
+.toast.show { opacity: 1; }
+.toast.bad { border-left-color: var(--bad); }
+.lang { float: right; }
+.lang button { display: inline; width: auto; padding: 2px 8px; font-size: 12px; }
+@media (max-width: 720px) {
+  .layout { grid-template-columns: 1fr; }
+  nav { position: static; height: auto; }
+  main { padding: 20px 16px 60px; }
+  .row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav>
+    <h1>smart-search</h1>
+    <p class="sub" id="subtitle"></p>
+    <div id="nav"></div>
+    <p class="sub" style="margin-top:18px">
+      <span class="lang">
+        <button class="act ghost" id="langToggle" type="button">EN / 中文</button>
+      </span>
+    </p>
+  </nav>
+  <main id="main"></main>
+</div>
+<div class="toast" id="toast"></div>
+
+<script nonce="__SS_UI_NONCE__">
+(function () {
+  "use strict";
+  var TOKEN = "__SS_UI_TOKEN__";
+  var lang = "__SS_UI_LANG__" === "en" ? "en" : "zh";
+  var state = null;
+  var current = "status";
+  var testing = {};
+
+  var T = {
+    zh: {
+      sub: "本地配置页", ready: "最低配置已满足", notReady: "最低配置还差一点",
+      missing: "还缺", configFile: "配置文件", source: "来源",
+      env: "环境变量", file: "配置文件", def: "默认值",
+      unset: "未配置", test: "测试", testing: "测试中…", testAll: "全部测试",
+      cost: "每点一次「测试」都会向对应服务商发一次真实请求，可能计费。",
+      capabilities: "能力", chain: "兜底顺序", configured: "已配置",
+      cooldown: "冷却中", provider: "数据源", status: "状态", message: "说明",
+      remaining: "剩余", reset: "解除冷却", resetAll: "全部解除",
+      noCooldown: "当前没有数据源在冷却。", envLocked: "由环境变量接管，改这里不生效",
+      doctor: "运行完整体检", doctorCost: "体检会一次性调用所有已配置的服务商。",
+      confirmAll: "这会对所有已配置的数据源各发一次真实请求，继续？",
+      skills: "已安装", skillsNot: "未安装", refresh: "刷新",
+      readonly: "这一版页面只读。要改配置仍然用 smart-search setup 或 smart-search config set。",
+      required: "必需", optional: "可选",
+      missingOne: "缺", optionalOne: "未配置", more: "更多设置",
+    },
+    en: {
+      sub: "local config", ready: "Minimum profile met", notReady: "Minimum profile not met",
+      missing: "Missing", configFile: "Config file", source: "Source",
+      env: "environment", file: "config file", def: "default",
+      unset: "not set", test: "Test", testing: "Testing…", testAll: "Test all",
+      cost: "Every Test makes one real request to that provider and may cost money.",
+      capabilities: "Capabilities", chain: "Fallback order", configured: "Configured",
+      cooldown: "Cooling down", provider: "Provider", status: "Status", message: "Message",
+      remaining: "Remaining", reset: "Clear cooldown", resetAll: "Clear all",
+      noCooldown: "No provider is cooling down.", envLocked: "Taken over by an environment variable",
+      doctor: "Run full doctor", doctorCost: "Doctor calls every configured provider at once.",
+      confirmAll: "This makes one real request to every configured provider. Continue?",
+      skills: "installed", skillsNot: "not installed", refresh: "Refresh",
+      readonly: "This build of the page is read-only. Use smart-search setup or smart-search config set to change values.",
+      required: "required", optional: "optional",
+      missingOne: "missing", optionalOne: "not set", more: "More settings",
+    }
+  };
+  function t(key) { return T[lang][key] || key; }
+  function L(obj, base) { return obj[base + "_" + lang] || obj[base + "_en"] || ""; }
+
+  function el(tag, attrs, kids) {
+    var node = document.createElement(tag);
+    attrs = attrs || {};
+    Object.keys(attrs).forEach(function (name) {
+      if (name === "class") node.className = attrs[name];
+      else if (name === "text") node.textContent = attrs[name];
+      else if (name.indexOf("on") === 0) node.addEventListener(name.slice(2), attrs[name]);
+      else if (attrs[name] !== null && attrs[name] !== undefined) node.setAttribute(name, attrs[name]);
+    });
+    (kids || []).forEach(function (kid) { if (kid) node.appendChild(kid); });
+    return node;
+  }
+
+  var toastTimer = null;
+  function toast(message, bad) {
+    var node = document.getElementById("toast");
+    node.textContent = message;
+    node.className = "toast show" + (bad ? " bad" : "");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { node.className = "toast"; }, 4200);
+  }
+
+  function api(method, path, body) {
+    return fetch(path, {
+      method: method,
+      headers: body
+        ? { "X-Smart-Search-Token": TOKEN, "Content-Type": "application/json" }
+        : { "X-Smart-Search-Token": TOKEN },
+      body: body ? JSON.stringify(body) : undefined
+    }).then(function (response) {
+      return response.json().catch(function () { return { ok: false, error: "HTTP " + response.status }; });
+    });
+  }
+
+  function sourceLabel(source) {
+    if (source === "environment") return t("env");
+    if (source === "config_file") return t("file");
+    return t("def");
+  }
+
+  function seconds(value) {
+    var n = Number(value || 0);
+    if (n <= 0) return "-";
+    if (n < 60) return Math.round(n) + "s";
+    if (n < 3600) return Math.round(n / 60) + "m";
+    return (n / 3600).toFixed(1) + "h";
+  }
+
+  // ---- views ------------------------------------------------------------
+  function viewStatus() {
+    var main = document.getElementById("main");
+    var minimum = state.minimum_profile || {};
+    var ok = !!minimum.ok;
+    main.appendChild(el("h2", { text: L(sectionById("status"), "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(sectionById("status"), "blurb") }));
+
+    var missing = (minimum.missing || []).join(", ");
+    main.appendChild(el("div", { class: "card banner " + (ok ? "ok" : "bad") }, [
+      el("h3", {}, [
+        el("span", { text: ok ? t("ready") : t("notReady") }),
+        el("span", { class: "pill " + (ok ? "ok" : "bad"), text: ok ? "OK" : "FAIL" })
+      ]),
+      missing ? el("p", { class: "note", text: t("missing") + ": " + missing }) : null,
+      el("p", { class: "note mono", text: t("configFile") + ": " + (state.config_path || {}).config_file })
+    ]));
+
+    var caps = state.capability_status || {};
+    var requiredCaps = minimum.required || [];
+    var rows = Object.keys(caps).map(function (name) {
+      var item = caps[name] || {};
+      var configured = (item.configured || []).join(", ") || "-";
+      var needed = requiredCaps.indexOf(name) >= 0;
+      var cls = item.ok ? "ok" : (needed ? "bad" : "");
+      var label = item.ok ? "OK" : (needed ? t("missingOne") : t("optionalOne"));
+      return el("tr", {}, [
+        el("td", {}, [
+          el("span", { class: "mono", text: name }),
+          needed ? el("span", { class: "pill", text: t("required") }) : null
+        ]),
+        el("td", {}, [el("span", { class: "pill " + cls, text: label })]),
+        el("td", { class: "mono", text: configured }),
+        el("td", { class: "mono", text: (item.fallback_chain || []).join(" → ") })
+      ]);
+    });
+    main.appendChild(el("div", { class: "card" }, [
+      el("h3", { text: t("capabilities") }),
+      el("table", {}, [
+        el("thead", {}, [el("tr", {}, [
+          el("th", { text: t("capabilities") }), el("th", { text: t("status") }),
+          el("th", { text: t("configured") }), el("th", { text: t("chain") })
+        ])]),
+        el("tbody", {}, rows)
+      ])
+    ]));
+
+    main.appendChild(cooldownCard());
+  }
+
+  function cooldownCard() {
+    var health = state.provider_health || {};
+    var cooling = (health.providers || []).filter(function (item) { return item.state === "cooldown"; });
+    var kids = [el("h3", { text: t("cooldown") })];
+    if (!cooling.length) {
+      kids.push(el("p", { class: "note", text: t("noCooldown") }));
+      return el("div", { class: "card" }, kids);
+    }
+    kids.push(el("table", {}, [
+      el("thead", {}, [el("tr", {}, [
+        el("th", { text: t("provider") }), el("th", { text: t("remaining") }),
+        el("th", { text: t("message") }), el("th", {})
+      ])]),
+      el("tbody", {}, cooling.map(function (item) {
+        return el("tr", {}, [
+          el("td", { class: "mono", text: item.provider }),
+          el("td", { text: seconds(item.cooldown_remaining_seconds) }),
+          el("td", { text: item.error || item.error_type || "-" }),
+          el("td", {}, [el("button", {
+            class: "act ghost", type: "button", text: t("reset"),
+            onclick: function () { resetCooldown([item.provider]); }
+          })])
+        ]);
+      }))
+    ]));
+    kids.push(el("p", { class: "note", style: "margin-top:12px" }, [
+      el("button", {
+        class: "act ghost", type: "button", text: t("resetAll"),
+        onclick: function () { resetCooldown(null); }
+      })
+    ]));
+    return el("div", { class: "card" }, kids);
+  }
+
+  function resetCooldown(providers) {
+    api("POST", "/api/providers/reset", { providers: providers }).then(function (data) {
+      if (!data.ok) { toast(data.error || "failed", true); return; }
+      toast((data.cleared || []).join(", ") || t("noCooldown"));
+      refresh();
+    });
+  }
+
+  function viewProviders() {
+    var main = document.getElementById("main");
+    var section = sectionById("providers");
+    main.appendChild(el("h2", { text: L(section, "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(section, "blurb") }));
+    main.appendChild(el("div", { class: "cost", text: t("cost") }));
+
+    var groups = {};
+    var order = [];
+    state.metadata.fields.forEach(function (field) {
+      if (field.section !== "providers") return;
+      var name = field.provider || "other";
+      if (!groups[name]) { groups[name] = []; order.push(name); }
+      groups[name].push(field);
+    });
+    order.forEach(function (provider) {
+      main.appendChild(providerCard(provider, groups[provider]));
+    });
+    main.appendChild(el("div", { class: "card" }, [
+      el("h3", { text: t("doctor") }),
+      el("p", { class: "note", text: t("doctorCost") }),
+      el("button", { class: "act ghost", type: "button", text: t("doctor"), onclick: runDoctor })
+    ]));
+  }
+
+  function providerCard(provider, fields) {
+    var health = ((state.provider_health || {}).providers || []).filter(function (item) {
+      return item.provider === provider;
+    })[0];
+    var probe = (state.probe_kinds || {})[provider] || "";
+    var testable = !!probe;
+    var badge = null;
+    if (health && health.state === "cooldown") badge = el("span", { class: "pill bad", text: t("cooldown") });
+    else if (probe === "presence") badge = el("span", { class: "pill warn", text: "presence" });
+
+    var kids = [
+      el("h3", {}, [
+        el("span", { class: "mono", text: provider }),
+        badge,
+        el("span", { class: "pill", id: "res-" + provider, text: "" })
+      ])
+    ];
+    var upfront = fields.filter(function (f) { return f.tier !== "advanced"; });
+    var advanced = fields.filter(function (f) { return f.tier === "advanced"; });
+    if (!upfront.length) { upfront = advanced; advanced = []; }
+    upfront.forEach(function (field) { kids.push(fieldRow(field)); });
+    if (advanced.length) {
+      kids.push(el("details", { class: "more" }, [
+        el("summary", { text: t("more") + " (" + advanced.length + ")" })
+      ].concat(advanced.map(fieldRow))));
+    }
+    if (testable) {
+      kids.push(el("p", { class: "note", style: "margin-top:12px;margin-bottom:0" }, [
+        el("button", {
+          class: "act", type: "button", id: "btn-" + provider, text: t("test"),
+          onclick: function () { runTest(provider); }
+        })
+      ]));
+    }
+    return el("div", { class: "card" }, kids);
+  }
+
+  function fieldRow(field) {
+    var source = (state.sources || {})[field.key] || "default";
+    var value = (state.values || {})[field.key];
+    var shown = value ? el("span", { class: "mono", text: value })
+                      : el("span", { class: "unset", text: field.default ? field.default + " (" + t("def") + ")" : t("unset") });
+    var pills = [el("span", { class: "pill", text: sourceLabel(source) })];
+    if (source === "environment") pills.push(el("span", { class: "pill warn", text: t("envLocked") }));
+    return el("div", { class: "row" }, [
+      el("div", {}, [
+        el("label", { text: L(field, "label") }),
+        el("span", { class: "help mono", text: field.key }),
+        L(field, "help") ? el("span", { class: "help", text: L(field, "help") }) : null
+      ]),
+      el("div", { class: "val" }, [shown]),
+      el("div", {}, pills)
+    ]);
+  }
+
+  function runTest(provider) {
+    if (testing[provider]) return;
+    testing[provider] = true;
+    var button = document.getElementById("btn-" + provider);
+    var result = document.getElementById("res-" + provider);
+    if (button) { button.disabled = true; button.textContent = t("testing"); }
+    if (result) { result.className = "pill"; result.textContent = "…"; }
+    api("POST", "/api/test", { provider: provider }).then(function (data) {
+      var good = data.status === "ok";
+      var neutral = data.status === "configured" || data.status === "not_configured";
+      if (result) {
+        result.className = "pill " + (good ? "ok" : (neutral ? "warn" : "bad"));
+        result.textContent = data.status + (data.response_time_ms ? " · " + Math.round(data.response_time_ms) + "ms" : "");
+      }
+      toast(provider + ": " + (data.message || data.status), !good && !neutral);
+      return api("GET", "/api/status");
+    }).then(function (fresh) {
+      if (fresh && fresh.ok) { Object.keys(fresh).forEach(function (k) { state[k] = fresh[k]; }); }
+    }).catch(function (e) {
+      toast(String(e), true);
+    }).then(function () {
+      testing[provider] = false;
+      if (button) { button.disabled = false; button.textContent = t("test"); }
+    });
+  }
+
+  function runDoctor() {
+    if (!window.confirm(t("confirmAll"))) return;
+    toast(t("testing"));
+    api("POST", "/api/doctor").then(function (data) {
+      toast(data.ok ? "doctor: OK" : "doctor: " + (data.error || "FAIL"), !data.ok);
+      refresh();
+    });
+  }
+
+  function viewSection(id) {
+    var main = document.getElementById("main");
+    var section = sectionById(id);
+    main.appendChild(el("h2", { text: L(section, "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(section, "blurb") }));
+    var fields = state.metadata.fields.filter(function (field) { return field.section === id; });
+    var essential = fields.filter(function (f) { return f.tier === "essential"; });
+    var rest = fields.filter(function (f) { return f.tier !== "essential"; });
+    if (essential.length) {
+      main.appendChild(el("div", { class: "card" }, [el("h3", { text: t("required") })].concat(
+        essential.map(fieldRow))));
+    }
+    if (rest.length) {
+      main.appendChild(el("div", { class: "card" }, [
+        el("h3", { text: t("optional") }),
+        el("details", { class: "more", open: essential.length ? null : "open" }, [
+          el("summary", { text: t("more") + " (" + rest.length + ")" })
+        ].concat(rest.map(fieldRow)))
+      ]));
+    }
+    main.appendChild(el("div", { class: "card banner" }, [el("p", { class: "note", text: t("readonly") })]));
+  }
+
+  function viewSkills() {
+    var main = document.getElementById("main");
+    var section = sectionById("skills");
+    main.appendChild(el("h2", { text: L(section, "label") }));
+    main.appendChild(el("p", { class: "blurb", text: L(section, "blurb") }));
+    var card = el("div", { class: "card" }, [el("p", { class: "note", text: "…" })]);
+    main.appendChild(card);
+    api("GET", "/api/skills?targets=" + encodeURIComponent(
+      state.skill_targets.map(function (item) { return item.id; }).join(",")
+    )).then(function (data) {
+      card.textContent = "";
+      if (!data.ok) { card.appendChild(el("p", { class: "note", text: data.error || "failed" })); return; }
+      card.appendChild(el("table", {}, [
+        el("thead", {}, [el("tr", {}, [
+          el("th", { text: t("provider") }), el("th", { text: t("status") }), el("th", { text: t("message") })
+        ])]),
+        el("tbody", {}, (data.targets || []).map(function (item) {
+          var installed = String(item.status || "").indexOf("installed") === 0;
+          return el("tr", {}, [
+            el("td", { text: item.label || item.target }),
+            el("td", {}, [el("span", {
+              class: "pill " + (installed ? "ok" : ""), text: installed ? t("skills") : t("skillsNot")
+            })]),
+            el("td", { class: "mono", text: item.status || "" })
+          ]);
+        }))
+      ]));
+    });
+  }
+
+  function sectionById(id) {
+    var found = state.metadata.sections.filter(function (item) { return item.id === id; })[0];
+    return found || { label_zh: id, label_en: id, blurb_zh: "", blurb_en: "" };
+  }
+
+  // ---- shell ------------------------------------------------------------
+  function renderNav() {
+    var nav = document.getElementById("nav");
+    nav.textContent = "";
+    document.getElementById("subtitle").textContent = t("sub");
+    state.metadata.sections.forEach(function (section) {
+      nav.appendChild(el("button", {
+        type: "button", text: L(section, "label"),
+        "aria-current": section.id === current ? "true" : "false",
+        onclick: function () { current = section.id; render(); }
+      }));
+    });
+  }
+
+  function render() {
+    renderNav();
+    var main = document.getElementById("main");
+    main.textContent = "";
+    if (current === "status") viewStatus();
+    else if (current === "providers") viewProviders();
+    else if (current === "skills") viewSkills();
+    else viewSection(current);
+    window.scrollTo(0, 0);
+  }
+
+  function refresh() {
+    return api("GET", "/api/status").then(function (data) {
+      if (data && data.ok) {
+        Object.keys(data).forEach(function (key) { state[key] = data[key]; });
+        render();
+      }
+    });
+  }
+
+  document.getElementById("langToggle").addEventListener("click", function () {
+    lang = lang === "zh" ? "en" : "zh";
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+    render();
+  });
+
+  window.setInterval(function () { api("POST", "/api/heartbeat", {}); }, 30000);
+
+  api("GET", "/api/state").then(function (data) {
+    if (!data || !data.ok) {
+      document.getElementById("main").textContent = (data && data.error) || "failed to load";
+      return;
+    }
+    state = data;
+    current = "status";
+    render();
+  });
+})();
+</script>
+</body>
+</html>

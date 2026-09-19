@@ -4,6 +4,7 @@ import contextlib
 import getpass
 import inspect
 import json
+import os
 from importlib import metadata
 import subprocess
 import sys
@@ -77,6 +78,7 @@ COMMAND_ALIASES = {
     "regression": ["reg"],
 }
 
+UI_COMMAND_ALIASES = ["web"]
 PROVIDERS_COMMAND_ALIASES = {
     "status": ["st", "ls"],
     "reset": ["clear"],
@@ -2834,6 +2836,46 @@ def _run_providers(args: argparse.Namespace) -> int:
     return _print_result("providers", data, args.format, args.output)
 
 
+def _default_ui_lang() -> str:
+    """Guess from the locale; the page has a toggle either way, so never prompt."""
+    locale_text = (os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or "").lower()
+    if locale_text and not locale_text.startswith("zh"):
+        return "en"
+    return "zh"
+
+
+def _run_ui(args: argparse.Namespace) -> int:
+    from . import ui_server
+
+    lang = getattr(args, "lang", "") or _default_ui_lang()
+    if getattr(args, "check", False):
+        # Resolves and reads the bundled page without binding a port, so a packaging
+        # mistake shows up in CI instead of as a 500 for a user.
+        try:
+            page = ui_server.load_page_source()
+        except (OSError, FileNotFoundError, ModuleNotFoundError) as e:
+            data = {"ok": False, "error_type": "runtime_error", "error": f"UI asset missing: {e}"}
+            return _print_result("ui", data, args.format, args.output)
+        data = {"ok": True, "error_type": "", "error": "", "asset_bytes": len(page.encode("utf-8"))}
+        return _print_result("ui", data, args.format, args.output)
+
+    options = ui_server.UIServerConfig(
+        port=getattr(args, "port", 0) or 0,
+        idle_timeout=getattr(args, "idle_timeout", ui_server.DEFAULT_IDLE_TIMEOUT),
+        lang=lang,
+        open_browser=not getattr(args, "no_browser", False),
+    )
+    try:
+        data = ui_server.serve(options, announce=_write_stderr_line)
+    except OSError as e:
+        data = {"ok": False, "error_type": "runtime_error", "error": f"无法启动本地服务: {e}"}
+    return _print_result("ui", data, args.format, args.output)
+
+
+def _write_stderr_line(line: str) -> None:
+    _write_stderr(line + "\n")
+
+
 def _skill_targets_from_args(args: argparse.Namespace) -> list[str]:
     if getattr(args, "all", False):
         return [target.target_id for target in SKILL_TARGETS]
@@ -3510,6 +3552,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_format_args(providers_test)
 
+    ui_parser = sub.add_parser(
+        "ui",
+        aliases=UI_COMMAND_ALIASES,
+        help="Open a temporary local page to review configuration and test provider keys.",
+    )
+    ui_parser.set_defaults(command="ui")
+    ui_parser.add_argument("--port", type=int, default=0, help="Port to bind on 127.0.0.1 (default: a free one).")
+    ui_parser.add_argument("--no-browser", action="store_true", help="Print the URL without opening a browser.")
+    ui_parser.add_argument(
+        "--idle-timeout",
+        type=float,
+        default=900.0,
+        help="Exit after this many idle seconds; 0 keeps it running (default: %(default)s).",
+    )
+    ui_parser.add_argument("--lang", choices=["zh", "en"], default="", help="Interface language.")
+    ui_parser.add_argument("--check", action="store_true", help="Verify the bundled page is installed, then exit.")
+    _add_format_args(ui_parser)
+
     setup_parser = sub.add_parser(
         "setup", aliases=COMMAND_ALIASES["setup"], help="Interactively save local provider configuration."
     )
@@ -3639,6 +3699,8 @@ def main(argv: list[str] | None = None) -> int:
             return _run_config(args)
         if args.command == "providers":
             return _run_providers(args)
+        if args.command == "ui":
+            return _run_ui(args)
         if args.command == "model":
             return _run_model(args)
         return asyncio.run(_run_async(args))
