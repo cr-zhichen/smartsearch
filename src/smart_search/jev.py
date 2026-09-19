@@ -229,6 +229,10 @@ GAP_CRITERIA = {
 }
 
 
+def has_source_evidence(evidence: list[dict]) -> bool:
+    return any(item.get("url") and item.get("kind", "source") == "source" for item in evidence)
+
+
 async def assess_evidence(client: JevClient, query: str, evidence: list[dict], validation: str) -> dict:
     if not evidence:
         return {"status": "empty", "useful": False, "sufficient": False, "gaps": ["direct_answer"]}
@@ -257,7 +261,7 @@ async def assess_evidence(client: JevClient, query: str, evidence: list[dict], v
     scores = await client.evaluate({"question": query, "validation": validation, "evidence": preview}, questions, "assessment")
     useful = scores["useful"] >= 0.5
     sufficient = useful and scores["sufficient"] >= client.settings.sufficiency_threshold
-    if validation == "strict" and not any(item.get("url") and item.get("kind", "source") == "source" for item in evidence):
+    if validation == "strict" and not has_source_evidence(evidence):
         sufficient = False
     return {
         "status": "sufficient" if sufficient else ("partial" if useful else "irrelevant"),

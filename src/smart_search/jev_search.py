@@ -8,7 +8,7 @@ import json
 import time
 from typing import Any
 
-from .jev import JevClient, assess_evidence, decide_synthesis, filter_evidence, noul, select_channels
+from .jev import JevClient, assess_evidence, decide_synthesis, filter_evidence, has_source_evidence, noul, select_channels
 from .provider_errors import ProviderCallError, classify_provider_exception
 
 
@@ -332,6 +332,11 @@ async def search(
     elif settings.filter_results:
         filter_info["reason"] = "no_confirmed_useful_evidence"
 
+    if validation == "strict" and assessment["sufficient"] and not has_source_evidence(evidence):
+        assessment = {**assessment, "status": "partial", "sufficient": False, "gaps": ["authority"]}
+        stopped = "filtered_sources_insufficient"
+        warnings.append("Filtering retained useful material but no source evidence for strict validation.")
+
     content = _evidence_content(evidence)
     synthesis = {
         "mode": settings.synthesis_mode, "enabled": settings.synthesis_mode == "true",
@@ -370,7 +375,7 @@ async def search(
     sources = [{key: value for key, value in item.items() if key != "content"} for item in evidence if item.get("url")]
     ok = bool(evidence and assessment["useful"])
     if validation == "strict":
-        ok = ok and assessment["sufficient"] and bool(sources)
+        ok = ok and assessment["sufficient"] and has_source_evidence(evidence)
     error_type = "" if ok else (failure.error_type if failure else "evidence_error")
     error = "" if ok else (failure.error if failure else "Search did not obtain enough verified useful evidence")
     return {

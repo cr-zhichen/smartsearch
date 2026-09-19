@@ -622,6 +622,8 @@ def _tavily_disabled_message() -> str:
 
 
 PROVIDER_CREDENTIAL_SOURCES: dict[str, Any] = {
+    "xai-responses": lambda: (config.xai_api_key, config.xai_api_url),
+    "openai-compatible": lambda: (config.openai_compatible_api_key, config.openai_compatible_api_url),
     "zhipu": lambda: (config.zhipu_api_key, config.zhipu_api_url),
     "zhipu-mcp": lambda: (config.zhipu_mcp_api_key, config.zhipu_mcp_search_api_url),
     "zhipu-mcp-reader": lambda: (config.zhipu_mcp_api_key, config.zhipu_mcp_reader_api_url),

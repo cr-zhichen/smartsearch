@@ -610,6 +610,63 @@ async def test_strict_mode_does_not_treat_model_answer_and_bare_citation_as_proo
 
 
 @pytest.mark.asyncio
+async def test_strict_filtering_cannot_replace_source_evidence_with_citations(monkeypatch, configured):
+    monkeypatch.setenv("SMART_SEARCH_JEV_FILTER_RESULTS", "true")
+    scripted_jev(
+        monkeypatch, [{"exa:search"}], [{"useful": 0.99, "sufficient": 0.99}],
+        filter_score=lambda group: 0.95 if any("Useful" in item["content"] for item in group) else 0.0,
+    )
+
+    async def exa(*args, **kwargs):
+        return {"ok": True, "results": [
+            {**hit("Unrelated source passage"), "kind": "source"},
+            {**hit("Useful generated summary", ""), "kind": "model_answer"},
+            {**hit("Useful page title", "https://example.org/citation"), "kind": "citation"},
+        ]}
+
+    monkeypatch.setattr(service, "exa_search", exa)
+    result = await service.search("verify this claim", validation="strict")
+
+    assert result["ok"] is False
+    assert result["error_type"] == "evidence_error"
+    assert result["partial_success"] is True
+    assert result["evidence_assessment"]["sufficient"] is False
+    assert result["routing_decision"]["stop_reason"] == "filtered_sources_insufficient"
+    assert "Useful generated summary" in result["content"]
+    assert [item["kind"] for item in result["sources"]] == ["citation"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider,key_name,url_name", [
+    ("openai-compatible", "OPENAI_COMPATIBLE_API_KEY", "OPENAI_COMPATIBLE_API_URL"),
+    ("xai-responses", "XAI_API_KEY", "XAI_API_URL"),
+])
+async def test_main_search_credential_change_and_reset_clear_jev_cooldown(monkeypatch, configured, provider, key_name, url_name):
+    monkeypatch.setenv("SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS", "300")
+    monkeypatch.setenv(key_name, "wrong-key")
+    monkeypatch.setenv(url_name, "https://api.example.org/v1")
+    monkeypatch.delenv("EXA_API_KEY")
+    scripted_jev(monkeypatch, [{f"{provider}:search"}], [])
+
+    async def rejected(self, query, platform="", ctx=None):
+        raise ProviderCallError("auth_error", "Rejected credential")
+
+    provider_type = service.OpenAICompatibleSearchProvider if provider == "openai-compatible" else service.XAIResponsesSearchProvider
+    monkeypatch.setattr(provider_type, "search", rejected)
+    failed = await service.search("question", providers=provider)
+
+    assert failed["ok"] is False
+    assert not available_channels(service, "question", [])
+    monkeypatch.setenv(key_name, "corrected-key")
+    assert [item["provider"] for item in available_channels(service, "question", [])] == [provider]
+
+    service._record_provider_result(provider, "error", "auth_error", "Rejected credential")
+    assert not available_channels(service, "question", [])
+    assert service.reset_provider_health([provider])["ok"] is True
+    assert [item["provider"] for item in available_channels(service, "question", [])] == [provider]
+
+
+@pytest.mark.asyncio
 async def test_research_uses_jev_and_exports_without_duplicate_body(monkeypatch, configured, tmp_path):
     scripted_jev(monkeypatch, [{"exa:search"}], [{"useful": 0.95, "sufficient": 0.95}])
 
