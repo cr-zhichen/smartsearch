@@ -792,13 +792,20 @@ details.more[open] > summary::before { content: "▾ "; }
   function chainCard() {
     var chains = state.capability_chains || {};
     var caps = state.capability_status || {};
+    var cooling = {};
+    ((state.provider_health || {}).providers || []).forEach(function (item) {
+      if (item.state === "cooldown") cooling[item.provider] = true;
+    });
     var rows = Object.keys(chains).filter(function (name) { return caps[name]; }).map(function (name) {
       var configured = (caps[name] || {}).configured || [];
       var steps = [];
       chains[name].forEach(function (provider, index) {
         if (index) steps.push(el("span", { class: "arrow", text: "→" }));
+        var cls = cooling[provider] ? "bad" : (configured.indexOf(provider) >= 0 ? "ok" : "");
         steps.push(el("span", {
-          class: "pill " + (configured.indexOf(provider) >= 0 ? "ok" : ""), text: provider
+          class: "pill " + cls,
+          title: cooling[provider] ? t("cooldown") : "",
+          text: provider + (cooling[provider] ? " ✕" : "")
         }));
       });
       return el("tr", {}, [
