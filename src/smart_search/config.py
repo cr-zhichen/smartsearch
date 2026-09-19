@@ -101,6 +101,45 @@ class Config:
         "SSL_VERIFY",
     }
     _LEGACY_CONFIG_KEYS: dict[str, str] = {}
+    # Writing any of these invalidates the resolved-model cache.
+    _MODEL_CACHE_KEYS = frozenset({
+        "XAI_API_URL",
+        "XAI_API_KEY",
+        "XAI_MODEL",
+        "XAI_TOOLS",
+        "OPENAI_COMPATIBLE_API_URL",
+        "OPENAI_COMPATIBLE_API_KEY",
+        "OPENAI_COMPATIBLE_MODEL",
+        "OPENAI_COMPATIBLE_FALLBACK_MODELS",
+        "OPENAI_COMPATIBLE_API_MODE",
+        "OPENAI_COMPATIBLE_STREAM",
+        "SMART_SEARCH_VALIDATION_LEVEL",
+        "SMART_SEARCH_FALLBACK_MODE",
+        "SMART_SEARCH_MINIMUM_PROFILE",
+        "SMART_SEARCH_INTENT_ROUTER",
+    })
+    # Keys validated on write. The four original entries validate unconditionally;
+    # the rest skip an empty value, which every getter already reads as "unset".
+    _PLAIN_FLOAT_KEYS = frozenset({
+        "INTENT_ROUTER_TIMEOUT_SECONDS",
+        "SMART_SEARCH_RETRY_MULTIPLIER",
+        "EXA_TIMEOUT_SECONDS",
+        "CONTEXT7_TIMEOUT_SECONDS",
+        "ZHIPU_TIMEOUT_SECONDS",
+        "ZHIPU_MCP_TIMEOUT_SECONDS",
+        "JINA_TIMEOUT_SECONDS",
+        "TAVILY_TIMEOUT_SECONDS",
+        "ANYSEARCH_TIMEOUT_SECONDS",
+        "SCIVERSE_TIMEOUT_SECONDS",
+    })
+    _PLAIN_INT_KEYS = frozenset({
+        "SMART_SEARCH_RETRY_MAX_ATTEMPTS",
+        "SMART_SEARCH_RETRY_MAX_WAIT",
+    })
+    _UNIT_INTERVAL_KEYS = frozenset({
+        "INTENT_EMBEDDING_THRESHOLD",
+        "INTENT_EMBEDDING_MARGIN",
+    })
 
     def __new__(cls):
         if cls._instance is None:
@@ -194,10 +233,37 @@ class Config:
             return {}
 
     def _save_config_file(self, config_data: dict) -> None:
+        """Write config.json atomically.
+
+        A truncating in-place write can leave an empty or half-written file if the
+        process dies mid-save, and an empty config.json silently means "no API keys
+        configured". Write a private temp file and rename it over the target instead,
+        the same way ``provider_health._save`` already does.
+        """
+        path = self.config_file
+        temp_path = path.with_name(f"{path.name}.{os.getpid()}.tmp")
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            # A temp file left behind by a crash would make O_EXCL fail forever.
+            try:
+                os.unlink(temp_path)
+            except FileNotFoundError:
+                pass
+            # O_EXCL refuses to follow a planted symlink; 0o600 means the file
+            # holding API keys is never world-readable, not even momentarily.
+            fd = os.open(temp_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            try:
+                handle = os.fdopen(fd, "w", encoding="utf-8")
+            except BaseException:
+                os.close(fd)
+                raise
+            with handle as f:
                 json.dump(config_data, f, ensure_ascii=False, indent=2)
-        except (IOError, PermissionError, OSError) as e:
+            os.replace(temp_path, path)
+        except (IOError, PermissionError, OSError, TypeError, ValueError) as e:
+            try:
+                os.unlink(temp_path)
+            except OSError:
+                pass
             hint = " (sandbox/CI 下可设 SMART_SEARCH_CONFIG_DIR 指向可写目录)" if isinstance(e, PermissionError) else ""
             raise ValueError(f"无法保存配置文件: {str(e)}{hint}")
 
@@ -243,59 +309,73 @@ class Config:
     def get_config_sources(self) -> dict[str, str]:
         return {key: self.get_config_source(key) for key in sorted(self._CONFIG_KEYS)}
 
-    def set_config_value(self, key: str, value: str) -> None:
-        key = key.strip().upper()
-        if key not in self._CONFIG_KEYS:
-            raise ValueError(f"Unsupported config key: {key}")
-        self._validate_config_value(key, value)
+    def update_config_values(
+        self,
+        set_values: dict[str, str] | None = None,
+        unset_keys: list[str] | None = None,
+    ) -> dict:
+        """Apply many config changes in one validated, atomic write.
+
+        All-or-nothing: a single rejected key or value leaves the file untouched, so
+        a typo in one field cannot strand half a provider profile on disk. One read
+        and one atomic rename replace the per-key read-modify-write cycle, which the
+        setup wizard used to repeat once for every value it saved.
+        """
+        normalized_set: dict[str, str] = {}
+        normalized_unset: list[str] = []
+        errors: list[dict] = []
+
+        for raw_key, raw_value in (set_values or {}).items():
+            key = str(raw_key).strip().upper()
+            if key not in self._CONFIG_KEYS:
+                errors.append({"key": key, "error": f"Unsupported config key: {key}"})
+                continue
+            value = "" if raw_value is None else str(raw_value)
+            try:
+                self._validate_config_value(key, value)
+            except ValueError as e:
+                errors.append({"key": key, "error": str(e)})
+                continue
+            normalized_set[key] = value
+
+        for raw_key in (unset_keys or []):
+            key = str(raw_key).strip().upper()
+            if key not in self._CONFIG_KEYS:
+                errors.append({"key": key, "error": f"Unsupported config key: {key}"})
+                continue
+            normalized_unset.append(key)
+
+        if errors:
+            return {"ok": False, "errors": errors, "saved": [], "unset": []}
+
         config_data = self._load_config_file()
-        config_data[key] = value
+        for key, value in normalized_set.items():
+            config_data[key] = value
+        for key in normalized_unset:
+            config_data.pop(key, None)
+            for old_key, new_key in self._LEGACY_CONFIG_KEYS.items():
+                if new_key == key:
+                    config_data.pop(old_key, None)
         self._save_config_file(config_data)
-        if key in {
-            "XAI_API_URL",
-            "XAI_API_KEY",
-            "XAI_MODEL",
-            "XAI_TOOLS",
-            "OPENAI_COMPATIBLE_API_URL",
-            "OPENAI_COMPATIBLE_API_KEY",
-            "OPENAI_COMPATIBLE_MODEL",
-            "OPENAI_COMPATIBLE_FALLBACK_MODELS",
-            "OPENAI_COMPATIBLE_API_MODE",
-            "OPENAI_COMPATIBLE_STREAM",
-            "SMART_SEARCH_VALIDATION_LEVEL",
-            "SMART_SEARCH_FALLBACK_MODE",
-            "SMART_SEARCH_MINIMUM_PROFILE",
-            "SMART_SEARCH_INTENT_ROUTER",
-        }:
+
+        if (set(normalized_set) | set(normalized_unset)) & self._MODEL_CACHE_KEYS:
             self._cached_model = None
+        return {
+            "ok": True,
+            "errors": [],
+            "saved": sorted(normalized_set),
+            "unset": sorted(normalized_unset),
+        }
+
+    def set_config_value(self, key: str, value: str) -> None:
+        result = self.update_config_values({key: value})
+        if not result["ok"]:
+            raise ValueError(result["errors"][0]["error"])
 
     def unset_config_value(self, key: str) -> None:
-        key = key.strip().upper()
-        if key not in self._CONFIG_KEYS:
-            raise ValueError(f"Unsupported config key: {key}")
-        config_data = self._load_config_file()
-        config_data.pop(key, None)
-        for old_key, new_key in self._LEGACY_CONFIG_KEYS.items():
-            if new_key == key:
-                config_data.pop(old_key, None)
-        self._save_config_file(config_data)
-        if key in {
-            "XAI_API_URL",
-            "XAI_API_KEY",
-            "XAI_MODEL",
-            "XAI_TOOLS",
-            "OPENAI_COMPATIBLE_API_URL",
-            "OPENAI_COMPATIBLE_API_KEY",
-            "OPENAI_COMPATIBLE_MODEL",
-            "OPENAI_COMPATIBLE_FALLBACK_MODELS",
-            "OPENAI_COMPATIBLE_API_MODE",
-            "OPENAI_COMPATIBLE_STREAM",
-            "SMART_SEARCH_VALIDATION_LEVEL",
-            "SMART_SEARCH_FALLBACK_MODE",
-            "SMART_SEARCH_MINIMUM_PROFILE",
-            "SMART_SEARCH_INTENT_ROUTER",
-        }:
-            self._cached_model = None
+        result = self.update_config_values(unset_keys=[key])
+        if not result["ok"]:
+            raise ValueError(result["errors"][0]["error"])
 
     def config_path_info(self) -> dict:
         return {
@@ -459,14 +539,60 @@ class Config:
         return value
 
     def _validate_config_value(self, key: str, value: str) -> None:
+        """Reject a bad value at write time instead of at the next read.
+
+        Without this, ``config set SMART_SEARCH_VALIDATION_LEVEL bogus`` succeeds and
+        only blows up on the next search, far from the mistake.
+        """
         if key == "SMART_SEARCH_TIMEOUT_SECONDS":
             self._parse_positive_float_value(key, value)
-        elif key == "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS":
+            return
+        if key == "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS":
             self._parse_non_negative_float_value(key, value)
-        elif key == "SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD":
+            return
+        if key == "SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD":
             self._parse_positive_int_value(key, value)
-        elif key == "OPENAI_COMPATIBLE_API_MODE":
+            return
+        if key == "OPENAI_COMPATIBLE_API_MODE":
             self._validate_enum_value(key, value, self._ALLOWED_OPENAI_COMPATIBLE_API_MODES)
+            return
+        # Every getter below falls back to its default on an empty value, so an
+        # empty string is how a key is cleared rather than a value to check.
+        if not str(value).strip():
+            return
+        enum_allowed = {
+            "SMART_SEARCH_VALIDATION_LEVEL": self._ALLOWED_VALIDATION_LEVELS,
+            "SMART_SEARCH_FALLBACK_MODE": self._ALLOWED_FALLBACK_MODES,
+            "SMART_SEARCH_MINIMUM_PROFILE": self._ALLOWED_MINIMUM_PROFILES,
+            "SMART_SEARCH_INTENT_ROUTER": self._ALLOWED_INTENT_ROUTER_MODES,
+        }.get(key)
+        if enum_allowed is not None:
+            self._validate_enum_value(key, value, enum_allowed)
+        elif key in self._UNIT_INTERVAL_KEYS:
+            parsed = self._parse_plain_float_value(key, value)
+            if parsed < 0.0 or parsed > 1.0:
+                raise ValueError(f"Invalid {key}: {value}. Expected a number between 0 and 1.")
+        elif key in self._PLAIN_FLOAT_KEYS:
+            self._parse_plain_float_value(key, value)
+        elif key in self._PLAIN_INT_KEYS:
+            self._parse_plain_int_value(key, value)
+
+    @staticmethod
+    def _parse_plain_float_value(key: str, raw_value: object) -> float:
+        try:
+            value = float(str(raw_value).strip())
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid {key}: {raw_value}. Expected a number.")
+        if not math.isfinite(value):
+            raise ValueError(f"Invalid {key}: {raw_value}. Expected a number.")
+        return value
+
+    @staticmethod
+    def _parse_plain_int_value(key: str, raw_value: object) -> int:
+        try:
+            return int(str(raw_value).strip())
+        except (TypeError, ValueError):
+            raise ValueError(f"Invalid {key}: {raw_value}. Expected an integer.")
 
     def _non_negative_float_value(self, key: str, default: str) -> float:
         value = self._get_config_value(key, default) or default

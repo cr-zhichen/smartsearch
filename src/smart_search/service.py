@@ -4823,6 +4823,45 @@ async def _test_context7_connection() -> dict[str, Any]:
     return {"status": "warning", "message": result.get("error", "Context7 API 不可用"), "response_time_ms": result.get("elapsed_ms", 0)}
 
 
+async def _test_anysearch_connection() -> dict[str, Any]:
+    """Probe AnySearch with a domain listing, which costs no search quota."""
+    if not config.anysearch_api_key:
+        return {"status": "not_configured", "message": "ANYSEARCH_API_KEY 未设置，AnySearch 垂直搜索不可用"}
+    start = time.time()
+    result = await anysearch_domains()
+    response_time = result.get("elapsed_ms") or _elapsed_ms(start)
+    if result.get("ok"):
+        return {"status": "ok", "message": "AnySearch API 可用", "response_time_ms": response_time}
+    error_type = str(result.get("error_type") or "")
+    status = error_type if error_type in APPROVED_PROVIDER_ERROR_TYPES else "warning"
+    return {"status": status, "message": result.get("error", "AnySearch API 不可用"), "response_time_ms": response_time}
+
+
+async def _test_sciverse_connection() -> dict[str, Any]:
+    """Probe Sciverse with a catalog listing, which costs no search quota."""
+    if not config.sciverse_api_token:
+        return {"status": "not_configured", "message": "SCIVERSE_API_TOKEN 未设置，Sciverse 学术检索不可用"}
+    start = time.time()
+    result = await sciverse_catalog()
+    response_time = result.get("elapsed_ms") or _elapsed_ms(start)
+    if result.get("ok"):
+        return {"status": "ok", "message": "Sciverse API 可用", "response_time_ms": response_time}
+    error_type = str(result.get("error_type") or "")
+    status = error_type if error_type in APPROVED_PROVIDER_ERROR_TYPES else "warning"
+    return {"status": status, "message": result.get("error", "Sciverse API 不可用"), "response_time_ms": response_time}
+
+
+async def _test_firecrawl_presence() -> dict[str, Any]:
+    """Firecrawl has no cheap authenticated endpoint confirmed, so report presence only.
+
+    Reported as `probe: presence` so callers can render "key present, unverified"
+    instead of a green tick they have not earned.
+    """
+    if not config.firecrawl_api_key:
+        return {"status": "not_configured", "message": "FIRECRAWL_API_KEY 未设置，Firecrawl 功能不可用"}
+    return {"status": "configured", "message": "FIRECRAWL_API_KEY 已配置（未发起真实请求验证）"}
+
+
 DOCTOR_PROBE_PROVIDERS = {
     "exa_connection_test": "exa",
     "tavily_connection_test": "tavily",
@@ -4834,20 +4873,186 @@ DOCTOR_PROBE_PROVIDERS = {
 DOCTOR_PROBE_NEUTRAL_STATUSES = {"not_configured", "configured", "skipped", "disabled"}
 
 
+def _record_probe_result(provider: str, test: dict[str, Any]) -> None:
+    """Fold one connection-test result into the persistent cooldown store.
+
+    Shared by `doctor` and by the single-provider dispatcher, so testing a key
+    anywhere is a first-class recovery path for a cooled-down provider.
+    """
+    if not isinstance(test, dict):
+        return
+    status = str(test.get("status") or "")
+    if status in DOCTOR_PROBE_NEUTRAL_STATUSES:
+        return
+    if status == "ok":
+        _record_provider_result(provider, "ok")
+        return
+    error_type = status if status in APPROVED_PROVIDER_ERROR_TYPES or status == "config_error" else "provider_error"
+    _record_provider_result(provider, "error", error_type, str(test.get("message") or ""))
+
+
 def _record_doctor_probes(info: dict[str, Any]) -> None:
     """Let `doctor` double as the recovery path for a cooled-down provider."""
     for key, provider in DOCTOR_PROBE_PROVIDERS.items():
-        test = info.get(key)
-        if not isinstance(test, dict):
-            continue
-        status = str(test.get("status") or "")
-        if status in DOCTOR_PROBE_NEUTRAL_STATUSES:
-            continue
-        if status == "ok":
-            _record_provider_result(provider, "ok")
-            continue
-        error_type = status if status in APPROVED_PROVIDER_ERROR_TYPES or status == "config_error" else "provider_error"
-        _record_provider_result(provider, "error", error_type, str(test.get("message") or ""))
+        _record_probe_result(provider, info.get(key))
+
+
+PROBE_TIMEOUT_CEILING = 20.0
+# How each provider id can be checked. "main" goes through the main-search provider
+# configs (which accept a dict, so unsaved candidate credentials work); "live" is a
+# real request; "shared:<id>" reuses another provider's probe because they share a
+# credential; "presence" only reports that a key is set.
+PROBE_KIND: dict[str, str] = {
+    "xai-responses": "main",
+    "openai-compatible": "main",
+    "exa": "live",
+    "tavily": "live",
+    "jina": "live",
+    "zhipu": "live",
+    "zhipu-mcp": "live",
+    "context7": "live",
+    "anysearch": "live",
+    "sciverse": "live",
+    "zhipu-mcp-reader": "shared:zhipu-mcp",
+    "firecrawl": "presence",
+}
+_LIVE_PROBES: dict[str, Any] = {
+    "exa": _test_exa_connection,
+    "tavily": _test_tavily_connection,
+    "jina": _test_jina_connection,
+    "zhipu": _test_zhipu_connection,
+    "zhipu-mcp": _test_zhipu_mcp_connection,
+    "context7": _test_context7_connection,
+    "anysearch": _test_anysearch_connection,
+    "sciverse": _test_sciverse_connection,
+    "firecrawl": _test_firecrawl_presence,
+}
+
+
+async def test_provider_connection(
+    provider: str,
+    *,
+    overrides: dict[str, str] | None = None,
+    record_health: bool | None = None,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Check one provider's credentials without firing every probe `doctor` runs.
+
+    `overrides` tests candidate credentials that are not saved yet; it is only
+    honoured for main_search, whose probes already take a config dict. Health is
+    not recorded for an override run: a success would clear a real cooldown under a
+    fingerprint that does not match what is stored, and a failure would cool down a
+    key that is actually fine.
+    """
+    provider = (provider or "").strip().lower()
+    kind = PROBE_KIND.get(provider)
+    if kind is None:
+        known = ", ".join(sorted(PROBE_KIND))
+        message = f"Unknown provider: {provider}. Known providers: {known}"
+        return {
+            "ok": False,
+            "provider": provider,
+            "status": "parameter_error",
+            "message": message,
+            "response_time_ms": 0,
+            "probe": "none",
+            "recorded_as": "",
+            "error_type": "parameter_error",
+            "error": message,
+            "known_providers": sorted(PROBE_KIND),
+        }
+    if record_health is None:
+        record_health = not overrides
+    ceiling = timeout_seconds if timeout_seconds and timeout_seconds > 0 else PROBE_TIMEOUT_CEILING
+
+    recorded_as = provider
+    probe_label = kind
+    if kind.startswith("shared:"):
+        recorded_as = kind.split(":", 1)[1]
+        probe_label = "shared"
+
+    async def _run() -> dict[str, Any]:
+        if kind == "main":
+            if overrides:
+                provider_config = _main_search_override_config(provider, overrides)
+                if provider_config is None:
+                    return {"status": "config_error", "message": f"{provider} 覆盖参数不完整"}
+            else:
+                configs = _main_search_provider_configs(providers=provider)
+                if not configs:
+                    return {"status": "not_configured", "message": f"{provider} 未配置"}
+                provider_config = configs[0]
+            return await _safe_test_main_provider_connection(provider_config)
+        probe = _LIVE_PROBES.get(recorded_as)
+        if probe is None:
+            return {"status": "not_configured", "message": f"{provider} 无可用探针"}
+        return await probe()
+
+    start = time.time()
+    try:
+        test = await asyncio.wait_for(_run(), timeout=ceiling)
+    except asyncio.TimeoutError:
+        test = {
+            "status": "timeout",
+            "message": f"{provider} 探测超过 {ceiling:g}s 上限",
+            "response_time_ms": _elapsed_ms(start),
+        }
+    except Exception as e:
+        test = {
+            "status": "error",
+            "message": f"{provider} 探测失败: {sanitize_provider_error_message(e)}",
+            "response_time_ms": _elapsed_ms(start),
+        }
+
+    if record_health and recorded_as in PROVIDER_CREDENTIAL_SOURCES:
+        _record_probe_result(recorded_as, test)
+
+    status = str(test.get("status") or "")
+    result = {
+        "ok": status == "ok",
+        "provider": provider,
+        "status": status,
+        "message": str(test.get("message") or ""),
+        "response_time_ms": test.get("response_time_ms", _elapsed_ms(start)),
+        "probe": probe_label,
+        "recorded_as": recorded_as if record_health else "",
+        "error_type": "" if status == "ok" else (status if status in APPROVED_PROVIDER_ERROR_TYPES else ""),
+        "error": "" if status == "ok" else str(test.get("message") or ""),
+        "health": _provider_health_status(recorded_as),
+    }
+    if probe_label == "shared":
+        result["message"] = (
+            f"{result['message']} (与 {recorded_as} 共用同一组凭据)" if result["message"] else f"与 {recorded_as} 共用同一组凭据"
+        )
+    return result
+
+
+def _main_search_override_config(provider: str, overrides: dict[str, str]) -> dict[str, Any] | None:
+    """Build a main-search provider config from unsaved form values."""
+    get = lambda key, fallback="": str(overrides.get(key) or fallback).strip()  # noqa: E731
+    if provider == "xai-responses":
+        api_key = get("XAI_API_KEY", config.xai_api_key)
+        if not api_key:
+            return None
+        return {
+            "provider": "xai-responses",
+            "mode": "xai-responses",
+            "api_url": get("XAI_API_URL", config.xai_api_url),
+            "api_key": api_key,
+            "model": get("XAI_MODEL", config.xai_model),
+        }
+    api_url = get("OPENAI_COMPATIBLE_API_URL", config.openai_compatible_api_url)
+    api_key = get("OPENAI_COMPATIBLE_API_KEY", config.openai_compatible_api_key)
+    if not api_url or not api_key:
+        return None
+    return {
+        "provider": "openai-compatible",
+        "mode": "openai-compatible",
+        "api_url": api_url,
+        "api_key": api_key,
+        "model": get("OPENAI_COMPATIBLE_MODEL", config.openai_compatible_model),
+        "api_mode": get("OPENAI_COMPATIBLE_API_MODE", config.openai_compatible_api_mode),
+    }
 
 
 async def doctor() -> dict[str, Any]:
@@ -5027,6 +5232,122 @@ def config_set(key: str, value: str) -> dict[str, Any]:
         "key": key.strip().upper(),
         "value": saved.get(key.strip().upper(), ""),
     }
+
+
+def config_update(
+    set_values: dict[str, str] | None = None,
+    unset_keys: list[str] | None = None,
+) -> dict[str, Any]:
+    """Apply a batch of config changes in one validated, atomic write."""
+    try:
+        result = config.update_config_values(set_values, unset_keys)
+    except ValueError as e:
+        return {
+            "ok": False,
+            "error_type": "parameter_error",
+            "error": str(e),
+            "config_file": str(config.config_file),
+            "errors": [],
+            "saved": {},
+            "unset": [],
+        }
+    if not result["ok"]:
+        return {
+            "ok": False,
+            "error_type": "parameter_error",
+            "error": "; ".join(f"{item['key']}: {item['error']}" for item in result["errors"]),
+            "config_file": str(config.config_file),
+            "errors": result["errors"],
+            "saved": {},
+            "unset": [],
+        }
+    saved = config.get_saved_config(masked=True)
+    return {
+        "ok": True,
+        "error_type": "",
+        "error": "",
+        "config_file": str(config.config_file),
+        "errors": [],
+        "saved": {key: saved.get(key, "") for key in result["saved"]},
+        "unset": result["unset"],
+    }
+
+
+def capability_status_from_values(values: dict[str, str]) -> dict[str, Any]:
+    """Capability status computed from a plain values dict, with no network calls.
+
+    Lets a form answer "would this configuration pass the minimum profile?" while
+    the user is still typing, before anything is saved.
+    """
+    def has(key: str) -> bool:
+        return bool(values.get(key))
+
+    main_configured: set[str] = set()
+    if has("XAI_API_KEY"):
+        main_configured.add("xai-responses")
+    if has("OPENAI_COMPATIBLE_API_URL") and has("OPENAI_COMPATIBLE_API_KEY"):
+        main_configured.add("openai-compatible")
+
+    status: dict[str, Any] = {
+        "main_search": {
+            "configured": [provider for provider in ("xai-responses", "openai-compatible") if provider in main_configured],
+            "fallback_chain": ["xai-responses", "openai-compatible"],
+        },
+        "web_search": {
+            "configured": [
+                provider
+                for provider, configured in [
+                    ("zhipu", has("ZHIPU_API_KEY")),
+                    ("zhipu-mcp", has("ZHIPU_MCP_API_KEY")),
+                    ("tavily", has("TAVILY_API_KEY")),
+                    ("firecrawl", has("FIRECRAWL_API_KEY")),
+                ]
+                if configured
+            ],
+            "fallback_chain": ["zhipu", "zhipu-mcp", "tavily", "firecrawl"],
+        },
+        "docs_search": {
+            "configured": [
+                provider
+                for provider, configured in [
+                    ("context7", has("CONTEXT7_API_KEY")),
+                    ("exa", has("EXA_API_KEY")),
+                ]
+                if configured
+            ],
+            "fallback_chain": ["context7", "exa"],
+        },
+        "web_fetch": {
+            "configured": [
+                provider
+                for provider, configured in [
+                    ("tavily", has("TAVILY_API_KEY")),
+                    ("jina", has("JINA_API_KEY")),
+                    ("zhipu-mcp-reader", has("ZHIPU_MCP_API_KEY")),
+                    ("firecrawl", has("FIRECRAWL_API_KEY")),
+                ]
+                if configured
+            ],
+            "fallback_chain": ["tavily", "jina", "zhipu-mcp-reader", "firecrawl"],
+        },
+        "vertical_search": {
+            "configured": [
+                provider
+                for provider, configured in [
+                    ("anysearch", has("ANYSEARCH_API_KEY")),
+                    ("sciverse", has("SCIVERSE_API_TOKEN")),
+                ]
+                if configured
+            ],
+            "fallback_chain": ["anysearch"],
+            "experimental": True,
+            "explicit_only": ["sciverse"],
+            "route_enabled": {"anysearch": True, "sciverse": False},
+        },
+    }
+    for item in status.values():
+        item["ok"] = bool(item["configured"])
+    return status
 
 
 def config_unset(key: str) -> dict[str, Any]:

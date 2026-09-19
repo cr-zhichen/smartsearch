@@ -80,6 +80,7 @@ COMMAND_ALIASES = {
 PROVIDERS_COMMAND_ALIASES = {
     "status": ["st", "ls"],
     "reset": ["clear"],
+    "test": ["check", "probe"],
 }
 
 CONFIG_COMMAND_ALIASES = {
@@ -405,6 +406,26 @@ def _format_result_markdown(command: str, data: dict[str, Any], title: str) -> s
 
 
 def _format_providers_markdown(data: dict[str, Any]) -> str:
+    if "results" in data:
+        rows = [
+            [
+                item.get("provider", ""),
+                item.get("status", ""),
+                item.get("probe", ""),
+                f"{item.get('response_time_ms', 0)}",
+                _one_line(item.get("message", "") or "-", 80),
+            ]
+            for item in (data.get("results") or [])
+        ]
+        return "\n".join(
+            [
+                "# Provider Connection Test",
+                "",
+                f"Status: {_status_label(data.get('ok'))}",
+                "",
+                *_markdown_table(["Provider", "Status", "Probe", "ms", "Message"], rows),
+            ]
+        ).strip() + "\n"
     if data.get("error"):
         lines = ["# Provider Health", "", f"Status: {_status_label(data.get('ok'))}"]
         lines.extend(_error_lines(data))
@@ -1227,6 +1248,12 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
         ]
         return "\n".join(lines) + "\n"
     if command == "providers":
+        if "results" in data:
+            lines = [
+                f"{item.get('provider', '')}: {item.get('status', '')} - {_one_line(item.get('message', '') or '-', 100)}"
+                for item in (data.get("results") or [])
+            ]
+            return "\n".join(lines) + "\n" if lines else "No provider tested\n"
         if data.get("error"):
             return f"Providers {_status_label(data.get('ok'))}: {_error_summary(data)}\n"
         if "cleared" in data:
@@ -1665,75 +1692,7 @@ def _is_interactive_setup_stream() -> bool:
 
 
 def _setup_status_from_values(values: dict[str, str]) -> dict[str, Any]:
-    def has(key: str) -> bool:
-        return bool(values.get(key))
-
-    main_configured: set[str] = set()
-    if has("XAI_API_KEY"):
-        main_configured.add("xai-responses")
-    if has("OPENAI_COMPATIBLE_API_URL") and has("OPENAI_COMPATIBLE_API_KEY"):
-        main_configured.add("openai-compatible")
-
-    status = {
-        "main_search": {
-            "configured": [provider for provider in ("xai-responses", "openai-compatible") if provider in main_configured],
-            "fallback_chain": ["xai-responses", "openai-compatible"],
-        },
-        "web_search": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("zhipu", has("ZHIPU_API_KEY")),
-                    ("zhipu-mcp", has("ZHIPU_MCP_API_KEY")),
-                    ("tavily", has("TAVILY_API_KEY")),
-                    ("firecrawl", has("FIRECRAWL_API_KEY")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["zhipu", "zhipu-mcp", "tavily", "firecrawl"],
-        },
-        "docs_search": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("context7", has("CONTEXT7_API_KEY")),
-                    ("exa", has("EXA_API_KEY")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["context7", "exa"],
-        },
-        "web_fetch": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("tavily", has("TAVILY_API_KEY")),
-                    ("jina", has("JINA_API_KEY")),
-                    ("zhipu-mcp-reader", has("ZHIPU_MCP_API_KEY")),
-                    ("firecrawl", has("FIRECRAWL_API_KEY")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["tavily", "jina", "zhipu-mcp-reader", "firecrawl"],
-        },
-        "vertical_search": {
-            "configured": [
-                provider
-                for provider, configured in [
-                    ("anysearch", has("ANYSEARCH_API_KEY")),
-                    ("sciverse", has("SCIVERSE_API_TOKEN")),
-                ]
-                if configured
-            ],
-            "fallback_chain": ["anysearch"],
-            "experimental": True,
-            "explicit_only": ["sciverse"],
-            "route_enabled": {"anysearch": True, "sciverse": False},
-        },
-    }
-    for item in status.values():
-        item["ok"] = bool(item["configured"])
-    return status
+    return service.capability_status_from_values(values)
 
 
 def _merge_setup_values(current: dict[str, str], values: dict[str, str]) -> dict[str, str]:
@@ -2845,11 +2804,31 @@ def _run_config(args: argparse.Namespace) -> int:
     return _print_result("config", data, args.format, args.output)
 
 
+async def _run_providers_test(providers: list[str], timeout_seconds: float) -> dict[str, Any]:
+    """Probe the named providers one at a time; each one costs a real API call."""
+    results = []
+    for provider in providers:
+        results.append(
+            await service.test_provider_connection(provider, timeout_seconds=timeout_seconds)
+        )
+    failed = [item for item in results if not item.get("ok")]
+    unknown = [item for item in failed if item.get("error_type") == "parameter_error"]
+    data: dict[str, Any] = {
+        "ok": not failed,
+        "error_type": "parameter_error" if unknown else ("provider_error" if failed else ""),
+        "error": "; ".join(str(item.get("error") or item.get("message") or "") for item in failed),
+        "results": results,
+    }
+    return data
+
+
 def _run_providers(args: argparse.Namespace) -> int:
     if args.providers_command == "status":
         data = service.provider_health_status()
     elif args.providers_command == "reset":
         data = service.reset_provider_health(list(args.providers) or None)
+    elif args.providers_command == "test":
+        data = asyncio.run(_run_providers_test(list(args.providers), args.timeout))
     else:
         data = {"ok": False, "error_type": "parameter_error", "error": "Unknown providers command"}
     return _print_result("providers", data, args.format, args.output)
@@ -3512,6 +3491,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Provider ids to clear, e.g. zhipu zhipu-mcp. Omit to clear every cooldown.",
     )
     _add_format_args(providers_reset)
+    providers_test = providers_sub.add_parser(
+        "test",
+        aliases=PROVIDERS_COMMAND_ALIASES["test"],
+        help="Check whether a provider's saved credentials still work. Makes a real API request.",
+    )
+    providers_test.set_defaults(providers_command="test")
+    providers_test.add_argument(
+        "providers",
+        nargs="+",
+        help=f"Provider ids to check, e.g. exa zhipu. Known: {', '.join(sorted(service.PROBE_KIND))}.",
+    )
+    providers_test.add_argument(
+        "--timeout",
+        type=float,
+        default=service.PROBE_TIMEOUT_CEILING,
+        help="Per-provider ceiling in seconds (default: %(default)s).",
+    )
+    _add_format_args(providers_test)
 
     setup_parser = sub.add_parser(
         "setup", aliases=COMMAND_ALIASES["setup"], help="Interactively save local provider configuration."
