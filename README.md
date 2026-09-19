@@ -636,6 +636,19 @@ smart-search deep "深度搜索一下最近的比特币行情" --format json | C
 
 ## Development
 
+The repository declares its development toolchain in `mise.toml`. With [mise](https://mise.jdx.dev) installed, `mise install` provisions the pinned Python and Node versions, and the same file exposes the common commands as tasks:
+
+```bash
+mise run install      # create .venv and install the package in editable mode
+mise run test         # install dev dependencies and run pytest
+mise run cli -- --v   # run the CLI from this checkout
+mise run regression
+mise run smoke
+mise run parity
+```
+
+mise is optional. The `npm` scripts below remain the supported path and CI keeps using `actions/setup-python` and `actions/setup-node`.
+
 ```powershell
 .\.venv\Scripts\python.exe -m compileall -q src tests
 .\.venv\Scripts\python.exe -m pytest tests -q

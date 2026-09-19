@@ -1,0 +1,45 @@
+# Development toolchain for smart-search.
+#
+# Both versions sit inside the ranges the project already declares
+# (pyproject requires-python >=3.10, package.json engines.node >=18) and inside
+# the CI matrix. This file is an optional entry point for developers; npm stays
+# the user-facing install path and CI keeps using actions/setup-* instead.
+[tools]
+python = "3.13.14"
+node = "24.16.0"
+
+# mise puts the venv first on PATH, so the tasks below call a bare `python`
+# instead of a platform-specific `.venv/bin/python` or `Scripts/python.exe`.
+[env]
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.install]
+description = "Create the venv and install the package in editable mode"
+run = [
+  "python -m ensurepip --upgrade",
+  "python -m pip install --disable-pip-version-check -e .",
+]
+
+[tasks.test]
+description = "Install dev dependencies and run the pytest suite"
+run = [
+  "python -m ensurepip --upgrade",
+  'python -m pip install --disable-pip-version-check -e ".[dev]"',
+  "python -m pytest",
+]
+
+[tasks.cli]
+description = "Run the CLI from this checkout"
+run = "python -m smart_search.cli"
+
+[tasks.regression]
+description = "Run the packaged regression suite through the npm wrapper"
+run = "node npm/bin/smart-search.js regression"
+
+[tasks.smoke]
+description = "Run the mock smoke suite"
+run = "node npm/bin/smart-search.js smoke --mock --format json"
+
+[tasks.parity]
+description = "Verify the public and packaged skill trees match"
+run = "npm run check:skill-parity"
