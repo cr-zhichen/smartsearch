@@ -11,7 +11,11 @@ def test_reference_pages_match_current_commands_and_configuration():
     generate = runpy.run_path(str(ROOT / "scripts/generate_references.py"))["reference_pages"]
     for language in ("en", "zh"):
         for path, expected in generate(language):
-            assert path.read_text(encoding="utf-8") == expected, f"Refresh {path.name} with scripts/generate_references.py"
+            actual = path.read_text(encoding="utf-8")
+            # argparse versions vary wrapping and repeat metavars before aliases.
+            actual = re.sub(r"(--[\w-]+) [A-Z_]+(?=, --)", r"\1", actual)
+            expected = re.sub(r"(--[\w-]+) [A-Z_]+(?=, --)", r"\1", expected)
+            assert actual.split() == expected.split(), f"Refresh {path.name} with scripts/generate_references.py"
 
 
 def test_bilingual_guide_links_resolve_in_the_distribution_source():

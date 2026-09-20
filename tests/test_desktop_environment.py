@@ -99,6 +99,7 @@ async def test_skill_conflicts_keep_custom_content_and_back_up_explicit_replace(
 
 @pytest.mark.asyncio
 async def test_changed_plan_and_invalid_targets_never_start_installers(tmp_path, monkeypatch):
+    monkeypatch.setattr(setup, "platform_target", lambda: ("windows", "x64"))
     environment = isolated(tmp_path, monkeypatch)
     env, info = {"PATH": ""}, {"external_path": None}
     environment.state.update(environment.inspect(env, info, str(tmp_path), False))
