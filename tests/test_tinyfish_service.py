@@ -1,4 +1,5 @@
 import pytest
+import json
 
 from smart_search import service
 
@@ -187,3 +188,35 @@ async def test_research_route_keeps_tinyfish_after_firecrawl(monkeypatch):
     assert providers == ["firecrawl", "tinyfish"]
     assert sources[0]["provider"] == providers[0]
     assert [attempt["provider"] for attempt in attempts] == [providers[0]]
+
+
+@pytest.mark.asyncio
+async def test_tinyfish_probe_cannot_clear_fetch_failure_from_search_success(monkeypatch):
+    monkeypatch.setenv("TINYFISH_API_KEY", "tinyfish-synthetic-key")
+    fetch_ok = False
+    calls = []
+
+    async def search(self, query, max_results=1):
+        calls.append("search")
+        return json.dumps({"ok": True, "results": []})
+
+    async def fetch(self, url):
+        calls.append("fetch")
+        return json.dumps({"ok": fetch_ok, "error_type": "auth_error", "error": "fetch endpoint rejected request"})
+
+    monkeypatch.setattr(service.TinyFishSearchProvider, "search", search)
+    monkeypatch.setattr(service.TinyFishFetchProvider, "fetch", fetch)
+    failed = await service.test_provider_connection("tinyfish", record_health=True)
+    assert not failed["ok"]
+    assert service._provider_health_status("tinyfish")["state"] == "cooldown"
+    fetch_ok = True
+    passed = await service.test_provider_connection("tinyfish", record_health=True)
+    assert passed["ok"]
+    assert service._provider_health_status("tinyfish")["state"] == "closed"
+    assert calls == ["search", "fetch", "search", "fetch"]
+
+
+@pytest.mark.parametrize("value", ["nonsense", "nan", "inf", "0", "-1"])
+def test_tinyfish_timeout_rejects_invalid_writes(value):
+    with pytest.raises(ValueError):
+        service.config._validate_config_value("TINYFISH_TIMEOUT_SECONDS", value)

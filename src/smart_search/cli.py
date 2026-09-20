@@ -532,7 +532,7 @@ def _format_doctor_markdown(data: dict[str, Any]) -> str:
         for key in sorted(config_sources):
             rows.append([key, config_sources.get(key), data.get(key, "-")])
         lines.extend(["", "## Configuration Values"])
-        lines.extend(_markdown_table(["Key", "Source", "Value"], rows))
+        lines.extend(_markdown_table(["Key", "Source", "Value"], rows, exact_headers={"Value"}))
 
     capability_status = data.get("capability_status") or {}
     if capability_status:
@@ -927,7 +927,7 @@ def _format_config_markdown(data: dict[str, Any]) -> str:
     values = data.get("values") or {}
     if values:
         lines.extend(["", "## Values"])
-        lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in values.items()]))
+        lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in values.items()], exact_headers={"Value"}))
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
 
@@ -962,7 +962,7 @@ def _format_setup_markdown(data: dict[str, Any]) -> str:
     saved = data.get("saved") or data.get("values") or {}
     if saved:
         lines.extend(["", "## Saved Values"])
-        lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in saved.items()]))
+        lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in saved.items()], exact_headers={"Value"}))
     skills = data.get("skills") or {}
     if isinstance(skills, dict) and skills:
         installed = skills.get("installed") or []

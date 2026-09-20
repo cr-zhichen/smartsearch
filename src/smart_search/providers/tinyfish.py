@@ -54,13 +54,15 @@ def _normalize_search_result(item: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _first_fetch_error(errors: Any) -> str:
-    if not isinstance(errors, list) or not errors:
-        return ""
-    first = errors[0]
-    if isinstance(first, dict):
-        return str(first.get("error") or "").strip()
-    return str(first or "").strip()
+def _fetch_error(errors: Any, api_key: str) -> ProviderCallError:
+    first = errors[0] if isinstance(errors, list) and errors else {}
+    code = str(first.get("error") or "") if isinstance(first, dict) else str(first or "")
+    error_type = {"timeout": "timeout", "bot_blocked": "quality_error"}.get(code.lower(), "provider_error")
+    status = first.get("status") if isinstance(first, dict) else None
+    message = code or "TinyFish fetch returned no content"
+    if status is not None:
+        message += f" (target HTTP {status})"
+    return ProviderCallError(error_type, message, additional_secrets=(api_key,))
 
 
 class TinyFishSearchProvider(BaseSearchProvider):
@@ -124,7 +126,7 @@ class TinyFishSearchProvider(BaseSearchProvider):
 
 
 class TinyFishFetchProvider:
-    def __init__(self, api_url: str, api_key: str, timeout: float = 60.0):
+    def __init__(self, api_url: str, api_key: str, timeout: float = 150.0):
         self.api_url = api_url
         self.api_key = api_key or ""
         self.timeout = timeout
@@ -165,11 +167,7 @@ class TinyFishFetchProvider:
             if not isinstance(results, list):
                 raise ProviderCallError("parse_error", "TinyFish fetch response is missing results")
             if not results:
-                raise ProviderCallError(
-                    "provider_error",
-                    _first_fetch_error(payload.get("errors")) or "TinyFish fetch returned no content",
-                    additional_secrets=(self.api_key,),
-                )
+                raise _fetch_error(payload.get("errors"), self.api_key)
             first = results[0]
             if not isinstance(first, dict):
                 raise ProviderCallError("parse_error", "TinyFish fetch result is not an object")

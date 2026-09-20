@@ -376,6 +376,7 @@ smart-search deep "https://example.com/source" --format json
 | Jina Reader | 已知 URL 正文抓取；满足 standard 最低配置必须有 key | `JINA_API_KEY`、`JINA_READER_API_URL`、`JINA_RESPOND_WITH`、`JINA_TIMEOUT_SECONDS` | [Jina Reader](https://jina.ai/reader/) | [Jina AI](https://jina.ai/) |
 | Firecrawl | fetch 兜底、补充网页来源 | `FIRECRAWL_API_URL`、`FIRECRAWL_API_KEY` | [Firecrawl docs](https://docs.firecrawl.dev/) | [Firecrawl API keys](https://www.firecrawl.dev/app/api-keys) |
 | TinyFish | 搜索与抓取兜底 | `TINYFISH_API_KEY`、`TINYFISH_SEARCH_API_URL`、`TINYFISH_FETCH_API_URL`、`TINYFISH_TIMEOUT_SECONDS` | [TinyFish 文档](https://docs.tinyfish.ai/) | [TinyFish API keys](https://agent.tinyfish.ai/api-keys) |
+| TypeSafe / Jev | 可选语义路由和证据判断 | `TYPESAFE_API_KEY`、`TYPESAFE_API_URL`、`TYPESAFE_MODEL` | [TypeSafe API](https://docs.typesafe.ai/api) | 参见 TypeSafe 文档 |
 | AnySearch | 实验垂直搜索验收入口，不是默认兜底 | `ANYSEARCH_API_URL`、`ANYSEARCH_API_KEY`、`ANYSEARCH_TIMEOUT_SECONDS` | [AnySearch 文档](https://www.anysearch.com/docs) | [AnySearch API keys](https://www.anysearch.com/console/api-keys) |
 | Sciverse | 显式实验学术检索、语义论文检索、正文片段和引用/参考文献关系，不是默认兜底 | `SCIVERSE_API_TOKEN`、`SCIVERSE_API_URL`、`SCIVERSE_TIMEOUT_SECONDS` | [Sciverse Agent Tools](https://github.com/opendatalab/Sciverse-Agent-Tools) | Sciverse 控制台 / token 提供方 |
 

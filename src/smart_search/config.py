@@ -668,7 +668,7 @@ class Config:
         if key in JEV_DEFAULTS:
             validate_jev_value(key, value)
             return
-        if key == "SMART_SEARCH_TIMEOUT_SECONDS":
+        if key in {"SMART_SEARCH_TIMEOUT_SECONDS", "TINYFISH_TIMEOUT_SECONDS"}:
             self._parse_positive_float_value(key, value)
             return
         if key == "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS":
@@ -941,7 +941,7 @@ class Config:
 
     @property
     def tinyfish_timeout(self) -> float:
-        return float(self._get_config_value("TINYFISH_TIMEOUT_SECONDS", "60") or "60")
+        return self._parse_positive_float_value("TINYFISH_TIMEOUT_SECONDS", self._get_config_value("TINYFISH_TIMEOUT_SECONDS", "150") or "150")
 
     @property
     def anysearch_api_url(self) -> str:

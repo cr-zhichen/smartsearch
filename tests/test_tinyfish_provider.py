@@ -220,3 +220,23 @@ async def test_search_rejects_a_payload_without_results(monkeypatch):
     assert data["ok"] is False
     assert data["error_type"] == "parse_error"
 
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code,status,expected", [("timeout", 504, "timeout"), ("bot_blocked", 403, "quality_error"), ("page_not_found", 404, "provider_error")])
+async def test_fetch_preserves_per_url_failure_semantics(monkeypatch, code, status, expected):
+    _monkeypatch_client(monkeypatch)
+    FakeTinyFishClient.post_response = _fetch_response({"results": [], "errors": [{"error": code, "status": status}]})
+    data = json.loads(await TinyFishFetchProvider("https://api.fetch.tinyfish.ai", "fake-secret").fetch("https://example.com"))
+    assert data["error_type"] == expected
+    assert str(status) in data["error"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status,payload", [(401, {"error": "invalid fake-secret"}), (200, {"results": [], "errors": [{"error": "failed fake-secret", "status": 500}]})])
+async def test_fetch_redacts_credentials_in_http_and_page_errors(monkeypatch, status, payload):
+    _monkeypatch_client(monkeypatch)
+    FakeTinyFishClient.post_response = _fetch_response(payload, status_code=status)
+    raw = await TinyFishFetchProvider("https://api.fetch.tinyfish.ai", "fake-secret").fetch("https://example.com")
+    assert not json.loads(raw)["ok"]
+    assert "fake-secret" not in raw
+

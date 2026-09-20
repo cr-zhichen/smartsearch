@@ -32,10 +32,12 @@ run = [
 
 [tasks.cli]
 description = "Run the CLI from this checkout"
+raw_args = true
 run = "{{vars.python}} -m smart_search.cli"
 
 [tasks.python]
 description = "Run a Python development script in the project environment"
+raw_args = true
 run = "{{vars.python}}"
 
 [tasks.regression]
@@ -52,4 +54,4 @@ run = "npm run check:skill-parity"
 
 [tasks.check]
 description = "Check Python syntax and patch whitespace"
-run = ["{{vars.python}} -m compileall -q src", "git diff --check"]
+run = ["{{vars.python}} -m compileall -q src tests", "git diff --check"]

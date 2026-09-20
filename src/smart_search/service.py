@@ -5043,18 +5043,22 @@ async def _test_tinyfish_connection() -> dict[str, Any]:
     if not config.tinyfish_api_key:
         return {"status": "not_configured", "message": "TINYFISH_API_KEY 未设置，TinyFish 功能不可用"}
     start = time.time()
-    raw = await TinyFishSearchProvider(
-        config.tinyfish_search_api_url,
-        config.tinyfish_api_key,
-        config.tinyfish_timeout,
-    ).search("tinyfish connectivity check", max_results=1)
-    data = json.loads(raw)
-    response_time = data.get("elapsed_ms", _elapsed_ms(start))
-    if data.get("ok"):
-        return {"status": "ok", "message": "TinyFish Search API 可用", "response_time_ms": response_time}
-    error_type = str(data.get("error_type") or "")
-    status = error_type if error_type in {"auth_error", "config_error", "parameter_error", "rate_limited", "timeout", "quality_error"} else "warning"
-    return {"status": status, "message": data.get("error", "TinyFish Search API 不可用"), "response_time_ms": response_time}
+    raw_results = await asyncio.gather(
+        TinyFishSearchProvider(config.tinyfish_search_api_url, config.tinyfish_api_key, config.tinyfish_timeout)
+        .search("tinyfish connectivity check", max_results=1),
+        TinyFishFetchProvider(config.tinyfish_fetch_api_url, config.tinyfish_api_key, config.tinyfish_timeout)
+        .fetch("https://example.com"),
+    )
+    # Both endpoints share one health fingerprint; search alone cannot clear a
+    # fetch failure. The caller controls the total probe deadline and persistence.
+    for label, raw in zip(("搜索", "抓取"), raw_results):
+        data = json.loads(raw)
+        if not data.get("ok"):
+            error_type = str(data.get("error_type") or "")
+            status = error_type if error_type in APPROVED_PROVIDER_ERROR_TYPES else "warning"
+            return {"status": status, "message": f"TinyFish {label}：{data.get('error', '请求未成功')}",
+                    "response_time_ms": _elapsed_ms(start)}
+    return {"status": "ok", "message": "TinyFish 搜索与抓取 API 均可用", "response_time_ms": _elapsed_ms(start)}
 
 
 DOCTOR_PROBE_PROVIDERS = {
@@ -5107,6 +5111,7 @@ PROBE_KIND: dict[str, str] = {
     "zhipu": "live",
     "zhipu-mcp": "live",
     "context7": "live",
+    "tinyfish": "live",
     "anysearch": "live",
     "sciverse": "live",
     "zhipu-mcp-reader": "shared:zhipu-mcp",
@@ -5119,6 +5124,7 @@ _LIVE_PROBES: dict[str, Any] = {
     "zhipu": _test_zhipu_connection,
     "zhipu-mcp": _test_zhipu_mcp_connection,
     "context7": _test_context7_connection,
+    "tinyfish": _test_tinyfish_connection,
     "anysearch": _test_anysearch_connection,
     "sciverse": _test_sciverse_connection,
     "firecrawl": _test_firecrawl_presence,

@@ -8,6 +8,25 @@ from smart_search import cli
 from smart_search import skill_installer
 
 
+def test_markdown_outputs_preserve_long_identifiers_and_escape_pipes():
+    long_path = "C:/" + "long-directory/" * 20 + "config.json"
+    long_url = "https://example.com/" + "path/" * 40 + "?option=a|b"
+    values = {"SMART_SEARCH_LOG_DIR": long_path, "EXA_BASE_URL": long_url}
+    for command, data in (
+        ("config", {"ok": True, "values": values}),
+        ("setup", {"ok": True, "saved": values}),
+        ("doctor", {"ok": True, **values, "config_sources": {key: "config_file" for key in values}}),
+        ("skills", {"ok": True, "targets": [{"target": "codex", "path": long_path, "legacy_locations": [{"path": long_path}]}]}),
+    ):
+        output = cli._render(command, data, "markdown")
+        assert long_path in output, command
+        if command != "skills":
+            assert long_url.replace("|", r"\|") in output, command
+    description = "explanation " * 40
+    output = cli._render("exa-search", {"ok": True, "results": [{"url": long_url, "description": description}]}, "markdown")
+    assert long_url.replace("|", r"\|") in output
+    assert description.strip() not in output
+
 class GbkStdout:
     encoding = "gbk"
     errors = "strict"
