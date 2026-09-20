@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -121,6 +122,49 @@ def test_phase_completion_preserves_provider_and_model(tmp_path):
     store.finish("phase", 0, "finished")
     terminal = store.details("phase")["events"][-1]
     assert (terminal["provider"], terminal["model"]) == ("exa", "")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("provider,key,model_key", [
+    ("xai-responses", "XAI_API_KEY", "XAI_MODEL"),
+    ("openai-compatible", "OPENAI_COMPATIBLE_API_KEY", "OPENAI_COMPATIBLE_MODEL"),
+    ("firecrawl", "FIRECRAWL_API_KEY", None),
+])
+async def test_provider_worker_records_applicable_model_and_memory_fallback(tmp_path, monkeypatch, provider, key, model_key):
+    model = "test-requested-model" if model_key else ""
+    values = {key: "synthetic-key", "OPENAI_COMPATIBLE_API_URL": "https://example.invalid/v1"}
+    if model_key:
+        values[model_key] = model
+
+    async def check_main(candidate):
+        assert candidate["model"] == model
+        return {"status": "ok", "message": "ok"}
+
+    monkeypatch.setattr(desktop_worker.service, "_safe_test_main_provider_connection", check_main)
+    run_id = uuid.uuid4().hex
+    envelope = await desktop_worker.execute({"method": "provider.test", "command": "provider.test",
+        "params": {"provider": provider}, "values": values, "config_dir": str(tmp_path), "run_id": run_id})
+    row = activity.ActivityStore(tmp_path).details(run_id)["run"]
+    assert (row["provider"], row["model"]) == (provider, model)
+    assert row["status"] == "finished" and envelope["status"] == "finished"
+    assert envelope["result"]["model"] == model
+    if provider == "firecrawl":
+        assert envelope["result"]["ok"] is False  # completed presence check, not a verified API
+    memory = Backend.run_metadata({**row, "directory": str(tmp_path), "process": None,
+                                   "result": envelope["result"]})
+    assert (memory["provider"], memory["model"]) == (provider, model)
+    assert not (tmp_path / "provider_health.json").exists()
+
+
+def test_final_activity_uses_primary_metadata_without_corrupting_supplemental_events():
+    with activity.observe("search", version="test") as run:
+        activity.progress("main_search", "xai-responses", "grok-test")
+        activity.progress("extra_sources", "exa")
+        activity.result({"provider": "xai-responses", "model": "grok-test"})
+    details = activity.ActivityStore().details(run.run_id)
+    assert (details["run"]["provider"], details["run"]["model"]) == ("xai-responses", "grok-test")
+    extra = next(event for event in details["events"] if event["phase"] == "extra_sources")
+    assert (extra["provider"], extra["model"]) == ("exa", "")
 
 
 def test_journal_terminal_retention_and_redaction(tmp_path, monkeypatch):

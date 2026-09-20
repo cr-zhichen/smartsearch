@@ -21,6 +21,13 @@ internal sealed record CommandArgument(
 
 internal sealed record CommandValue(string? Text, bool IsChecked = false);
 
+internal static class ActivityPresentation
+{
+    public static string ProviderModel(string provider, string model) => string.Join(" · ",
+        new[] { string.IsNullOrWhiteSpace(provider) ? null : $"服务商：{provider}",
+                string.IsNullOrWhiteSpace(model) ? null : $"模型：{model}" }.Where(value => value is not null));
+}
+
 internal static class ControlValueComparer
 {
     public static bool Equal(CommandValue first, CommandValue second) =>

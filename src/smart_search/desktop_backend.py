@@ -99,9 +99,11 @@ class Backend:
     def run_metadata(run):
         now = time.time()
         terminal = run["status"] not in {"running", "cancelling"}
+        result = run["result"] or {}
         return {"run_id": run["run_id"], "command": run["command"], "origin": "app", "config_dir": run["directory"],
                 "version": cli._get_version(), "pid": run["process"].pid if run["process"] else None,
-                "status": run["status"], "phase": "completed" if terminal else "running", "provider": "", "model": "",
+                "status": run["status"], "phase": "completed" if terminal else "running",
+                "provider": result.get("provider") or run.get("provider", ""), "model": result.get("model", ""),
                 "started_at": run["started_at"], "updated_at": run.get("finished_at", now),
                 "finished_at": run.get("finished_at"), "elapsed_ms": (run.get("finished_at", now) - run["started_at"]) * 1000,
                 "sequence": 0, "error_type": (run["result"] or {}).get("error_type", ""), "config_revision": "",

@@ -1,5 +1,10 @@
 using SmartSearch.Desktop;
 
+if (ActivityPresentation.ProviderModel("firecrawl", "") != "服务商：firecrawl" ||
+    ActivityPresentation.ProviderModel("openai-compatible", "grok-test") != "服务商：openai-compatible · 模型：grok-test" ||
+    ActivityPresentation.ProviderModel("", "") != "")
+    throw new Exception("Activity captions must distinguish a model from a non-model provider.");
+
 // The same real client must reconnect after stopping for a failed installer
 // launch. No UI, installer, package manager, or provider is invoked here.
 if (args.Length != 2) throw new ArgumentException("Pass Python executable and an isolated config directory.");

@@ -637,7 +637,7 @@ private struct ProviderSection: View {
                         if model.isBusy.contains(testKey) {
                             HStack(spacing: 6) {
                                 ProgressView().controlSize(.small)
-                                Text("测试中…")
+                                Text(model.state?.raw["probe_kinds"]?[provider]?.stringValue == "presence" ? "检查中…" : "测试中…")
                             }
                         } else {
                             Text(model.providerTestLabel(provider))
@@ -964,7 +964,7 @@ private struct ActivityRow: View {
                     StatusTag(status: run.status, label: run.status == "stale" ? "状态未更新" : model.state?.statusLabels[run.status])
                     Text(run.origin.uppercased()).font(.caption).foregroundStyle(.secondary)
                 }
-                Text([run.phase.map { model.state?.phaseLabel($0) ?? "处理中" }, run.provider, run.model].compactMap { $0 }.joined(separator: " · "))
+                Text([run.phase.map { model.state?.phaseLabel($0) ?? "处理中" }, run.provider, run.model].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary)
                     .lineLimit(1)
                 if let error = run.errorType { Text(model.state?.statusLabels[error] ?? "任务异常").font(.caption).foregroundStyle(.red) }

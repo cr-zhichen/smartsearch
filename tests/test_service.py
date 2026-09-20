@@ -1213,6 +1213,8 @@ async def test_search_fallbacks_from_xai_responses_to_openai_compatible(monkeypa
     assert result["content"] == "Fallback answer."
     assert result["fallback_used"] is True
     assert [a["provider"] for a in result["provider_attempts"][:2]] == ["xAI Responses", "OpenAI-compatible"]
+    assert [a["model"] for a in result["provider_attempts"][:2]] == ["xai-model", "relay-model"]
+    assert result["provider"] == "openai-compatible"
     assert result["provider_attempts"][0]["status"] == "error"
     assert result["provider_attempts"][1]["status"] == "ok"
     assert result["primary_api_mode"] == "chat-completions"

@@ -60,6 +60,8 @@ public sealed partial class MainWindow : Window
     private bool _allowClose;
     private bool _shuttingDown;
     private StackPanel? _activityRows;
+    private readonly Dictionary<string, ActivityRowView> _activityViews = [];
+    private TextBlock? _activityHint;
     private ToggleSwitch? _activityEnabledSwitch;
     private StackPanel? _skillRows;
     private TextBlock? _cliSummary;
@@ -68,6 +70,7 @@ public sealed partial class MainWindow : Window
     private TextBox? _resultText;
     private TextBox? _rawResult;
     private StackPanel? _sourceRows;
+    private Expander? _sourceDisclosure;
     private string _lastResultExport = string.Empty;
     private string? _selectedCommandId;
     private string? _selectedResultRunId;
@@ -317,7 +320,7 @@ public sealed partial class MainWindow : Window
         _providerStatusPanels[provider] = status;
         content.Children.Add(status);
         content.Children.Add(ActionButton("测试", () => TestProviderDraftAsync(provider), operationKey: "test:" + provider,
-            busyText: "测试中…", label: () => ProviderTestLabel(provider)));
+            busyText: Text(Property(state, "probe_kinds"), provider) == "presence" ? "检查中…" : "测试中…", label: () => ProviderTestLabel(provider)));
         return content;
     }
 
@@ -410,17 +413,20 @@ public sealed partial class MainWindow : Window
     {
         var panel = new StackPanel { Spacing = 6 };
         var busy = _operations.IsBusy("test:" + provider);
+        var presence = Text(Property(state, "probe_kinds"), provider) == "presence";
         var check = Property(Property(state, "provider_checks"), provider);
         var status = Text(check, "status");
-        panel.Children.Add(Badge(busy ? "测试中" : check.ValueKind == JsonValueKind.Object ? ProviderCheckLabel(status) : "尚未测试",
+        panel.Children.Add(Badge(busy ? presence ? "检查中" : "测试中" : check.ValueKind == JsonValueKind.Object ? ProviderCheckLabel(status) : presence ? "尚未检查" : "尚未测试",
             busy ? "Active" : StatusTone(status)));
         if (busy)
-            panel.Children.Add(Secondary("正在等待服务商响应，请稍候。可在活动页取消。"));
+            panel.Children.Add(Secondary(presence ? "正在检查配置是否填写。" : "正在等待服务商响应，请稍候。可在活动页取消。"));
         else if (check.ValueKind == JsonValueKind.Object)
         {
             var scope = Text(check, "scope");
             panel.Children.Add(Secondary($"{(scope == "draft" ? "未保存修改的测试" : "测试时的有效配置")} · {TimestampOrText(check, "checked_at")}"));
             if (scope == "draft") panel.Children.Add(Secondary("此结果对应测试时尚未保存的修改；再次测试可确认当前配置。"));
+            if (!string.IsNullOrWhiteSpace(Text(check, "probe")))
+                panel.Children.Add(Secondary("检查方式：" + ProviderCheckLabel(Text(check, "probe"))));
             var message = Text(check, "message");
             if (!string.IsNullOrWhiteSpace(message)) panel.Children.Add(Disclosure("test-detail:" + provider, "技术详情", DataText(message)));
         }
@@ -470,13 +476,15 @@ public sealed partial class MainWindow : Window
             MinHeight = 160,
             PlaceholderText = "运行后会在这里显示可读结果和下一步。"
         };
-        panel.Children.Add(_resultText);
         _sourceRows = new StackPanel { Spacing = 4 };
-        panel.Children.Add(_sourceRows);
+        _sourceDisclosure = Disclosure("result-sources", "来源链接", _sourceRows);
+        _sourceDisclosure.Visibility = Visibility.Collapsed;
         var resultActions = ActionRow(ActionButton("复制结果", CopyResult), ActionButton("导出结果", ExportResultAsync, busyText: "导出中…"));
-        panel.Children.Add(resultActions);
         _rawResult = new TextBox { IsReadOnly = true, TextWrapping = TextWrapping.Wrap, AcceptsReturn = true, MinHeight = 120 };
-        panel.Children.Add(new Expander { Header = "高级 JSON", Content = _rawResult });
+        panel.Children.Add(Card(new StackPanel { Spacing = 12, Children =
+        {
+            _resultText, _sourceDisclosure, resultActions, Disclosure("result-json", "高级 JSON", _rawResult)
+        } }));
         if (_commandPicker.Items.Count > 0)
         {
             _commandPicker.SelectedItem = _commandPicker.Items.OfType<CommandOption>()
@@ -502,6 +510,10 @@ public sealed partial class MainWindow : Window
         var actions = ActionRow(ActionButton("立即刷新", () => RefreshActivityAsync(silent: false), busyText: "刷新中…"),
             ActionButton("清除已结束记录", ClearActivityAsync, busyText: "清除中…"));
         panel.Children.Add(actions);
+        _activityViews.Clear();
+        _activityHint = Body("");
+        _activityHint.Visibility = Visibility.Collapsed;
+        panel.Children.Add(_activityHint);
         _activityRows = new StackPanel { Spacing = 12, HorizontalAlignment = HorizontalAlignment.Stretch };
         panel.Children.Add(_activityRows);
         _ = RefreshActivityAsync(silent: true);
@@ -672,6 +684,7 @@ public sealed partial class MainWindow : Window
         if (_rawResult is not null)
             _rawResult.Text = string.Empty;
         _sourceRows?.Children.Clear();
+        if (_sourceDisclosure is not null) _sourceDisclosure.Visibility = Visibility.Collapsed;
         ShowNotice("正在运行", "结果完成后会显示在本页，也可到活动页查看或取消。", InfoBarSeverity.Informational);
     }
 
@@ -751,61 +764,87 @@ public sealed partial class MainWindow : Window
 
     private void RenderActivity(JsonElement result)
     {
+        if (_currentPage != "activity" || _activityRows is null) return;
         if (_activityEnabledSwitch is not null)
         {
             _settingActivityEnabled = true;
             _activityEnabledSwitch.IsOn = Bool(result, "enabled", true);
             _settingActivityEnabled = false;
         }
-        if (_activityRows is null)
-            return;
-        var expanded = _activityRows.Children.OfType<Expander>()
-            .Where(row => row.IsExpanded).Select(row => row.Tag as string).ToHashSet();
-        foreach (var (button, binding) in _actionButtons.ToArray())
-            if (new[] { "details:", "cancel:", "result:" }.Any(prefix => binding.Key().StartsWith(prefix, StringComparison.Ordinal)))
-                _actionButtons.Remove(button);
-        _activityRows.Children.Clear();
-        var errors = Items(result, "errors").ToList();
-        if (errors.Count > 0)
-            _activityRows.Children.Add(Body("部分活动目录不可读取。请在设置中检查已添加的目录；这不表示没有活动。"));
-        var runs = Items(result, "runs").OrderByDescending(run => Number(run, "updated_at")).ToList();
-        if (runs.Count == 0)
+        // A heartbeat changes elapsed time, not row identity or chronological order.
+        var runs = Items(result, "runs").OrderByDescending(run => Number(run, "started_at"))
+            .ThenBy(run => Text(run, "run_id"), StringComparer.Ordinal).ToList();
+        var ids = runs.Select(run => Text(run, "run_id")).ToHashSet();
+        foreach (var id in _activityViews.Keys.Where(id => !ids.Contains(id)).ToArray())
         {
-            _activityRows.Children.Add(Body("目前没有可见记录。旧 CLI、未启用观测或未添加的配置目录不会被伪造为“空闲”。"));
-            return;
+            _activityRows.Children.Remove(_activityViews[id].Row);
+            _activityViews.Remove(id);
+            foreach (var (button, binding) in _actionButtons.ToArray())
+                if (new[] { "details:", "cancel:", "result:" }.Any(prefix => binding.Key() == prefix + id))
+                    _actionButtons.Remove(button);
         }
-        foreach (var run in runs)
+        for (var index = 0; index < runs.Count; index++)
         {
-            var row = BuildActivityRow(run);
-            row.IsExpanded = expanded.Contains(Text(run, "run_id"));
-            _activityRows.Children.Add(row);
+            var run = runs[index];
+            var id = Text(run, "run_id");
+            if (!_activityViews.TryGetValue(id, out var view))
+                _activityViews[id] = view = BuildActivityRow(run);
+            view.Update(run);
+            var position = _activityRows.Children.IndexOf(view.Row);
+            if (position == index) continue;
+            if (position >= 0) _activityRows.Children.RemoveAt(position);
+            _activityRows.Children.Insert(index, view.Row);
         }
+        var messages = new List<string>();
+        if (Items(result, "errors").Any()) messages.Add("部分活动目录不可读取。请在设置中检查已添加的目录；这不表示没有活动。");
+        if (runs.Count == 0) messages.Add("目前没有可见记录。旧 CLI、未启用观测或未添加的配置目录不会被伪造为“空闲”。");
+        _activityHint!.Text = string.Join("\n", messages);
+        _activityHint.Visibility = messages.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
-    private Expander BuildActivityRow(JsonElement run)
+    private ActivityRowView BuildActivityRow(JsonElement initial)
     {
-        var runId = Text(run, "run_id");
-        var status = Text(run, "status", "unknown");
-        if (_ownedRuns.Contains(runId))
-            _ownedRunStatus[runId] = status;
+        var runId = Text(initial, "run_id");
+        var current = initial;
         var summary = new StackPanel { Spacing = 3 };
-        summary.Children.Add(Secondary($"{(Text(run, "origin") == "app" ? "桌面 App" : "终端 / AI")} · {PhaseLabel(Text(run, "phase"))} · 用时 {Elapsed(run)}"));
-        var provider = Text(run, "provider");
-        var model = Text(run, "model");
-        if (!string.IsNullOrWhiteSpace(provider) || !string.IsNullOrWhiteSpace(model))
-            summary.Children.Add(Body($"服务商：{(string.IsNullOrWhiteSpace(provider) ? "未返回" : provider)}  模型：{(string.IsNullOrWhiteSpace(model) ? "未返回" : model)}"));
-        summary.Children.Add(DataText($"开始：{Timestamp(run, "started_at")}\n{Text(run, "config_dir", "未返回")}"));
-        if (!string.IsNullOrWhiteSpace(Text(run, "config_revision")))
-            summary.Children.Add(DataText($"配置版本：{Text(run, "config_revision")}"));
-        if (!string.IsNullOrWhiteSpace(Text(run, "error_type")))
-            summary.Children.Add(Secondary($"错误：{ProviderCheckLabel(Text(run, "error_type"))}"));
-            summary.Children.Add(ActionButton("运行详情", () => ShowActivityDetailsAsync(run), operationKey: "details:" + runId));
-        if (_ownedRuns.Contains(runId) && !IsTerminal(status))
-            summary.Children.Add(ActionButton("取消任务", () => CancelOwnedRunAsync(runId), operationKey: "cancel:" + runId, busyText: "取消中…"));
-        if (_ownedRuns.Contains(runId) && IsTerminal(status))
-            summary.Children.Add(ActionButton("查看结果", () => ShowRunResultAsync(runId), operationKey: "result:" + runId));
-        return new Expander { Tag = runId, Header = HeadingWithStatus(CommandLabel(Text(run, "command")), StatusLabel(status), StatusTone(status)),
-            Content = summary, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        var progress = Secondary("");
+        var providerLine = Body("");
+        var location = DataText("");
+        var revision = DataText("");
+        var error = Secondary("");
+        var details = ActionButton("运行详情", () => ShowActivityDetailsAsync(current), operationKey: "details:" + runId);
+        var cancel = ActionButton("取消任务", () => CancelOwnedRunAsync(runId), operationKey: "cancel:" + runId, busyText: "取消中…");
+        var result = ActionButton("查看结果", () => ShowRunResultAsync(runId), operationKey: "result:" + runId);
+        foreach (var child in new UIElement[] { progress, providerLine, location, revision, error, details, cancel, result })
+            summary.Children.Add(child);
+        var row = Disclosure("activity:" + runId, "", summary);
+        row.Tag = runId;
+        var header = "";
+        return new ActivityRowView(row, run =>
+        {
+            current = run;
+            var status = Text(run, "status", "unknown");
+            var owned = _ownedRuns.Contains(runId);
+            if (owned) _ownedRunStatus[runId] = status;
+            var nextHeader = Text(run, "command") + ":" + status;
+            if (header != nextHeader)
+            {
+                row.Header = HeadingWithStatus(CommandLabel(Text(run, "command")), StatusLabel(status), StatusTone(status));
+                header = nextHeader;
+            }
+            progress.Text = $"{(Text(run, "origin") == "app" ? "桌面 App" : "终端 / AI")} · {PhaseLabel(Text(run, "phase"))} · 用时 {Elapsed(run)}";
+            var provider = Text(run, "provider");
+            var model = Text(run, "model");
+            providerLine.Text = ActivityPresentation.ProviderModel(provider, model);
+            providerLine.Visibility = string.IsNullOrWhiteSpace(provider) && string.IsNullOrWhiteSpace(model) ? Visibility.Collapsed : Visibility.Visible;
+            location.Text = $"开始：{Timestamp(run, "started_at")}\n{Text(run, "config_dir", "未返回")}";
+            revision.Text = $"配置版本：{Text(run, "config_revision")}";
+            revision.Visibility = string.IsNullOrWhiteSpace(Text(run, "config_revision")) ? Visibility.Collapsed : Visibility.Visible;
+            error.Text = $"错误：{ProviderCheckLabel(Text(run, "error_type"))}";
+            error.Visibility = string.IsNullOrWhiteSpace(Text(run, "error_type")) ? Visibility.Collapsed : Visibility.Visible;
+            cancel.Visibility = owned && !IsTerminal(status) ? Visibility.Visible : Visibility.Collapsed;
+            result.Visibility = owned && IsTerminal(status) ? Visibility.Visible : Visibility.Collapsed;
+        });
     }
 
     private async Task ShowActivityDetailsAsync(JsonElement run)
@@ -833,7 +872,7 @@ public sealed partial class MainWindow : Window
         var detailProvider = Text(detailedRun, "provider");
         var detailModel = Text(detailedRun, "model");
         if (!string.IsNullOrWhiteSpace(detailProvider) || !string.IsNullOrWhiteSpace(detailModel))
-            content.Children.Add(Body($"服务商：{(string.IsNullOrWhiteSpace(detailProvider) ? "未返回" : detailProvider)}  模型：{(string.IsNullOrWhiteSpace(detailModel) ? "未返回" : detailModel)}"));
+            content.Children.Add(Body(ActivityPresentation.ProviderModel(detailProvider, detailModel)));
         if (!string.IsNullOrWhiteSpace(Text(detailedRun, "config_revision")))
             content.Children.Add(Body($"配置版本：{Text(detailedRun, "config_revision")}"));
         if (!string.IsNullOrWhiteSpace(Text(details.Value, "note")))
@@ -1242,8 +1281,20 @@ public sealed partial class MainWindow : Window
         {
             var url = Text(source, "url", Text(source, "link"));
             if (Uri.TryCreate(url, UriKind.Absolute, out var uri) && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
-                _sourceRows.Children.Add(new HyperlinkButton { Content = Text(source, "title", Text(source, "name", url)), NavigateUri = uri });
+            {
+                var title = Text(source, "title", Text(source, "name", uri.Host));
+                var label = title == uri.Host ? title : $"{title} · {uri.Host}";
+                var link = new HyperlinkButton
+                {
+                    Content = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap }, NavigateUri = uri,
+                    HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left
+                };
+                ToolTipService.SetToolTip(link, uri.AbsoluteUri);
+                _sourceRows.Children.Add(link);
+            }
         }
+        _sourceDisclosure!.Header = $"来源链接（{_sourceRows.Children.Count}）";
+        _sourceDisclosure.Visibility = _sourceRows.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private Task CopyResult()
@@ -1602,6 +1653,8 @@ public sealed partial class MainWindow : Window
     private string ProviderTestLabel(string provider)
     {
         var draft = CollectDraft(provider);
+        if (Text(Property(_state, "probe_kinds"), provider) == "presence")
+            return draft.Set.Count + draft.Unset.Count > 0 ? "检查未保存的配置" : "检查配置";
         return draft.Set.Count + draft.Unset.Count > 0 ? "用未保存的修改测试" : "测试";
     }
 
@@ -2071,6 +2124,7 @@ public sealed partial class MainWindow : Window
 
     private sealed record FieldDraft(string? Text, bool IsChecked, bool Clear);
     private sealed record ActionBinding(Func<string> Key, Func<string> Label, string BusyText);
+    private sealed record ActivityRowView(Expander Row, Action<JsonElement> Update);
 
     private sealed record DraftChange(Dictionary<string, object?> Set, List<string> Unset);
 

@@ -31,7 +31,8 @@ async def execute(payload: dict) -> dict:
                 if payload["method"] == "provider.test":
                     result = await service.test_provider_connection(
                         payload["params"]["provider"], overrides=payload["params"].get("overrides", {}), record_health=False)
-                    code = 0 if result.get("ok") else 4
+                    presence_complete = result.get("probe") == "presence" and result.get("status") == "configured"
+                    code = 0 if result.get("ok") or presence_complete else 4
                 elif payload["method"] == "skills.install":
                     result = ui_api.skills_install(payload["params"])
                     code = 0 if result.get("ok") else 5
