@@ -214,6 +214,10 @@ class Invocation:
                       model=self._label(model), error_type=error_type if error_type in _SAFE_ERROR_TYPES else "runtime_error")
 
     def result(self, data: dict):
+        if data.get("provider"):
+            # The final result names the primary provider; keep supplemental
+            # providers in phase events without attaching its model to them.
+            self.progress(self.command, str(data["provider"]), str(data.get("model") or ""))
         self._error_type = str(data.get("error_type") or "")
         if self._error_type not in _SAFE_ERROR_TYPES:
             self._error_type = "runtime_error"

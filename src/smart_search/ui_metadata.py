@@ -314,8 +314,8 @@ CONFIG_FIELDS: tuple[ConfigField, ...] = (
     # ---- providers: Firecrawl ---------------------------------------------
     _f(key="FIRECRAWL_API_KEY", section="providers", tier="enhancement", kind="secret",
        label_zh="Firecrawl API Key", label_en="Firecrawl API key",
-       help_zh="可选的搜索与抓取渠道。没有便宜的校验接口，测试只确认 Key 已填写。",
-       help_en="Optional search and fetch provider. Without a cheap probe, testing only checks whether a key is present.",
+       help_zh="可选的搜索与抓取渠道。当前仅检查 Key 是否填写，不验证凭据或接口可用性。",
+       help_en="Optional search and fetch provider. The current check only confirms a key is present, not credential or API availability.",
        provider="firecrawl", capabilities=("web_fetch", "web_search"),
        key_url="https://www.firecrawl.dev/app/api-keys",
        docs_url="https://docs.firecrawl.dev/"),

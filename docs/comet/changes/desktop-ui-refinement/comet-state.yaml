@@ -3,9 +3,9 @@ name: desktop-ui-refinement
 language: zh-CN
 phase: build
 status: active
-state_version: 16
+state_version: 33
 brief: brief.md
-shape_confirmation_hash: f40549670c91566b0f3f8f57393be7b08a73cc56aae50135b675bc69003f534e
+shape_confirmation_hash: 36194be017bfa4952a7d3d6369abfac8d9ff1bafe04a08f6ef787e5b1444f6a9
 spec_changes:
   - capability: desktop-ui-refinement
     operation: create
@@ -17,7 +17,7 @@ workspace:
   finish: null
 loop:
   stage: building
-  goal_cycle: 4
+  goal_cycle: 6
   iteration: 1
   attempt: 0
   retry_epoch: 0
@@ -211,6 +211,68 @@ history:
       text: Native confirmed acceptance criteria changed
       truncated: false
     completed_at: 2026-09-20T05:25:23.937Z
+  - goal_cycle: 4
+    iteration: 1
+    attempt: 0
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Native Shape artifacts changed
+      truncated: false
+    completed_at: 2026-09-20T07:00:16.593Z
+  - goal_cycle: 5
+    iteration: 1
+    attempt: 1
+    outcome: fail
+    unresolved_ids:
+      - A2
+      - A3
+      - A5
+      - A7
+      - A19
+    summary:
+      text: 冻结候选 284e9b3530c98ce0a25675b82bd1a3649452bb1c 的 Runtime 检查均通过，但独立源码核验确认
+        A2、A3、A5、A7 未达标；A19 因这些失败和 PR 尚未合并而阻塞。其余 14 项通过。
+      truncated: false
+    completed_at: 2026-09-20T07:21:04.379Z
+  - goal_cycle: 5
+    iteration: 2
+    attempt: 1
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: 当前 CI 的 Python 3.10 明确失败：新增测试使用 Python 3.11 才有的
+        Task.cancelling；保持确认范围，修复测试兼容性后重新提交。尚未启动本轮独立 Verifier。
+      truncated: false
+    completed_at: 2026-09-20T07:29:42.448Z
+  - goal_cycle: 5
+    iteration: 3
+    attempt: 1
+    outcome: pass
+    unresolved_ids: []
+    summary:
+      text: 冻结候选 bd0d2c5 的 A1–A18 经独立源码、当前 Runtime/CI 和有效历史证据核对通过；#47 已合并至远端 main
+        ad11395a，四个来源 PR/head 与对应 issue 均已远端读回，A19 通过。
+      truncated: false
+    completed_at: 2026-09-20T07:53:58.503Z
+  - goal_cycle: 5
+    iteration: 3
+    attempt: 1
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: 用户本机验收发现模型信息误导、搜索来源区域布局和活动展开刷新抖动，要求核查并修复；保留原确认范围，恢复实现修复。
+      truncated: false
+    completed_at: 2026-09-20T08:22:36.014Z
+  - goal_cycle: 5
+    iteration: 4
+    attempt: 0
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Native Shape artifacts changed
+      truncated: false
+    completed_at: 2026-09-20T09:12:26.674Z
 history_overflow:
   dropped_entries: 0
   first_dropped_at: null

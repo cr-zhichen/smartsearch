@@ -3083,9 +3083,8 @@ async def search(
                 break
             primary_start = time.time()
             search_provider = _main_search_providers([candidate_config], fallback="auto")[0]
-            attempt_extra: dict[str, Any] = {}
+            attempt_extra: dict[str, Any] = {"model": candidate_config.get("model", "")}
             if candidate_config["provider"] == "openai-compatible":
-                attempt_extra["model"] = candidate_config["model"]
                 attempt_extra["model_role"] = candidate_config.get("model_role", "primary")
                 attempt_extra["stream"] = bool(candidate_config.get("stream", False))
                 attempt_extra["api_mode"] = candidate_config.get("api_mode", candidate_config.get("mode", "chat-completions"))
@@ -3381,6 +3380,7 @@ async def search(
         "session_id": session_id,
         "query": query,
         "platform": platform,
+        "provider": successful_main_config["provider"] if successful_main_config else "",
         "model": effective_model,
         "primary_api_mode": primary_api_mode,
         "content": answer,
@@ -5023,7 +5023,7 @@ async def _test_sciverse_connection() -> dict[str, Any]:
 
 
 async def _test_firecrawl_presence() -> dict[str, Any]:
-    """Firecrawl has no cheap authenticated endpoint confirmed, so report presence only.
+    """The current Firecrawl probe checks presence, without authenticating the key.
 
     Reported as `probe: presence` so callers can render "key present, unverified"
     instead of a green tick they have not earned.
@@ -5174,11 +5174,13 @@ async def test_provider_connection(
 
     recorded_as = provider
     probe_label = kind
+    probe_model = ""
     if kind.startswith("shared:"):
         recorded_as = kind.split(":", 1)[1]
         probe_label = "shared"
 
     async def _run() -> dict[str, Any]:
+        nonlocal probe_model
         if kind == "main":
             if overrides:
                 provider_config = _main_search_override_config(provider, overrides)
@@ -5189,6 +5191,8 @@ async def test_provider_connection(
                 if not configs:
                     return {"status": "not_configured", "message": f"{provider} 未配置"}
                 provider_config = configs[0]
+            probe_model = str(provider_config.get("model", ""))
+            activity.progress("provider.test", provider, probe_model)
             return await _safe_test_main_provider_connection(provider_config)
         probe = _LIVE_PROBES.get(recorded_as)
         if probe is None:
@@ -5218,6 +5222,7 @@ async def test_provider_connection(
     result = {
         "ok": status == "ok",
         "provider": provider,
+        "model": probe_model,
         "status": status,
         "message": str(test.get("message") or ""),
         "response_time_ms": test.get("response_time_ms", _elapsed_ms(start)),
@@ -5314,10 +5319,7 @@ async def doctor() -> dict[str, Any]:
     except Exception as e:
         info["jina_connection_test"] = {"status": "error", "message": sanitize_provider_error_message(e)}
 
-    if config.firecrawl_api_key:
-        info["firecrawl_connection_test"] = {"status": "configured", "message": "FIRECRAWL_API_KEY 已设置"}
-    else:
-        info["firecrawl_connection_test"] = {"status": "not_configured", "message": "FIRECRAWL_API_KEY 未设置，Firecrawl 功能不可用"}
+    info["firecrawl_connection_test"] = {**await _test_firecrawl_presence(), "probe": "presence"}
 
     try:
         info["zhipu_connection_test"] = await _test_zhipu_connection()

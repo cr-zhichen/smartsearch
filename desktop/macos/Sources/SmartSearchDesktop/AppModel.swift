@@ -916,8 +916,11 @@ final class AppModel: ObservableObject {
 
     func providerTestLabel(_ provider: String) -> String {
         let keys = Set(state?.fields.filter { $0.provider == provider }.map(\.key) ?? [])
-        return keys.contains { configDraft[$0] != nil || clearSecretKeys.contains($0) }
-            ? "用未保存的修改测试" : "测试"
+        let changed = keys.contains { configDraft[$0] != nil || clearSecretKeys.contains($0) }
+        if state?.raw["probe_kinds"]?[provider]?.stringValue == "presence" {
+            return changed ? "检查未保存的配置" : "检查配置"
+        }
+        return changed ? "用未保存的修改测试" : "测试"
     }
 
     private func present(_ error: Error) {
