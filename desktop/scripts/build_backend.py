@@ -108,7 +108,7 @@ def verify_asset_inventory(source_assets: Path, packaged_assets: Path) -> int:
     return len(source_files)
 
 
-def smoke_backend(executable: Path, run_directory: Path) -> None:
+def smoke_backend(executable: Path, run_directory: Path, expected_version: str) -> None:
     smoke_config = run_directory / "smoke-config"
     smoke_config.mkdir()
     requests = [
@@ -157,6 +157,8 @@ def smoke_backend(executable: Path, run_directory: Path) -> None:
     result = initialize.get("result")
     if not isinstance(result, dict) or result.get("protocol_version") != 1:
         raise RuntimeError("packaged backend initialize response did not confirm protocol_version 1")
+    if result.get("version") != expected_version:
+        raise RuntimeError("packaged backend reported a different version from the build source")
 
 
 def main() -> int:
@@ -207,11 +209,14 @@ def main() -> int:
     if not executable.is_file():
         raise RuntimeError(f"PyInstaller did not create the expected executable: {executable}")
 
+    # _get_version already prefers this fixed path over versioned dist-info
+    # directories that a previous Windows installation may have left behind.
+    (bundle_directory / "package.json").write_bytes((REPOSITORY_ROOT / "package.json").read_bytes())
     packaged_assets = find_packaged_assets(bundle_directory)
     metadata_directory = find_package_metadata(bundle_directory)
     asset_file_count = verify_asset_inventory(source_assets, packaged_assets)
     if args.smoke:
-        smoke_backend(executable, run_directory)
+        smoke_backend(executable, run_directory, project_version)
 
     result = {
         "run_directory": str(run_directory),

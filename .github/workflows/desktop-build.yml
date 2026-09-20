@@ -13,6 +13,11 @@ on:
         description: "Optional existing stable vX.Y.Z tag: build all packages and attach them with SHA256SUMS to that release"
         required: false
         default: ""
+      replace_existing_assets:
+        description: "Explicitly replace existing packages and checksums when repairing release packaging"
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: read
@@ -55,9 +60,9 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"
 
-      - name: Load lifecycle checks from the workflow revision
-        # Release code stays pinned to its tag; test harness fixes can be used
-        # from this workflow's immutable commit without moving a published tag.
+      - name: Load release tooling from the workflow revision
+        # Product source stays pinned to the tag; packaging and test fixes
+        # come from this workflow's immutable commit.
         if: inputs.release_tag != ''
         shell: pwsh
         env:
@@ -65,8 +70,8 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "$env:WORKFLOW_SHA"
           if ($LASTEXITCODE -ne 0) { throw "Unable to fetch the workflow revision" }
-          git restore --source="$env:WORKFLOW_SHA" -- desktop/tests/BackendLifecycleCheck
-          if ($LASTEXITCODE -ne 0) { throw "Unable to load the lifecycle test harness" }
+          git restore --source="$env:WORKFLOW_SHA" -- desktop/tests/BackendLifecycleCheck desktop/scripts/build_backend.py
+          if ($LASTEXITCODE -ne 0) { throw "Unable to load the release tooling" }
 
       - name: Verify backend stop and reconnect without a window
         shell: pwsh
@@ -135,6 +140,14 @@ jobs:
         env:
           PYTHON_BIN: ${{ steps.python.outputs.python-path }}
         run: '"$PYTHON_BIN" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"'
+
+      - name: Load backend packaging from the workflow revision
+        if: inputs.release_tag != ''
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git restore --source="$WORKFLOW_SHA" -- desktop/scripts/build_backend.py
 
       - name: Build unsigned test app and DMG
         run: >-
@@ -208,6 +221,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
+          REPLACE_EXISTING_ASSETS: ${{ inputs.replace_existing_assets }}
         run: |
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
-          gh release upload "$RELEASE_TAG" release-packages/*.exe release-packages/*.dmg release-packages/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY"
+          upload_args=()
+          if [[ "$REPLACE_EXISTING_ASSETS" == "true" ]]; then
+            upload_args+=(--clobber)
+          fi
+          gh release upload "$RELEASE_TAG" release-packages/*.exe release-packages/*.dmg release-packages/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" "${upload_args[@]}"

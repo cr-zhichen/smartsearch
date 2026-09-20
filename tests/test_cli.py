@@ -73,6 +73,16 @@ def test_version_flags_exit_successfully(monkeypatch, capsys):
         assert capsys.readouterr().out.strip() == "smart-search 9.9.9-test"
 
 
+def test_frozen_version_prefers_bundle_manifest_over_leftover_distribution(tmp_path, monkeypatch):
+    module = tmp_path / "backend/_internal/smart_search/cli.py"
+    module.parent.mkdir(parents=True)
+    monkeypatch.setattr(cli, "__file__", str(module))
+    monkeypatch.setattr(cli.metadata, "version", lambda _: "0.1.20")
+    assert cli._get_version() == "0.1.20"
+    (tmp_path / "backend/package.json").write_text('{"version":"0.1.21"}')
+    assert cli._get_version() == "0.1.21"
+
+
 def test_each_subcommand_help_exits_successfully(capsys):
     commands = [
         ["search", "--help"],

@@ -32,7 +32,9 @@ bash desktop/scripts/build-macos.sh --architecture arm64 --python python3
 
 ## CI 与发布边界
 
-`.github/workflows/desktop-build.yml` 在 pull request 或普通手动触发时构建 Windows x64/ARM64 与 macOS x86_64/arm64，并只上传短期测试产物。手动提供已有稳定 `release_tag` 时会检出该 tag，在临时 Windows runner 安装 Inno Setup，生成两种 Windows 安装器和两种 DMG；全部构建成功并核对 tag/版本/四个文件名后，才向已有 Release 上传包和 `SHA256SUMS.txt`。不创建 Release/Tag、不推送提交、不覆盖已上传附件、不签名或公证。CI 的结构与协议 smoke 通过只是对应架构的构建证据；干净机器安装、启动、卸载、键盘/缩放/主题、签名和 macOS 公证仍须分别验收。
+`.github/workflows/desktop-build.yml` 在 pull request 或普通手动触发时构建 Windows x64/ARM64 与 macOS x86_64/arm64，并只上传短期测试产物。手动提供已有稳定 `release_tag` 时会检出该 tag，在临时 Windows runner 安装 Inno Setup，生成两种 Windows 安装器和两种 DMG；全部构建成功并核对 tag/版本/四个文件名后，才向已有 Release 上传包和 `SHA256SUMS.txt`。不创建 Release/Tag、不推送提交，默认不覆盖已上传附件，不签名或公证。CI 的结构与协议 smoke 通过只是对应架构的构建证据；干净机器安装、启动、卸载、键盘/缩放/主题、签名和 macOS 公证仍须分别验收。
+
+修复既有发行版的打包时，产品源码仍固定在 tag，后端打包脚本与 Windows 检查工程取工作流本次提交。只有显式开启 `replace_existing_assets` 才替换附件和校验清单。桌面后端携带固定路径的 `package.json` 版本清单，避免覆盖升级遗留的旧版 `dist-info` 干扰版本读回。
 
 普通 Windows PR CI 仍只上传 self-contained `publish` 测试包。发行模式与本地安装器均清楚标为未签名测试包。
 
