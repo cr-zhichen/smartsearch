@@ -14,12 +14,12 @@ import sys
 import time
 import uuid
 
-import httpx
-
 from . import cli, service, ui_api
 from .activity import ActivityStore, RETENTION_SECONDS
 from .config import config
 from .desktop_catalog import command_arguments, command_catalog
+from .desktop_updates import Updates
+from .desktop_cli import discover, update_command
 from .provider_errors import sanitize_provider_error_message as sanitize_error_message
 
 PROTOCOL_VERSION = 1
@@ -45,6 +45,11 @@ def child_environment(directory):
             "SMART_SEARCH_CONFIG_DIR": directory, "PYTHONUTF8": "1"}
 
 
+def manager_environment(directory):
+    return {key: value for key, value in child_environment(directory).items()
+            if key not in {"PYTHONPATH", "PYTHONHOME", "VIRTUAL_ENV"}}
+
+
 class Backend:
     def __init__(self, emit):
         self.emit = emit
@@ -54,6 +59,7 @@ class Backend:
         self.stopping = False
         self.runs = {}
         self.cli_info = None
+        self.updates = Updates(self.event)
 
     def event(self, name, data):
         self.emit({"event": name, "generation": self.generation, "data": {**data, "generation": self.generation}})
@@ -104,14 +110,15 @@ class Backend:
     def state(self):
         data = ui_api.state()
         data.update(protocol_version=PROTOCOL_VERSION, version=cli._get_version(), generation=self.generation,
-                    config_dir=self.directory, commands=command_catalog(), activity=self.activity(), cli=self.cli_status())
+                    config_dir=self.directory, commands=command_catalog(), activity=self.activity(), cli=self.cli_status(),
+                    updates=self.updates.state)
         checks = {}
         for run in sorted(self.runs.values(), key=lambda item: item.get("finished_at", 0)):
             if run["command"] != "provider.test" or run["directory"] != self.directory or not run.get("finished_at"):
                 continue
             result = run["result"] or {}
             checks[run["provider"]] = {"status": result.get("status", run["status"]), "checked_at": run["finished_at"],
-                                       "source": "app", "scope": "draft", "probe": result.get("probe", "none"),
+                                       "source": "app", "scope": run["scope"], "probe": result.get("probe", "none"),
                                        "message": result.get("message", result.get("error", ""))}
         data["provider_checks"] = checks
         return data
@@ -123,43 +130,39 @@ class Backend:
         external = shutil.which("smart-search")
         data = {"bundled_path": bundled, "external_path": external, "version": cli._get_version(),
                 "external_version": None, "activity_protocol_version": 1, "external_activity_protocol_version": None,
+                "external_runtime_verified": False,
+                "manager": "none", "manager_label": "未安装独立 CLI", "can_update": False,
                 "external_status": "未发现外部 CLI" if not external else "版本及观测能力尚未验证"}
         if external:
             external_path = Path(external).resolve()
             probe_command = None
             if getattr(sys, "frozen", False) and external_path == Path(sys.executable).resolve():
                 probe_command = [str(external_path)]
+                data.update(manager="bundled", manager_label="随 App 更新", can_update=False)
             else:
                 # npm's public wrapper repairs a missing runtime on invocation. Discovery
                 # must never trigger that installer; probe an existing private Python only.
-                candidates = [external_path.parent / "node_modules/@konbakuyomu/smart-search",
-                              external_path.parent.parent / "@konbakuyomu/smart-search",
-                              external_path.parent.parent.parent]
-                for root in candidates:
-                    try:
-                        package = json.loads((root / "package.json").read_text(encoding="utf-8"))
-                    except (OSError, ValueError):
-                        continue
-                    if package.get("name") != "@konbakuyomu/smart-search":
-                        continue
-                    data["external_version"] = package.get("version")
+                data.update(discover(external, manager_environment(self.directory)))
+                if data.get("package_root"):
+                    root = Path(data["package_root"])
                     python = root / ".smart-search-python" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
                     if python.is_file():
                         probe_command = [str(python), "-m", "smart_search.cli"]
                     else:
                         data["external_status"] = "外部 npm CLI 的运行环境缺失；App 不会自动修复该安装。"
-                    break
             if probe_command is None:
                 self.cli_info = data
                 return data
-            env = {**child_environment(self.directory), "SMART_SEARCH_ACTIVITY_ENABLED": "false"}
+            env = {**manager_environment(self.directory), "SMART_SEARCH_ACTIVITY_ENABLED": "false"}
             try:
                 version = subprocess.run([*probe_command, "--version"], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                                         timeout=3, env=env, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                                         timeout=3, env=env, cwd=Path.home(), creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
                 if version.returncode == 0 and version.stdout.strip().startswith("smart-search "):
-                    data["external_version"] = version.stdout.strip().split()[-1]
+                    reported_version = version.stdout.strip().split()[-1]
+                    data["external_runtime_verified"] = data["external_version"] in {None, reported_version}
+                    data["external_version"] = reported_version
                 capabilities = subprocess.run([*probe_command, "--desktop-capabilities"], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                                              timeout=3, env=env, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+                                              timeout=3, env=env, cwd=Path.home(), creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
                 if capabilities.returncode == 0:
                     parsed = json.loads(capabilities.stdout)
                     data["external_activity_protocol_version"] = parsed.get("activity_protocol_version")
@@ -168,6 +171,63 @@ class Backend:
                 data["external_status"] = "外部 CLI 检查未完成；不能判断是否支持活动观测。"
         self.cli_info = data
         return data
+
+    def update_cli(self, params):
+        if params.get("confirm") is not True:
+            raise ValueError("只有明确点击更新 CLI 后才可执行。")
+        if self.updates.cli_task and not self.updates.cli_task.done():
+            return self.updates.state
+        latest = self.updates.state["cli"]
+        previous = dict(self.cli_status())
+        self.cli_info = None
+        current = self.cli_status()
+        identity = ("external_path", "resolved_path", "external_version", "manager", "manager_command", "manager_options")
+        if any(previous.get(key) != current.get(key) for key in identity):
+            raise ValueError("CLI 来源或版本刚刚发生变化，请刷新并重新检查更新。")
+        version = latest.get("latest_version")
+        if latest.get("error") or not latest.get("available") or params.get("version") != version or latest.get("current_version") != current.get("external_version"):
+            raise ValueError("请先成功检查当前 CLI 的目标版本。")
+        if any(run["status"] in {"running", "cancelling"} for run in self.runs.values()):
+            raise ValueError("请先等待 App 自有任务完成，再更新 CLI。")
+        observed = self.activity().get("runs", [])
+        if any(row.get("origin") == "cli" and row.get("status") in {"running", "cancelling"} for row in observed):
+            raise ValueError("当前配置目录有 CLI 正在运行，请等待它完成后更新。")
+        command = update_command(current, version)
+        self.updates.state["cli_update"] = {"status": "running", "target_version": version, "error": "",
+                                             "command": subprocess.list2cmdline(command), "log": "正在调用原管理器，请保持 App 打开。"}
+        self.updates.changed()
+        self.updates.cli_task = asyncio.create_task(self.execute_cli_update(command, version, current["manager"]))
+        return self.updates.state
+
+    async def execute_cli_update(self, command, version, manager):
+        state = self.updates.state["cli_update"]
+        log_path = self.updates.directory / "cli-update.log"
+        try:
+            self.updates.directory.mkdir(parents=True, exist_ok=True)
+            process = await asyncio.create_subprocess_exec(*command, cwd=Path.home(), env=manager_environment(self.directory),
+                stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
+            tail = ""
+            last_notice = 0
+            while chunk := await process.stdout.read(4096):
+                tail = sanitize_error_message(tail + chunk.decode("utf-8", errors="replace"))[-16000:]
+                if time.monotonic() - last_notice >= .5:
+                    state["log"] = tail
+                    self.updates.changed()
+                    last_notice = time.monotonic()
+            exit_code = await process.wait()
+            log_path.write_text(tail, encoding="utf-8")
+            self.cli_info = None
+            current = self.cli_status()
+            verified = exit_code == 0 and current.get("external_version") == version and current.get("manager") == manager and current.get("external_runtime_verified") is True
+            state.update(status="finished" if verified else "failed", exit_code=exit_code, log=tail,
+                         error="" if verified else "管理器执行失败，或 CLI 实际版本/运行环境未通过验证；请在原终端执行 smart-search --version 检查，再刷新状态。",
+                         actual_version=current.get("external_version"), log_path=str(log_path), cli=current)
+            self.updates.state["cli"].update(current_version=current.get("external_version"), available=not verified)
+        except (OSError, ValueError):
+            state.update(status="failed", error="无法完成 CLI 更新，请使用原管理器检查安装并刷新状态。")
+        finally:
+            self.updates.changed()
 
     def enable_cli(self, params):
         if params.get("confirm") is not True:
@@ -235,7 +295,8 @@ class Backend:
                    "sources": config.get_config_sources(), "config_dir": self.directory, "run_id": run_id}
         run = {"run_id": run_id, "status": "running", "result": None, "process": None, "cancel_requested": False,
                "directory": self.directory, "command": command, "started_at": time.time(),
-               "provider": params.get("provider", "") if method == "provider.test" else ""}
+               "provider": params.get("provider", "") if method == "provider.test" else "",
+               "scope": "draft" if params.get("overrides") else "current"}
         self.runs[run_id] = run
         run["task"] = asyncio.create_task(self.execute(run, payload))
         # Results contain user content only in memory; keep a bounded recent set.
@@ -314,6 +375,7 @@ class Backend:
 
     async def close(self):
         self.stopping = True
+        await self.updates.close()
         for run_id in list(self.runs):
             await self.cancel(run_id)
         await asyncio.gather(*(run["task"] for run in self.runs.values()), return_exceptions=True)
@@ -326,6 +388,9 @@ class Backend:
                 raise ValueError("App 与后端协议版本不匹配，请安装完整的同版本 App。")
             self.directory = absolute_directory(params["config_dir"]) if params.get("config_dir") else str(config.config_file.parent)
             self.initialized = True
+            self.updates.current_version = str(params.get("app_version", cli._get_version()))
+            self.updates.state["app"]["current_version"] = self.updates.current_version
+            self.updates.enabled = params.get("enable_update_checks") is True
         if not self.initialized:
             raise ValueError("请先完成协议版本握手。")
         if method == "profile.select":
@@ -333,6 +398,8 @@ class Backend:
             self.cli_info = None
         with config.snapshot(directory=self.directory):
             if method in {"initialize", "profile.select", "get_state"}:
+                if method == "get_state":
+                    self.cli_info = None
                 return self.state()
             if method == "config.preview":
                 values = dict(params.get("set", {}))
@@ -380,18 +447,34 @@ class Backend:
                 ActivityStore(self.directory).set_enabled(params["enabled"])
                 return {"ok": True, "enabled": params["enabled"]}
             if method == "cli.status":
+                self.cli_info = None
                 return self.cli_status()
             if method == "cli.enable":
                 return self.enable_cli(params)
+            if method == "cli.update":
+                return self.update_cli(params)
             if method == "app.update-check":
-                try:
-                    async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
-                        response = await client.get("https://api.github.com/repos/konbakuyomu/smartsearch/releases/latest")
-                        response.raise_for_status()
-                        release = response.json()
-                    return {"ok": True, "current_version": cli._get_version(), "latest_version": release["tag_name"], "url": RELEASE_URL}
-                except (httpx.HTTPError, KeyError, ValueError):
-                    return {"ok": False, "current_version": cli._get_version(), "error": "暂无可读取的正式发行版，请查看官方发行页面。", "url": RELEASE_URL}
+                self.cli_info = None
+                return self.updates.check(self.cli_status())
+            if method == "updates.state":
+                return self.updates.state
+            if method == "updates.auto":
+                if type(params.get("enabled")) is not bool:
+                    raise ValueError("enabled 必须为布尔值。")
+                self.updates.state["auto_check"] = params["enabled"]
+                self.updates.save()
+                self.updates.changed()
+                return self.updates.state
+            if method == "updates.download":
+                return self.updates.download()
+            if method == "updates.cancel":
+                return await self.updates.cancel_download()
+            if method == "updates.installer":
+                if any(run["status"] in {"running", "cancelling"} for run in self.runs.values()):
+                    raise ValueError("请先等待或取消 App 自有任务，再启动安装。")
+                if self.updates.state["cli_update"]["status"] == "running":
+                    raise ValueError("CLI 正在更新，请等待结果。")
+                return await self.updates.installer()
             if method == "shutdown":
                 await self.close()
                 return {"ok": True}
@@ -409,6 +492,7 @@ async def serve():
             await asyncio.sleep(1)
             if backend.initialized:
                 backend.event("activity", backend.activity())
+                backend.updates.auto_check(backend.cli_status())
 
     poller = asyncio.create_task(poll())
     try:

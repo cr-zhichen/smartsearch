@@ -27,6 +27,27 @@ internal static class ControlValueComparer
         first.IsChecked == second.IsChecked && string.Equals(first.Text?.Trim(), second.Text?.Trim(), StringComparison.Ordinal);
 }
 
+internal sealed class OperationState
+{
+    private readonly HashSet<string> _requests = [];
+    private readonly Dictionary<string, HashSet<string>> _runs = [];
+
+    public bool IsBusy(string key) => _requests.Contains(key) || _runs.Values.Any(keys => keys.Contains(key));
+    public bool Begin(string key)
+    {
+        if (IsBusy(key)) return false;
+        return _requests.Add(key);
+    }
+    public void EndRequest(string key) => _requests.Remove(key);
+    public void TrackRun(string key, string runId)
+    {
+        if (!_runs.TryGetValue(runId, out var keys)) _runs[runId] = keys = [];
+        keys.Add(key);
+    }
+    public void EndRun(string runId) => _runs.Remove(runId);
+    public void Clear() { _requests.Clear(); _runs.Clear(); }
+}
+
 internal static class ProtocolArguments
 {
     public static IReadOnlyList<string> Build(
@@ -88,5 +109,16 @@ internal static class ProtocolSelfTest
         Debug.Assert(arguments.SequenceEqual(["Smart Search", "--limit", "5", "--verbose", "--tag", "docs", "--tag", "web"]));
         Debug.Assert(ControlValueComparer.Equal(new CommandValue(null, false), new CommandValue(null, false)));
         Debug.Assert(!ControlValueComparer.Equal(new CommandValue(null, false), new CommandValue(null, true)));
+        var operations = new OperationState();
+        Debug.Assert(operations.Begin("test:exa"));
+        Debug.Assert(!operations.Begin("test:exa"));
+        operations.TrackRun("test:exa", "probe");
+        operations.EndRequest("test:exa");
+        Debug.Assert(operations.IsBusy("test:exa"));
+        Debug.Assert(operations.Begin("test:context7"));
+        operations.EndRun("probe");
+        Debug.Assert(operations.Begin("test:exa"));
+        operations.Clear();
+        Debug.Assert(!operations.IsBusy("test:exa") && !operations.IsBusy("test:context7"));
     }
 }

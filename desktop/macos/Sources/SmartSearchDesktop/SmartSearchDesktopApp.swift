@@ -61,6 +61,11 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if let model, model.isUpdatingCLI {
+            model.noticeMessage = "CLI 正在更新，请等待原管理器完成后退出。"
+            showMainWindow()
+            return .terminateCancel
+        }
         guard let model, model.hasOwnedActiveRuns else { return .terminateNow }
         model.presentQuitChoice { choice in
             switch choice {
@@ -88,6 +93,10 @@ private final class MainWindowDelegate: NSObject, NSWindowDelegate {
     weak var model: AppModel?
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if let model, model.isUpdatingCLI {
+            model.noticeMessage = "CLI 正在更新，请等待完成；可以最小化窗口。"
+            return false
+        }
         guard let model, model.hasOwnedActiveRuns else { return true }
         model.presentWindowCloseChoice(for: sender)
         return false

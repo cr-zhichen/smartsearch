@@ -75,7 +75,9 @@ internal sealed class BackendClient : IAsyncDisposable
         var result = await CallAsync("initialize", new
         {
             protocol_version = 1,
-            config_dir = configDirectory
+            config_dir = configDirectory,
+            app_version = _configuredPath is null ? System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) : "development",
+            enable_update_checks = _configuredPath is null
         }, cancellationToken);
 
         var protocol = GetInt(result, "protocol_version");

@@ -91,4 +91,49 @@ final class ProtocolModelTests: XCTestCase {
         XCTAssertEqual(state.providerChecks?["exa"]?["scope"]?.stringValue, "draft")
         XCTAssertEqual(state.providerChecks?["exa"]?["source"]?.stringValue, "app")
     }
+    func testOperationsStayBusyUntilWorkerFinishesAndResetAfterDisconnect() {
+        var state = OperationState()
+        XCTAssertTrue(state.begin("test:exa"))
+        XCTAssertFalse(state.begin("test:exa"))
+        state.track("probe", key: "test:exa")
+        state.endRequest("test:exa")
+        XCTAssertTrue(state.busyKeys.contains("test:exa"))
+        XCTAssertFalse(state.begin("test:exa"))
+        XCTAssertTrue(state.begin("test:context7"))
+        state.track("probe", key: "cancel:probe")
+        state.finish("probe")
+        XCTAssertFalse(state.busyKeys.contains("test:exa"))
+        XCTAssertFalse(state.busyKeys.contains("cancel:probe"))
+        state.reset()
+        XCTAssertTrue(state.busyKeys.isEmpty)
+    }
+
+    func testConfigurationMetadataPreservesOrderAndHints() throws {
+        let payload = Data("""
+        {"metadata":{"sections":[{"id":"diagnostics","order":8},{"id":"getting_started","order":1}],
+          "status_labels":{"closed":{"zh":"未冷却"}},
+          "fields":[{"key":"OPENAI_COMPATIBLE_MODEL","section":"getting_started","tier":"advanced",
+            "provider":"openai-compatible","default":"model-default","placeholder":"模型名称","capabilities":["main_search"]}]},
+          "capability_chains":{"main_search":["openai-compatible"]}}
+        """.utf8)
+        let state = try XCTUnwrap(DesktopState(try JSONDecoder().decode(JSONValue.self, from: payload)))
+        XCTAssertEqual(state.sections.map(\.id), ["getting_started", "diagnostics"])
+        XCTAssertTrue(state.fields[0].isAdvanced)
+        XCTAssertEqual(state.fields[0].placeholder, "模型名称")
+        XCTAssertEqual(state.effectiveValue(for: state.fields[0]), "model-default")
+        XCTAssertEqual(state.capabilityChains["main_search"], ["openai-compatible"])
+        XCTAssertEqual(state.statusLabels["closed"], "未冷却")
+    }
+    func testActivityPhasesUseCommandLabelsWhileRawEventsRemainAvailable() throws {
+        let value: JSONValue = .object([
+            "commands": .array([.object(["id": .string("regression"), "label": .string("离线回归检查")])]),
+            "metadata": .object(["status_labels": .object(["finished": .object(["zh": .string("已完成")])])])
+        ])
+        let state = try XCTUnwrap(DesktopState(value))
+        XCTAssertEqual(state.phaseLabel("provider.test"), "服务商测试")
+        XCTAssertEqual(state.phaseLabel("version"), "版本查询")
+        XCTAssertEqual(state.phaseLabel("regression"), "离线回归检查")
+        XCTAssertEqual(state.phaseLabel("finished"), "已完成")
+        XCTAssertEqual(state.phaseLabel("new_internal_phase"), "处理中")
+    }
 }

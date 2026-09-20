@@ -173,8 +173,11 @@ struct ConfigField: Identifiable, Hashable {
     let capabilities: [String]
     let keyURL: String?
     let docsURL: String?
+    let defaultValue: String
+    let placeholder: String
 
     var id: String { key }
+    var isAdvanced: Bool { tier == "advanced" || ["routing", "reliability", "diagnostics"].contains(section) }
     var isSecret: Bool {
         let normalized = kind.lowercased() + " " + key.lowercased()
         return normalized.contains("password") || normalized.contains("secret") || normalized.contains("api_key") || normalized.contains("token")
@@ -193,7 +196,50 @@ struct ConfigField: Identifiable, Hashable {
         capabilities = raw.array("capabilities").compactMap(\.stringValue)
         keyURL = raw.string("key_url")
         docsURL = raw.string("docs_url")
+        defaultValue = raw["default"]?.displayString ?? ""
+        placeholder = raw.string("placeholder") ?? defaultValue
     }
+}
+
+struct ConfigSection: Identifiable, Hashable {
+    let id: String
+    let order: Int
+    let label: String
+    let blurb: String
+
+    init?(_ value: JSONValue) {
+        guard let raw = value.objectValue, let id = raw.string("id") else { return nil }
+        self.id = id
+        order = raw["order"]?.integerValue ?? Int.max
+        label = raw.string("label_zh") ?? raw.string("label_en") ?? id
+        blurb = raw.string("blurb_zh") ?? raw.string("blurb_en") ?? ""
+    }
+}
+
+struct ProviderFieldGroup: Identifiable {
+    let id: String
+    let fields: [ConfigField]
+
+    var primaryCapability: String? {
+        ["main_search", "docs_search", "web_fetch"].first { capability in
+            fields.contains { $0.tier == "essential" && $0.capabilities.contains(capability) }
+        }
+    }
+}
+
+struct OperationState {
+    private var requests: Set<String> = []
+    private var runs: [String: Set<String>] = [:]
+    var busyKeys: Set<String> { requests.union(runs.values.reduce(into: Set<String>()) { $0.formUnion($1) }) }
+
+    mutating func begin(_ key: String) -> Bool {
+        guard !busyKeys.contains(key) else { return false }
+        return requests.insert(key).inserted
+    }
+    mutating func endRequest(_ key: String) { requests.remove(key) }
+    mutating func track(_ runID: String, key: String) { runs[runID, default: []].insert(key) }
+    mutating func finish(_ runID: String) { runs.removeValue(forKey: runID) }
+    mutating func reset() { requests.removeAll(); runs.removeAll() }
 }
 
 struct CommandField: Identifiable, Hashable {
@@ -368,10 +414,13 @@ struct DesktopState {
     let savedValues: [String: JSONValue]
     let sources: [String: JSONValue]
     let fields: [ConfigField]
+    let sections: [ConfigSection]
     let commands: [CommandCatalogEntry]
     let skillTargets: [SkillTarget]
     let minimumProfile: JSONValue?
     let capabilityStatus: JSONValue?
+    let capabilityChains: [String: [String]]
+    let statusLabels: [String: String]
     let providerHealth: JSONValue?
     let providerChecks: JSONValue?
     let cli: JSONValue?
@@ -388,10 +437,13 @@ struct DesktopState {
         savedValues = raw.object("saved_values")
         sources = raw.object("sources")
         fields = raw.object("metadata").array("fields").compactMap(ConfigField.init)
+        sections = raw.object("metadata").array("sections").compactMap(ConfigSection.init).sorted { $0.order < $1.order }
         commands = raw.array("commands").compactMap(CommandCatalogEntry.init)
         skillTargets = raw.array("skill_targets").compactMap(SkillTarget.init)
         minimumProfile = raw["minimum_profile"]
         capabilityStatus = raw["capability_status"]
+        capabilityChains = raw.object("capability_chains").mapValues { $0.arrayValue?.compactMap(\.stringValue) ?? [] }
+        statusLabels = raw.object("metadata").object("status_labels").mapValues { $0["zh"]?.stringValue ?? "状态未知" }
         providerHealth = raw["provider_health"]
         providerChecks = raw["provider_checks"]
         cli = raw["cli"]
@@ -407,7 +459,7 @@ struct DesktopState {
     }
 
     func effectiveValue(for field: ConfigField) -> String {
-        values[field.key]?.displayString ?? ""
+        values[field.key]?.displayString ?? field.defaultValue
     }
 
     func savedValue(for field: ConfigField) -> String {
@@ -418,8 +470,24 @@ struct DesktopState {
         sources[field.key]?.displayString ?? "unknown"
     }
 
+    func phaseLabel(_ phase: String) -> String {
+        ["provider.test": "服务商测试", "version": "版本查询", "skills.install": "安装 / 更新 Skills",
+         "started": "已启动", "planning": "制定计划"][phase]
+            ?? commands.first { $0.id == phase }?.label
+            ?? statusLabels[phase]
+            ?? "处理中"
+    }
+
     func activityRuns() -> [ActivityRun] {
         raw["activity"]?["runs"]?.arrayValue?.compactMap(ActivityRun.init) ?? []
+    }
+
+    var providerGroups: [ProviderFieldGroup] {
+        var seen: Set<String> = []
+        return fields.compactMap { field in
+            guard let provider = field.provider, !provider.isEmpty, seen.insert(provider).inserted else { return nil }
+            return ProviderFieldGroup(id: provider, fields: fields.filter { $0.provider == provider })
+        }
     }
 }
 

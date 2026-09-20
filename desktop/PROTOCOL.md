@@ -21,7 +21,7 @@ Methods below return result objects. Ordinary business errors have `ok:false`.
 | Method | Parameters | Result |
 | --- | --- | --- |
 | `ping` | `{}` | `protocol_version`, `version`, `generation` |
-| `initialize` | `protocol_version:1`, optional absolute `config_dir` | full state below |
+| `initialize` | `protocol_version:1`, optional absolute `config_dir`, `app_version`, `enable_update_checks:true` for production native clients | full state below |
 | `get_state` | `{}` | full state, local/read-only |
 | `profile.select` | absolute `config_dir` | full state |
 | `config.preview` | `set` object, `unset` key array | `ok`, `minimum_profile_ok`, `missing`, `capability_status` |
@@ -39,13 +39,22 @@ Methods below return result objects. Ordinary business errors have `ok:false`.
 | `activity.details` | `run_id`, optional absolute `config_dir` | `ok`, `run`, metadata-only `events`, `events_truncated` |
 | `cli.status` | `{}` | `bundled_path`, `external_path`, `version`, external version or null |
 | `cli.enable` | `confirm:true`, sent only by explicit user action | `ok`, `path`, `message`; refuses command conflicts |
-| `app.update-check` | `{}`; only user initiated | `ok`, `current_version`, `latest_version`, `url`, `error` |
+| `app.update-check` | `{}`; explicit manual check | update state immediately; completion via `updates` event |
+| `updates.state` | `{}` | latest update state (no network) |
+| `updates.auto` | `enabled` boolean | save automatic-check preference, return update state |
+| `updates.download` | `{}`; explicit click | pinned compatible package download; state/events report bytes and SHA256 verification |
+| `updates.cancel` | `{}` | cancel the package download; terminal event follows |
+| `updates.installer` | `{}`; explicit install/open click | reverified absolute installer `path`, `version`; refuses active owned runs/CLI update |
+| `cli.update` | `confirm:true`, exact checked `version` | call only the identified npm/mise manager; terminal event includes actual version and bounded sanitized log |
 | `shutdown` | `{}` | `ok`; cancels own work and exits |
 
 `run.start` catalog identifiers can include subcommands, e.g.
 `model/current`. `diagnose` selects its provider via its catalog fields. Arguments do not repeat command
 tokens. A secret configuration mutation uses `config.apply`, not CLI arguments.
-`provider.test` always tests a draft snapshot; no health changes are persisted.
+`provider.test` tests a snapshot of the effective configuration at click time,
+merged with any actual edits. No configuration or health changes are persisted.
+Its completion scope is `current` when overrides are empty and `draft` when edits
+are supplied. UI labels say “测试” or “用未保存的修改测试” accordingly.
 
 Full state extends `smart_search.ui_api.state()`:
 
@@ -54,14 +63,15 @@ Full state extends `smart_search.ui_api.state()`:
 - `minimum_profile` (`ok/required/missing`), `capability_status`,
   `capability_chains`, `provider_health`, `provider_profiles`, `probe_kinds`;
 - `provider_checks`: last in-memory test per provider for this App session, with
-  `status/checked_at/source/scope/probe/message`. Scope is `draft`, and a draft
+  `status/checked_at/source/scope/probe/message`. Scope is `current` or `draft`, and a draft
   test must never be described as a verified saved configuration. No entry means
   not tested during this session; cooldown `closed` alone is not a successful probe.
-- `metadata.fields`: key, section, tier, kind, label_zh/en, help_zh/en, default,
+- `metadata.fields`: key, section, tier, kind, label_zh/en, help_zh/en, default, placeholder,
   choices, provider, capabilities, key_url, docs_url; sections include
-  getting_started, providers, routing, reliability, diagnostics;
+  getting_started, providers, routing, reliability, diagnostics. Consume
+  `metadata.sections` order, label_zh/en and blurb_zh/en instead of alphabetic ordering;
 - `skill_targets`: id, label, default;
-- `protocol_version:1`, `version`, `generation`, `config_dir`, `cli`,
+- `protocol_version:1`, `version`, `generation`, `config_dir`, `cli`, `updates`,
   `commands` (catalog below), `activity` (activity.list result).
 
 Catalog entry: `id`, `label`, `description`, `experimental`, `fields`.
@@ -97,3 +107,26 @@ plans, lists, diagnostics and sources readable without a second native formatter
 This additive desktop-only field is not added to public CLI JSON output.
 Close with own active work offers background/stop-and-quit/return. Background
 has a tray/menu-bar entry. Never terminate external CLI processes.
+
+Update state contains `checking/auto_check/last_attempt/last_success/error`,
+independent `app` and `cli` checked versions, `download` and `cli_update` states.
+The backend emits `updates` when these change. Automatic checks require native
+handshake opt-in, run at startup when due and at most once per 24 hours, and stop
+with the App. Checking never downloads or installs. Cached results retain their
+time and errors; package actions require successful fresh metadata.
+
+Only stable official GitHub assets matching the system and architecture with a
+SHA256 are downloadable. The pinned asset includes ID/version/size/hash; streamed
+bytes go to a temporary file and rename only after verification. `ready` means
+downloaded, not installed. Hash verification is not system code signing. Windows
+handles drafts and owned tasks, stops its backend and releases the installer
+presence mutex before opening the verified Inno installer and exiting; macOS opens
+the verified DMG and explains normal installation. Neither replaces files itself.
+
+`cli.status` and full refresh re-resolve the effective entry. Ownership fields
+include `manager/manager_label/can_update/resolved_path/update_note`; unknown,
+project, ambiguous, or unsupported constrained installations remain manual.
+CLI updates use the original manager with an exact checked version, no shell or
+bulk upgrade. The frontends prevent quit/reconnect during the manager operation;
+no forced cancellation or rollback is promised. Readback must confirm the target
+effective version before `cli_update.status` becomes `finished`.

@@ -189,13 +189,27 @@ def _one_line(value: Any, limit: int = 160) -> str:
     return text
 
 
-def _md_cell(value: Any) -> str:
-    return _one_line(value).replace("|", r"\|")
+MD_CELL_LIMIT = 160
 
 
-def _markdown_table(headers: list[str], rows: list[list[Any]]) -> list[str]:
+def _md_cell(value: Any, limit: int = MD_CELL_LIMIT) -> str:
+    return _one_line(value, limit).replace("|", r"\|")
+
+
+def _markdown_table(
+    headers: list[str],
+    rows: list[list[Any]],
+    exact_headers: set[str] | None = None,
+) -> list[str]:
+    """Render a Markdown table.
+
+    `exact_headers` names columns holding exact identifiers (paths, URLs, IDs)
+    instead of prose. Those cells are never capped: a truncated path points at
+    a location that does not exist, which is worse than a wide table.
+    """
     if not rows:
         return []
+    cell_limits = [0 if header in (exact_headers or set()) else MD_CELL_LIMIT for header in headers]
     lines = [
         "| " + " | ".join(_md_cell(header) for header in headers) + " |",
         "| " + " | ".join("---" for _ in headers) + " |",
@@ -203,7 +217,7 @@ def _markdown_table(headers: list[str], rows: list[list[Any]]) -> list[str]:
     for row in rows:
         cells = list(row)[: len(headers)]
         cells.extend([""] * (len(headers) - len(cells)))
-        lines.append("| " + " | ".join(_md_cell(cell) for cell in cells) + " |")
+        lines.append("| " + " | ".join(_md_cell(cell, limit) for cell, limit in zip(cells, cell_limits)) + " |")
     return lines
 
 
@@ -397,7 +411,13 @@ def _format_result_markdown(command: str, data: dict[str, Any], title: str) -> s
     lines.append("")
     if results:
         lines.append("## Results")
-        lines.extend(_markdown_table(["#", "Title", "URL / ID", "Summary"], _result_rows(results)))
+        lines.extend(
+            _markdown_table(
+                ["#", "Title", "URL / ID", "Summary"],
+                _result_rows(results),
+                exact_headers={"URL / ID"},
+            )
+        )
     elif data.get("content"):
         lines.append("## Content")
         lines.extend(_markdown_code_block(data.get("content")))
@@ -512,7 +532,7 @@ def _format_doctor_markdown(data: dict[str, Any]) -> str:
         for key in sorted(config_sources):
             rows.append([key, config_sources.get(key), data.get(key, "-")])
         lines.extend(["", "## Configuration Values"])
-        lines.extend(_markdown_table(["Key", "Source", "Value"], rows))
+        lines.extend(_markdown_table(["Key", "Source", "Value"], rows, exact_headers={"Value"}))
 
     capability_status = data.get("capability_status") or {}
     if capability_status:
@@ -600,6 +620,7 @@ def _format_doctor_markdown(data: dict[str, Any]) -> str:
         ("tavily", data.get("tavily_connection_test") or {}),
         ("jina", data.get("jina_connection_test") or {}),
         ("firecrawl", data.get("firecrawl_connection_test") or {}),
+        ("tinyfish", data.get("tinyfish_connection_test") or {}),
         ("zhipu", data.get("zhipu_connection_test") or {}),
         ("zhipu-mcp", data.get("zhipu_mcp_connection_test") or {}),
         ("context7", data.get("context7_connection_test") or {}),
@@ -802,6 +823,8 @@ def _format_route_markdown(data: dict[str, Any]) -> str:
             lines.extend(_markdown_code_block("\n".join(str(command) for command in commands)))
     if data.get("degraded_reason"):
         lines.append(f"Degraded reason: {data.get('degraded_reason')}")
+    if data.get("intent_router_mode") == "jev":
+        lines.append("Selected channels: " + ", ".join(item["id"] for item in data.get("selected_channels", [])))
     reasons = data.get("reasons") or []
     if reasons:
         lines.extend(["", "## Reasons"])
@@ -904,7 +927,7 @@ def _format_config_markdown(data: dict[str, Any]) -> str:
     values = data.get("values") or {}
     if values:
         lines.extend(["", "## Values"])
-        lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in values.items()]))
+        lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in values.items()], exact_headers={"Value"}))
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
 
@@ -939,7 +962,7 @@ def _format_setup_markdown(data: dict[str, Any]) -> str:
     saved = data.get("saved") or data.get("values") or {}
     if saved:
         lines.extend(["", "## Saved Values"])
-        lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in saved.items()]))
+        lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in saved.items()], exact_headers={"Value"}))
     skills = data.get("skills") or {}
     if isinstance(skills, dict) and skills:
         installed = skills.get("installed") or []
@@ -974,7 +997,13 @@ def _format_skills_markdown(data: dict[str, Any]) -> str:
                 ]
             )
         lines.extend(["", "## Targets"])
-        lines.extend(_markdown_table(["Target", "Status", "Files", "Installed", "Hash match", "Extra", "Path"], rows))
+        lines.extend(
+            _markdown_table(
+                ["Target", "Status", "Files", "Installed", "Hash match", "Extra", "Path"],
+                rows,
+                exact_headers={"Path"},
+            )
+        )
     legacy_rows = []
     for item in targets:
         for legacy in item.get("legacy_locations") or []:
@@ -993,10 +1022,22 @@ def _format_skills_markdown(data: dict[str, Any]) -> str:
             "## Legacy Locations",
             "Reported read-only; setup and update write only to the canonical target.",
         ])
-        lines.extend(_markdown_table(["Target", "Status", "Installed", "Extra", "Path"], legacy_rows))
+        lines.extend(
+            _markdown_table(
+                ["Target", "Status", "Installed", "Extra", "Path"],
+                legacy_rows,
+                exact_headers={"Path"},
+            )
+        )
     if data.get("failed"):
         lines.extend(["", "## Failed"])
-        lines.extend(_markdown_table(["Target", "Path", "Error"], [[item.get("target"), item.get("path"), item.get("error")] for item in data.get("failed", [])]))
+        lines.extend(
+            _markdown_table(
+                ["Target", "Path", "Error"],
+                [[item.get("target"), item.get("path"), item.get("error")] for item in data.get("failed", [])],
+                exact_headers={"Path"},
+            )
+        )
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
 
@@ -1026,6 +1067,11 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
             lines.extend(_error_lines(data))
             return "\n".join(lines).strip() + "\n"
         lines = [data.get("content", "")]
+        if data.get("primary_api_mode") == "jev":
+            assessment = data.get("evidence_assessment", {})
+            lines.append(f"\nEvidence: {assessment.get('status', 'unknown')}")
+            for warning in data.get("warnings", []):
+                lines.append(f"Warning: {warning}")
         lines.extend(_search_timeout_lines(data))
         lines.extend(_provider_notice_lines(data))
         primary_sources = data.get("primary_sources") or []
@@ -1537,6 +1583,7 @@ def _display_provider(provider: str, lang: str) -> str:
         "jina": "Jina Reader",
         "tavily": "Tavily",
         "firecrawl": "Firecrawl",
+        "tinyfish": "TinyFish",
         "anysearch": "AnySearch",
         "sciverse": "Sciverse",
     }
@@ -2227,7 +2274,7 @@ def _prompt_web_fetch(values: dict[str, str], current: dict[str, str], lang: str
             "选择 web_fetch provider",
             "Choose web_fetch providers",
         ),
-        ["tavily", "jina", "firecrawl"],
+        ["tavily", "jina", "firecrawl", "tinyfish"],
         default_selected,
         lang,
     )
@@ -2252,6 +2299,13 @@ def _prompt_web_fetch(values: dict[str, str], current: dict[str, str], lang: str
             lang=lang,
         )
         _prompt_firecrawl_api_url(values, current, lang)
+    if "tinyfish" in selected:
+        values["TINYFISH_API_KEY"] = _prompt_value(
+            "TINYFISH_API_KEY",
+            "TinyFish API key",
+            current.get("TINYFISH_API_KEY", ""),
+            lang=lang,
+        )
 
 
 def _prompt_optional_enhancements(values: dict[str, str], current: dict[str, str], lang: str) -> None:
@@ -2300,6 +2354,7 @@ def _prompt_optional_enhancements(values: dict[str, str], current: dict[str, str
 def _has_intent_router_config(values: dict[str, str]) -> bool:
     keys = {
         "SMART_SEARCH_INTENT_ROUTER",
+        "TYPESAFE_API_KEY",
         "INTENT_EMBEDDING_API_URL",
         "INTENT_EMBEDDING_API_KEY",
         "INTENT_EMBEDDING_MODEL",
@@ -2330,7 +2385,7 @@ def _prompt_intent_router(values: dict[str, str], current: dict[str, str], lang:
         return
 
     mode_default = values.get("SMART_SEARCH_INTENT_ROUTER") or current.get("SMART_SEARCH_INTENT_ROUTER") or "hybrid"
-    if mode_default not in {"hybrid", "rules", "off"}:
+    if mode_default not in {"hybrid", "rules", "off", "jev"}:
         mode_default = "hybrid"
     mode = _prompt_select(
         _t(lang, "选择 intent router 模式", "Choose intent router mode"),
@@ -2338,10 +2393,34 @@ def _prompt_intent_router(values: dict[str, str], current: dict[str, str], lang:
             {"name": _t(lang, "hybrid: 规则 + embeddings + classifier，缺配置自动降级 rules", "hybrid: rules + embeddings + classifier, degrading to rules when optional config is missing"), "value": "hybrid"},
             {"name": _t(lang, "rules: 只用本地规则", "rules: local rules only"), "value": "rules"},
             {"name": _t(lang, "off: 关闭额外意图路由", "off: disable additional intent routing"), "value": "off"},
+            {"name": _t(lang, "jev: 多渠道搜索、按结果补搜、可选结果过滤", "jev: multiple channels, evidence-driven follow-up, optional filtering"), "value": "jev"},
         ],
         mode_default,
     )
     values["SMART_SEARCH_INTENT_ROUTER"] = mode
+    if mode == "jev":
+        values["TYPESAFE_API_KEY"] = _prompt_value(
+            "TYPESAFE_API_KEY", "TypeSafe API key", merged.get("TYPESAFE_API_KEY", ""), optional=False, lang=lang,
+        )
+        values["SMART_SEARCH_JEV_FILTER_RESULTS"] = str(_prompt_yes_no(
+            _t(lang, "使用 Jev 剔除无关结果?", "Use Jev to remove irrelevant evidence?"),
+            default=merged.get("SMART_SEARCH_JEV_FILTER_RESULTS", "false").lower() in {"true", "1", "yes", "on"},
+        )).lower()
+        synthesis_default = merged.get("SMART_SEARCH_JEV_SYNTHESIZE", "false").strip().lower()
+        if synthesis_default in {"1", "yes", "on"}:
+            synthesis_default = "true"
+        if synthesis_default not in {"true", "false", "auto"}:
+            synthesis_default = "false"
+        values["SMART_SEARCH_JEV_SYNTHESIZE"] = _prompt_select(
+            _t(lang, "选择主模型汇总模式", "Choose main-model synthesis mode"),
+            [
+                {"name": _t(lang, "true: 使用主模型汇总", "true: synthesize with the main model"), "value": "true"},
+                {"name": _t(lang, "false: 直接返回证据", "false: return evidence directly"), "value": "false"},
+                {"name": _t(lang, "auto: 由 Jev 判断是否需要汇总", "auto: let Jev decide whether synthesis is needed"), "value": "auto"},
+            ],
+            synthesis_default,
+        )
+        return
     if mode != "hybrid":
         return
 
@@ -2523,7 +2602,7 @@ def _run_advanced_setup_prompts(values: dict[str, str], current: dict[str, str],
         ("SMART_SEARCH_VALIDATION_LEVEL", "Validation level (fast/balanced/strict)", True),
         ("SMART_SEARCH_FALLBACK_MODE", "Fallback mode (auto/off)", True),
         ("SMART_SEARCH_MINIMUM_PROFILE", "Minimum profile (standard/off)", True),
-        ("SMART_SEARCH_INTENT_ROUTER", "Intent router mode (hybrid/rules/off)", True),
+        ("SMART_SEARCH_INTENT_ROUTER", "Intent router mode (hybrid/rules/off/jev)", True),
         ("SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS", "Optional-provider failure cooldown seconds (0 disables)", True),
         ("SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD", "Consecutive soft failures before cooldown", True),
         ("INTENT_EMBEDDING_API_URL", "Intent embedding API URL", True),
@@ -2553,6 +2632,10 @@ def _run_advanced_setup_prompts(values: dict[str, str], current: dict[str, str],
         ("TAVILY_API_KEY", "Tavily API key", True),
         ("FIRECRAWL_API_URL", "Firecrawl API URL", True),
         ("FIRECRAWL_API_KEY", "Firecrawl API key", True),
+        ("TINYFISH_API_KEY", "TinyFish API key", True),
+        ("TINYFISH_SEARCH_API_URL", "TinyFish Search API URL", True),
+        ("TINYFISH_FETCH_API_URL", "TinyFish Fetch API URL", True),
+        ("TINYFISH_TIMEOUT_SECONDS", "TinyFish timeout seconds", True),
         ("ANYSEARCH_API_URL", "AnySearch MCP API URL", True),
         ("ANYSEARCH_API_KEY", "AnySearch API key", True),
         ("ANYSEARCH_TIMEOUT_SECONDS", "AnySearch timeout seconds", True),
@@ -2575,6 +2658,8 @@ def _run_advanced_setup_prompts(values: dict[str, str], current: dict[str, str],
         elif key in {"ZHIPU_MCP_SEARCH_API_URL", "ZHIPU_MCP_READER_API_URL", "ZHIPU_MCP_ZREAD_API_URL"}:
             value = _normalize_custom_base_url(value)
         elif key == "SCIVERSE_API_URL":
+            value = _normalize_custom_base_url(value)
+        elif key in {"TINYFISH_SEARCH_API_URL", "TINYFISH_FETCH_API_URL"}:
             value = _normalize_custom_base_url(value)
         values[key] = value
 
@@ -2602,7 +2687,7 @@ async def _run_async_impl(args: argparse.Namespace) -> int:
         data = await service.search(args.query, **search_kwargs)
         return _print_result("search", data, args.format, args.output)
     if args.command == "route":
-        data = await service.route(args.query, validation=args.validation, mode=args.router_mode)
+        data = await service.route(args.query, validation=args.validation, mode=args.router_mode, allow_remote=args.remote)
         return _print_result("route", data, args.format, args.output)
     if args.command == "route-calibrate":
         data = await service.route_calibrate(models=args.models)
@@ -2969,6 +3054,10 @@ def _run_setup(args: argparse.Namespace) -> int:
         "TAVILY_API_KEY": args.tavily_key,
         "FIRECRAWL_API_URL": _normalize_firecrawl_api_url(args.firecrawl_api_url),
         "FIRECRAWL_API_KEY": args.firecrawl_key,
+        "TINYFISH_API_KEY": args.tinyfish_key,
+        "TINYFISH_SEARCH_API_URL": _normalize_custom_base_url(args.tinyfish_search_api_url),
+        "TINYFISH_FETCH_API_URL": _normalize_custom_base_url(args.tinyfish_fetch_api_url),
+        "TINYFISH_TIMEOUT_SECONDS": args.tinyfish_timeout,
         "ANYSEARCH_API_URL": _normalize_custom_base_url(args.anysearch_api_url),
         "ANYSEARCH_API_KEY": args.anysearch_key,
         "ANYSEARCH_TIMEOUT_SECONDS": args.anysearch_timeout,
@@ -3052,12 +3141,14 @@ def _run_setup(args: argparse.Namespace) -> int:
             _write_skill_install_summary(skill_result, lang)
         _write_setup_status(final_status, lang, final=True)
         missing = [capability for capability in ("main_search", "docs_search", "web_fetch") if not final_status[capability]["ok"]]
+        if service.config.intent_router_mode == "jev":
+            missing = service.validate_minimum_profile().get("missing", [])
         if missing:
             _write_stderr(
                 _t(
                     lang,
-                    "\n当前配置尚未满足 standard 最低配置。\nsearch / doctor 会 fail closed，不会假装可用。\n",
-                    "\nThe current config does not satisfy the standard minimum profile.\nsearch / doctor will fail closed instead of pretending to work.\n",
+                    "\n当前配置尚未满足所选模式的最低配置。\nsearch / doctor 会报告缺失配置。\n",
+                    "\nThe current config does not satisfy the selected mode's minimum profile.\nsearch / doctor will fail closed and report missing configuration.\n",
                 )
             )
         else:
@@ -3081,9 +3172,12 @@ def _run_regression() -> int:
         "tests/test_service.py",
         "tests/test_providers_new.py",
         "tests/test_jina_provider.py",
+        "tests/test_tinyfish_provider.py",
+        "tests/test_tinyfish_service.py",
         "tests/test_zhipu_mcp_provider.py",
         "tests/test_smoke.py",
         "tests/test_intent_router.py",
+        "tests/test_jev.py",
         "tests/test_regression.py",
         "tests/test_release_workflow.py",
     ]
@@ -3136,9 +3230,10 @@ def build_parser() -> argparse.ArgumentParser:
     route_parser.set_defaults(command="route")
     route_parser.add_argument("query")
     route_parser.add_argument("--validation", choices=["fast", "balanced", "strict"], default="")
+    route_parser.add_argument("--remote", action="store_true", help="Explicitly allow remote routing judgments; may incur API charges. No retrieval is executed.")
     route_parser.add_argument(
         "--router-mode",
-        choices=["hybrid", "rules", "off"],
+        choices=["hybrid", "rules", "off", "jev"],
         default="",
         help="Override SMART_SEARCH_INTENT_ROUTER for this diagnostic call.",
     )
@@ -3656,6 +3751,10 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--tavily-key", default="", help="Save TAVILY_API_KEY.")
     setup_parser.add_argument("--firecrawl-api-url", default="", help="Save FIRECRAWL_API_URL.")
     setup_parser.add_argument("--firecrawl-key", default="", help="Save FIRECRAWL_API_KEY.")
+    setup_parser.add_argument("--tinyfish-key", default="", help="Save TINYFISH_API_KEY.")
+    setup_parser.add_argument("--tinyfish-search-api-url", default="", help="Save TINYFISH_SEARCH_API_URL.")
+    setup_parser.add_argument("--tinyfish-fetch-api-url", default="", help="Save TINYFISH_FETCH_API_URL.")
+    setup_parser.add_argument("--tinyfish-timeout", default="", help="Save TINYFISH_TIMEOUT_SECONDS.")
     setup_parser.add_argument("--anysearch-api-url", default="", help="Save ANYSEARCH_API_URL.")
     setup_parser.add_argument("--anysearch-key", default="", help="Save ANYSEARCH_API_KEY.")
     setup_parser.add_argument("--anysearch-timeout", default="", help="Save ANYSEARCH_TIMEOUT_SECONDS.")

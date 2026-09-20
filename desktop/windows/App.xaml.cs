@@ -30,6 +30,15 @@ public partial class App : Application
         instance.Activated += OnRedirectedActivation;
     }
 
+    internal static void ReleaseInstallerMutex()
+    {
+        _singleInstanceMutex?.Dispose();
+        _singleInstanceMutex = null;
+    }
+
+    internal static void RestoreInstallerMutex() =>
+        _singleInstanceMutex ??= new Mutex(initiallyOwned: false, Program.MutexName);
+
     private static void OnRedirectedActivation(object? sender, AppActivationArguments args)
     {
         if (_window is MainWindow window)

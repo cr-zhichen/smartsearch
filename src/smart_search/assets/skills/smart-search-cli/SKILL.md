@@ -32,7 +32,7 @@ Use the local `smart-search` command as the default execution layer for web rese
 ## Routing
 
 - `search`: first hop for realtime, broad exploration, community signals, multi-source summaries, and routing metadata.
-- `route`: explain capability routing without executing providers.
+- `route`: explain capability routing locally without executing providers; `--router-mode jev --remote` explicitly opts into a potentially billable TypeSafe judgment.
 - `research`: live Deep Research executor for end-to-end plan, discovery, fetch/read, gap check, and evidence-only synthesis.
 - `deep`: offline Deep Research planner; it does not run providers, fetch pages, or replace default `search`.
 - `zhipu-search`: Chinese-language, domestic China, policy/regulatory, announcements, current news, or China-local source discovery.

@@ -25,5 +25,7 @@ node_modules/
 .comet/current-change.json
 desktop/windows/**/bin/
 desktop/windows/**/obj/
+desktop/tests/**/bin/
+desktop/tests/**/obj/
 desktop/macos/.build/
 desktop/macos/.swiftpm/
