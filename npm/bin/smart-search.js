@@ -50,6 +50,7 @@ const child = spawn(
     env: {
       ...process.env,
       SMART_SEARCH_PACKAGE_ROOT: packageRoot,
+      SMART_SEARCH_NODE_PATH: process.execPath,
       PYTHONIOENCODING: process.env.PYTHONIOENCODING || "utf-8",
       PYTHONUTF8: process.env.PYTHONUTF8 || "1"
     },

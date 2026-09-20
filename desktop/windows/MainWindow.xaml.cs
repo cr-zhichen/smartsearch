@@ -49,13 +49,14 @@ public sealed partial class MainWindow : Window
     private JsonElement? _state;
     private JsonElement? _updates;
     private JsonElement? _environment;
+    private JsonElement? _skills;
+    private TextBlock? _skillSummary, _skillResult;
+    private ToggleSwitch? _autoSkillsSwitch;
+    private bool _settingAutoSkills, _skillSelectionInitialized;
+    private readonly HashSet<string> _selectedSkillTargets = [];
     private StackPanel? _environmentSteps;
     private TextBlock? _environmentSummary, _environmentDetails, _environmentPlan;
     private ProgressBar? _environmentProgress;
-    private readonly HashSet<string> _environmentTargets = ["codex", "claude"];
-    private readonly Dictionary<string, TextBlock> _environmentTargetStatus = [];
-    private readonly List<Control> _environmentTargetControls = [];
-    private bool _replaceEnvironmentSkills;
     private bool EnvironmentBusy => Bool(_environment, "busy") || _operations.IsBusy("environment-request");
     private TextBlock? _appUpdateSummary, _cliUpdateSummary, _downloadSummary, _updateCheckSummary, _cliUpdateLog;
     private ProgressBar? _downloadProgress;
@@ -182,6 +183,7 @@ public sealed partial class MainWindow : Window
         _state = state.Clone();
         _updates = Property(state, "updates").Clone();
         _environment = Property(state, "environment").Clone();
+        _skills = Property(state, "skills").Clone();
     }
 
     private void OnNavigationSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -544,8 +546,22 @@ public sealed partial class MainWindow : Window
     private UIElement BuildAiPage()
     {
         var panel = PagePanel();
-        panel.Children.Add(PageTitle(L("AI 接入")));
-        panel.Children.Add(Secondary(L("App 与终端命令独立运行、独立更新。选择需要接入的 AI 工具。")));
+        panel.Children.Add(PageTitle(L("更新 Skills")));
+        panel.Children.Add(Secondary(L("为编程 Agent 安装或更新 Smart Search Skill。软件更新不会自动同步这些文件。")));
+        _skillSummary = Body("");
+        _skillResult = Body("");
+        _skillRows = new StackPanel { Spacing = 12 };
+        _autoSkillsSwitch = new ToggleSwitch { Header = L("每天自动检查 Skills，只提示，不写入"), IsOn = Bool(_skills, "auto_check", true) };
+        _autoSkillsSwitch.Toggled += async (_, _) =>
+        {
+            if (!_settingAutoSkills) await SkillsRequestAsync("skills.auto", new { enabled = _autoSkillsSwitch.IsOn });
+        };
+        panel.Children.Add(Card(Section(L("最新正式版 Skills"), [_skillSummary, _autoSkillsSwitch,
+            ActionRow(ActionButton(L("检查最新 Skills"), () => SkillsRequestAsync("skills.check"), operationKey: "skills-check", busyText: L("检查中…")),
+                ActionButton(L("刷新本机状态"), LoadSkillsAsync, operationKey: "skills-status", busyText: L("刷新中…")))])));
+        panel.Children.Add(Card(Section(L("选择 Agent"), [Secondary(L("状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。")), _skillRows,
+            ActionRow(ActionButton(L("更新所选 Skills"), InstallSelectedSkillsAsync, primary: true, operationKey: "skills-install", busyText: L("更新中…"))), _skillResult,
+            Secondary(L("不同内容会先备份；额外文件与未选目标保持原样。更新后重新打开 Agent 会话；Gemini 可运行 /skills reload。实际调用仍需在 Agent 中验证。"))])));
         _environmentSummary = Body("");
         _environmentPlan = Body("");
         _environmentSteps = new StackPanel { Spacing = 12 };
@@ -557,28 +573,9 @@ public sealed partial class MainWindow : Window
             ActionButton(L("取消下载"), () => EnvironmentRequestAsync("environment.cancel"), operationKey: "environment-cancel"));
         var nextActions = ActionRow(ActionButton(L("去配置服务商"), () => NavigateToAsync("providers")),
             ActionButton(L("复制 AI 测试指引"), CopyEnvironmentTestAsync, operationKey: "environment-copy"));
-        panel.Children.Add(Card(Section(L("准备 AI 使用环境"), [_environmentSummary, _environmentProgress, _environmentSteps, _environmentPlan, environmentActions, nextActions])));
-        var targets = new StackPanel { Spacing = 12 };
-        _environmentTargetStatus.Clear();
-        _environmentTargetControls.Clear();
-        foreach (var (id, label) in new[] { ("codex", "Codex"), ("claude", "Claude Code") })
-        {
-            var check = new CheckBox { Content = label, IsChecked = _environmentTargets.Contains(id) };
-            check.Checked += (_, _) => { _environmentTargets.Add(id); RenderEnvironmentState(); };
-            check.Unchecked += (_, _) => { _environmentTargets.Remove(id); RenderEnvironmentState(); };
-            var description = Secondary(L("检测环境后显示安装与接入状态。"));
-            _environmentTargetStatus[id] = description;
-            targets.Children.Add(check);
-            _environmentTargetControls.Add(check);
-            targets.Children.Add(description);
-        }
-        var replace = new CheckBox { Content = L("备份后替换内容不同的接入文件"), IsChecked = _replaceEnvironmentSkills };
-        replace.Checked += (_, _) => { _replaceEnvironmentSkills = true; RenderEnvironmentState(); };
-        replace.Unchecked += (_, _) => { _replaceEnvironmentSkills = false; RenderEnvironmentState(); };
-        targets.Children.Add(replace);
-        _environmentTargetControls.Add(replace);
-        targets.Children.Add(Secondary(L("默认保留个人修改。这里只检测已有 AI 软件，不代为安装或登录。")));
-        panel.Children.Add(Card(Section(L("选择接入的 AI"), [targets])));
+        panel.Children.Add(Disclosure("shared-cli", L("共用独立 CLI 环境"), Section(L("准备独立 CLI"),
+            [Secondary(L("所有 Agent 共用独立 CLI。此处只准备运行环境，Skills 在上方单独更新。")), _environmentSummary, _environmentProgress, _environmentSteps, _environmentPlan, environmentActions, nextActions,
+                ActionRow(ActionButton(L("去设置更新 CLI"), () => NavigateToAsync("settings")))])));
         _environmentDetails = Body("");
         _environmentDetails.Style = UiStyle("DataCopyStyle");
         panel.Children.Add(Disclosure("environment-details", L("安装位置与检查详情"), _environmentDetails));
@@ -589,10 +586,7 @@ public sealed partial class MainWindow : Window
             ActionButton(L("启用内置命令"), EnableBundledCliAsync, operationKey: "cli-enable", busyText: L("启用中…")));
         panel.Children.Add(Disclosure("legacy-cli", L("高级：App 内置入口（依赖 App）"), Section(L("内置入口"),
             [Secondary(L("内置入口随 App 卸载失效。上方的独立 CLI 接入不使用此入口。")), _cliSummary, cliActions])));
-        _skillRows = new StackPanel { Spacing = 8 };
-        var skillActions = ActionRow(ActionButton(L("检查状态"), LoadSkillsAsync, operationKey: "skills-status", busyText: L("检查中…")),
-            ActionButton(L("安装/更新选择项"), InstallSelectedSkillsAsync, primary: true, operationKey: "skills-install", busyText: L("安装中…")));
-        panel.Children.Add(Disclosure("other-skills", L("高级：其他 AI 工具"), Section(L("其他接入目标"), [_skillRows, skillActions])));
+        RenderSkillState();
         _ = RunOperationAsync("cli-status", LoadCliStatusAsync);
         _ = RunOperationAsync("skills-status", LoadSkillsAsync);
         return Scroll(panel);
@@ -610,18 +604,10 @@ public sealed partial class MainWindow : Window
                 HeadingWithStatus(Text(step, "name"), Text(step, "status_label", ready ? L("已检查") : L("待处理")), ready ? "Success" : "Warning"),
                 Body(Text(step, "message")) } });
         }
-        foreach (var target in Items(Property(_environment, "targets")))
-            if (_environmentTargetStatus.TryGetValue(Text(target, "target"), out var label))
-            {
-                var status = Text(target, "status");
-                label.Text = Text(target, "application") + L("\n接入文件：") + (status switch
-                { "up_to_date" or "extra_files" => L("已就绪；AI 内加载与调用待验证"), "stale" => L("内容不同，默认保留"), "missing" => L("尚未配置"), _ => L("需要检查") });
-                if (!string.IsNullOrEmpty(Text(target, "legacy_path"))) label.Text += L("\n发现历史技能副本，保留原文件；请核对 AI 中的同名技能。");
-            }
         var total = Number(_environment ?? default, "total");
         var actions = EnvironmentActions();
         _environmentPlan!.Text = Text(_environment, "plan_id").Length == 0 ? L("检测后会在这里列出将要安装或配置的内容。") :
-            actions.Count == 0 ? L("没有需要安装的软件或接入文件。请按上方提示完成服务商配置和 AI 内测试。") :
+            actions.Count == 0 ? L("独立 CLI 已就绪。可返回上方检查并更新 Skills。") :
             L("本次将执行：\n") + string.Join("\n", actions.Select(action => "• " + action));
         _environmentProgress!.Visibility = EnvironmentBusy && total > 0 ? Visibility.Visible : Visibility.Collapsed;
         _environmentProgress.Value = total > 0 ? 100 * Number(_environment ?? default, "received") / total : 0;
@@ -636,13 +622,6 @@ public sealed partial class MainWindow : Window
     private List<string> EnvironmentActions()
     {
         var actions = Items(Property(_environment, "plan")).Select(item => item.GetString() ?? "").Where(item => item.Length > 0).ToList();
-        foreach (var target in Items(Property(_environment, "targets")))
-        {
-            if (!_environmentTargets.Contains(Text(target, "target"))) continue;
-            var action = Text(target, "action");
-            if (action == "install") actions.Add(L("配置 ") + Text(target, "label") + L(" 接入文件"));
-            if (action == "review" && _replaceEnvironmentSkills) actions.Add(L("备份并更新 ") + Text(target, "label") + L(" 接入文件"));
-        }
         return actions;
     }
 
@@ -669,13 +648,13 @@ public sealed partial class MainWindow : Window
     {
         if (EnvironmentBusy || !Bool(_environment, "can_install")) return;
         var plan = string.Join("\n", EnvironmentActions());
-        var selected = _environmentTargets.ToArray();
+        var selected = Array.Empty<string>();
         var planId = Text(_environment, "plan_id");
-        var replace = _replaceEnvironmentSkills;
+        var replace = false;
         var message = plan + L("\n接入目标：") + (selected.Length == 0 ? L("只准备独立 CLI") : string.Join("、", selected)) +
             L("\n独立安装目录：") + Text(_environment, "tools_dir") + "\n" +
             (replace ? L("内容不同的接入文件将先备份再替换。") : L("已有个人修改将保留。")) + L("\n关闭或卸载 App 后，独立 CLI 仍可使用。");
-        if (!await ConfirmAsync(L("准备独立 CLI 与 AI 接入"), message, L("开始准备"))) return;
+        if (!await ConfirmAsync(L("准备独立 CLI"), message, L("开始准备"))) return;
         await EnvironmentRequestAsync("environment.install", new { confirm = true, targets = selected, plan_id = planId, replace_modified = replace });
     }
 
@@ -1134,54 +1113,76 @@ public sealed partial class MainWindow : Window
 
     private async Task LoadSkillsAsync()
     {
-        var definitions = Items(Property(_state, "skill_targets"))
-            .Where(item => !string.IsNullOrWhiteSpace(Text(item, "id")))
-            .ToDictionary(item => Text(item, "id"), item => item, StringComparer.Ordinal);
-        var parameters = new Dictionary<string, object?>();
-        if (definitions.Count > 0)
-            parameters["targets"] = definitions.Keys.ToArray();
-        var result = await RequestAsync("skills.status", parameters, L("无法读取 Skills 状态。"));
-        if (result is null || _skillRows is null)
-            return;
+        await SkillsRequestAsync("skills.catalog");
+    }
+
+    private async Task SkillsRequestAsync(string method, object? parameters = null)
+    {
+        var result = await RequestAsync(method, parameters ?? new { }, L("Skills 操作未完成。"));
+        if (result is not null) { _skills = result.Value.Clone(); RenderSkillState(); }
+    }
+
+    private void RenderSkillState()
+    {
+        if (_currentPage != "ai" || _skillRows is null || _skillSummary is null) { RefreshActionButtons(); return; }
+        var source = Property(_skills, "source");
+        _skillSummary.Text = Bool(_skills, "checking") ? L("正在检查官方稳定版 Skills…") :
+            Text(source, "version").Length > 0 ? L("Skills 来源：官方 npm 正式版 {0}\n最近成功检查：{1}\n独立 CLI：{2}", Text(source, "version"), Timestamp(source, "checked_at"), Text(_skills, "cli_version", L("未发现"))) :
+            L("尚未获取正式版 Skills；当前文件仅与 App 内置副本比较。");
+        if (Bool(_skills, "cached") && Text(source, "version").Length > 0) _skillSummary.Text += "\n" + L("显示上次缓存；请检查最新 Skills 后再更新。");
+        _skillSummary.Text += "\n" + Text(_skills, "error") + "\n" + Text(_skills, "compatibility");
+        _settingAutoSkills = true;
+        if (_autoSkillsSwitch is not null) _autoSkillsSwitch.IsOn = Bool(_skills, "auto_check", true);
+        _settingAutoSkills = false;
+        if (!_skillSelectionInitialized && Items(Property(_skills, "targets")).Any())
+        {
+            foreach (var definition in Items(Property(_state, "skill_targets")))
+                if (Bool(definition, "default")) _selectedSkillTargets.Add(Text(definition, "id"));
+            _skillSelectionInitialized = true;
+        }
         _skillRows.Children.Clear();
-        foreach (var target in Items(result.Value, "targets"))
+        foreach (var target in Items(Property(_skills, "targets")))
         {
             var id = Text(target, "target", Text(target, "id"));
-            if (id is "codex" or "claude") continue;
-            if (string.IsNullOrWhiteSpace(id))
-                continue;
-            definitions.TryGetValue(id, out var definition);
-            var status = Text(target, "status", "unknown");
-            _skillRows.Children.Add(new CheckBox
+            if (string.IsNullOrWhiteSpace(id)) continue;
+            var check = new CheckBox
             {
-                Content = $"{Text(target, "label", Text(definition, "label", id))}：{SkillStatusLabel(status)}",
-                Tag = id,
-                IsChecked = Bool(definition, "default")
-            });
+                Content = Body($"{Text(target, "label", id)} · {SkillStatusLabel(Text(target, "status"))}"),
+                IsChecked = _selectedSkillTargets.Contains(id), IsEnabled = !Bool(_skills, "busy")
+            };
+            check.Checked += (_, _) => { _selectedSkillTargets.Add(id); RefreshActionButtons(); };
+            check.Unchecked += (_, _) => { _selectedSkillTargets.Remove(id); RefreshActionButtons(); };
+            _skillRows.Children.Add(check);
+            var detail = Text(target, "path");
+            var changed = Items(target, "stale_files").Concat(Items(target, "missing_files")).Select(item => item.GetString());
+            if (changed.Any()) detail += "\n" + L("将同步：{0}", string.Join(", ", changed));
+            foreach (var legacy in Items(target, "legacy_locations")) detail += "\n" + L("历史副本，保留：{0}", Text(legacy, "path"));
+            if (Text(target, "error").Length > 0) detail += "\n" + Text(target, "error");
+            _skillRows.Children.Add(Secondary(detail));
         }
         if (_skillRows.Children.Count == 0)
             _skillRows.Children.Add(Body(L("后端没有返回可管理的 Skill 目标。")));
+        var result = Property(_skills, "result");
+        var receipts = Items(result, "installed").Select(item => Text(item, "target") + L("：已同步") +
+            (Text(item, "backup").Length > 0 ? L("\n备份：{0}", Text(item, "backup")) : ""));
+        var failures = Items(result, "failed").Select(item => Text(item, "target") + ": " + Text(item, "error"));
+        _skillResult!.Text = Bool(_skills, "busy") ? L("正在更新所选 Skills…") : string.Join("\n", receipts.Concat(failures));
+        RefreshActionButtons();
     }
 
     private async Task InstallSelectedSkillsAsync()
     {
-        if (_skillRows is null)
-            return;
-        var targets = _skillRows.Children.OfType<CheckBox>()
-            .Where(check => check.IsChecked == true && check.Tag is string id && !string.IsNullOrWhiteSpace(id))
-            .Select(check => (string)check.Tag)
-            .ToArray();
+        var targets = _selectedSkillTargets.ToArray();
         if (targets.Length == 0)
         {
             ShowNotice(L("请选择目标"), L("至少选择一个 Skill 后才能安装或更新。"), InfoBarSeverity.Warning);
             return;
         }
-        var result = await RequestAsync("skills.install", new { targets }, L("无法启动 Skills 安装。"));
-        if (result is not null)
-        {
-            RegisterOwnedRun(Text(result.Value, "run_id"), "skills.install", "skills-install");
-            ShowNotice(L("正在安装"), L("完成后会自动刷新所选工具的安装状态。"), InfoBarSeverity.Informational);
-        }
+        var planId = Text(_skills, "plan_id");
+        var paths = Items(Property(_skills, "targets")).Where(item => targets.Contains(Text(item, "target")))
+            .Select(item => Text(item, "label") + "\n" + Text(item, "path"));
+        if (!await ConfirmAsync(L("更新所选 Skills"), L("来源版本：{0}\n{1}\n将同步所选目标的托管文件；不同内容先备份，额外文件保留。", Text(Property(_skills, "source"), "version"), string.Join("\n\n", paths)), L("备份并更新"))) return;
+        await SkillsRequestAsync("skills.sync", new { targets, confirm = true, plan_id = planId });
     }
 
     private async Task CopyBundledCli()
@@ -1347,6 +1348,14 @@ public sealed partial class MainWindow : Window
     {
         DispatcherQueue.TryEnqueue(async () =>
         {
+            if (backendEvent.Name == "skills")
+            {
+                var completedCheck = Bool(_skills, "checking") && !Bool(backendEvent.Data, "checking");
+                _skills = backendEvent.Data.Clone();
+                RenderSkillState();
+                if (completedCheck && Text(_skills, "error").Length == 0 && Items(Property(_skills, "targets")).Any(item => Text(item, "status") == "stale"))
+                    ShowNotice(L("Skills 可同步"), L("发现内容不同的 Smart Search Skill，请到“更新 Skills”页选择目标。"), InfoBarSeverity.Informational);
+            }
             if (backendEvent.Name == "environment")
             {
                 _environment = backendEvent.Data.Clone();
@@ -1575,9 +1584,9 @@ public sealed partial class MainWindow : Window
     {
         if (_shuttingDown)
             return;
-        if (EnvironmentBusy || _operations.IsBusy("updates-cli") || Text(Property(_updates, "cli_update"), "status") == "running")
+        if (EnvironmentBusy || Bool(_skills, "busy") || _operations.IsBusy("updates-cli") || Text(Property(_updates, "cli_update"), "status") == "running")
         {
-            ShowNotice(L("安装或检查正在进行"), L("请等待完成，避免中断环境准备。可以最小化 App；下载阶段可在 AI 接入页取消。"), InfoBarSeverity.Warning);
+            ShowNotice(L("安装或检查正在进行"), L("环境或 Skills 操作正在进行，请等待完成后退出。"), InfoBarSeverity.Warning);
             return;
         }
         if (HasActiveOwnedRuns)
@@ -1799,10 +1808,13 @@ public sealed partial class MainWindow : Window
         var downloading = downloadStatus is "downloading" or "cancelling";
         var updatingCli = Text(Property(_updates, "cli_update"), "status") == "running";
         var busy = _operations.IsBusy(key) || key == "updates-check" && Bool(_updates, "checking") ||
+            key == "skills-check" && Bool(_skills, "checking") || key == "skills-install" && Bool(_skills, "busy") ||
             key == "updates-download" && downloading || key == "updates-cancel" && downloadStatus == "cancelling" || key == "updates-cli" && updatingCli ||
             Bool(_environment, "busy") && key == "environment-" + Text(_environment, "operation");
         var allowed = key switch
         {
+            "skills-install" => _state is not null && Bool(_skills, "can_sync") && !Bool(_skills, "checking") && !EnvironmentBusy && !updatingCli && _selectedSkillTargets.Count > 0,
+            "skills-check" or "skills-status" => _state is not null && !Bool(_skills, "busy") && !Bool(_skills, "checking") && !EnvironmentBusy && !updatingCli,
             "environment-check" or "environment-verify" => _state is not null && !EnvironmentBusy && !updatingCli,
             "environment-install" => _state is not null && !EnvironmentBusy && !updatingCli && Bool(_environment, "can_install") && Text(_environment, "plan_id").Length > 0 && EnvironmentActions().Count > 0,
             "environment-cancel" => Bool(_environment, "can_cancel"),
@@ -1815,6 +1827,7 @@ public sealed partial class MainWindow : Window
             _ => true
         };
         if (EnvironmentBusy && new[] { "updates-cli", "updates-install", "connect", "profile", "skills-install", "cli-enable" }.Contains(key)) allowed = false;
+        if (Bool(_skills, "busy") && new[] { "updates-cli", "updates-install", "connect", "profile", "environment-check", "environment-verify", "environment-install", "cli-enable" }.Contains(key)) allowed = false;
         button.IsEnabled = allowed && !busy && !(new[] { "state", "config-save", "config-preview", "profile" }.Contains(key) && ConfigOperationBusy);
         var label = busy ? binding.BusyText : binding.Label();
         if (busy)
@@ -1830,7 +1843,6 @@ public sealed partial class MainWindow : Window
     private void RefreshActionButtons()
     {
         foreach (var (button, binding) in _actionButtons.ToArray()) UpdateActionButton(button, binding);
-        foreach (var control in _environmentTargetControls) control.IsEnabled = !EnvironmentBusy;
         if (_currentPage == "providers")
         {
             var changes = CollectDraft();
@@ -2121,8 +2133,9 @@ public sealed partial class MainWindow : Window
     private static string SkillStatusLabel(string status) => status.ToLowerInvariant() switch
     {
         "missing" => L("未安装"),
-        "stale" => L("可更新"),
-        "up_to_date" => L("已是当前版本"),
+        "stale" => L("内容不同，可同步"),
+        "up_to_date" or "extra_files" => L("与来源一致"),
+        "error" => L("读取失败"),
         _ => L("状态未知")
     };
 
@@ -2290,7 +2303,7 @@ public sealed partial class MainWindow : Window
         var titles = new Dictionary<string, string>
         {
             ["overview"] = L("概览"), ["providers"] = L("服务商"), ["search"] = L("搜索与研究"),
-            ["activity"] = L("活动"), ["ai"] = L("AI 接入"), ["settings"] = L("设置与关于")
+            ["activity"] = L("活动"), ["ai"] = L("更新 Skills"), ["settings"] = L("设置与关于")
         };
         foreach (var item in RootNavigation.MenuItems.OfType<NavigationViewItem>())
             if (item.Tag is string key && titles.TryGetValue(key, out var title)) item.Content = title;

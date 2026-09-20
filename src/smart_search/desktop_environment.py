@@ -236,24 +236,10 @@ class Environment:
     def skill_files(self, node, info, config_dir):
         source = Path(info["package_root"]) / "skills/smart-search-cli" if info.get("package_root") else None
         files = dict(skill_installer._load_skill_files(source if source and source.is_dir() else None))
-        invocation = self.invocation(node, info)
-        if invocation:
-            # Integration bytes are identical in both UI languages.
-            note = ("\n\n## Independent CLI on this computer\n\nThis independent npm installation does not depend on the Smart Search App. "
-                    "Replace the `smart-search` command in this skill with the following full invocation prefix, then append the original arguments:\n\n"
-                    f"```{'powershell' if os.name == 'nt' else 'sh'}\n{command_text(invocation)}\n```\n\n"
-                    f"Configuration directory: `{config_dir}`. If this is not the default, set SMART_SEARCH_CONFIG_DIR to it before calling the CLI. "
-                    "Never copy API keys into command arguments. Check `--version` first, then search when the user requests it.\n")
-            files["SKILL.md"] += note.encode("utf-8")
-        return files
+        return skill_installer.with_invocation(files, self.invocation(node, info), config_dir)
 
     def target_path(self, target, env):
-        if target == "claude" and env.get("CLAUDE_CONFIG_DIR"):
-            root = Path(env["CLAUDE_CONFIG_DIR"]).expanduser()
-            if not root.is_absolute():
-                raise ValueError(tr('CLAUDE_CONFIG_DIR 必须是绝对路径。'))
-            return root / "skills/smart-search-cli"
-        return self.home / (".agents/skills/smart-search-cli" if target == "codex" else ".claude/skills/smart-search-cli")
+        return skill_installer.target_path(target, self.home, env)
 
     def target_status(self, target, files, env):
         dest = self.target_path(target, env)
@@ -318,7 +304,7 @@ class Environment:
                  {"name": tr('搜索配置'), "status": "ready" if minimum_ok else "pending", "status_label": tr('已配置') if minimum_ok else tr('待配置'),
                   "message": tr('App 当前配置满足最低要求；AI 所处环境与服务连通性仍需验证') if minimum_ok else tr('请填写服务商 Key；这一步不需要安装软件')},
                  {"name": tr('AI 内实际调用'), "status": "pending", "status_label": tr('待验证'),
-                  "message": tr('把测试指引粘贴到 Codex / Claude Code 中执行；这一步不需要安装软件')}]
+                  "message": tr('把测试指引粘贴到 Agent 中执行；这一步不需要安装软件')}]
         fingerprint = {"node": node, "python": python, "cli": {k: cli_info.get(k) for k in
                        ("external_path", "resolved_path", "external_version", "manager", "can_update", "external_runtime_verified")},
                        "skills": [(t["target"], t["installed_hash"], t["path"]) for t in targets], "plan": plan, "config_dir": config_dir}
@@ -327,7 +313,7 @@ class Environment:
                 "plan": plan, "plan_id": plan_id, "blocked": blocked, "can_install": not blocked,
                 "checked_at": time.time(), "config_dir": config_dir, "tools_dir": str(self.directory),
                 "independent": cli_ready, "invocation": command_text(self.invocation(node, cli_info)) if installed else "",
-                "message": blocked or tr('检测完成。选择 AI 后可补齐环境和接入文件。')}
+                "message": blocked or tr('检测完成。可按清单准备共用独立 CLI。')}
 
     def command_entry_ready(self):
         if os.name != "nt":
@@ -511,22 +497,10 @@ class Environment:
             if status["stale_files"] and not replace:
                 messages.append(TARGETS[target] + tr(' 接入内容不同，已保留；需要替换时勾选备份并替换。'))
                 continue
-            if status["stale_files"]:
-                backup = self.directory / "skill-backups" / f"{target}-{uuid.uuid4().hex}"
-                shutil.copytree(dest, backup, symlinks=True)
-                messages.append(TARGETS[target] + tr(' 原接入已备份到 ') + str(backup))
             new_parent = not dest.parent.exists()
-            for rel, content in files.items():
-                path = dest / rel
-                if path.is_file() and path.read_bytes() == content:
-                    continue
-                path.parent.mkdir(parents=True, exist_ok=True)
-                temporary = path.with_name(path.name + "." + uuid.uuid4().hex + ".tmp")
-                try:
-                    temporary.write_bytes(content)
-                    temporary.replace(path)
-                finally:
-                    temporary.unlink(missing_ok=True)
+            receipt = skill_installer.write_skill_files(dest, files, self.directory / "skill-backups", backup_prefix=target + "-")
+            if receipt["backup"]:
+                messages.append(TARGETS[target] + tr(' 原接入已备份到 ') + receipt["backup"])
             if new_parent:
                 messages.append(TARGETS[target] + tr(' 新建了技能目录，请重新打开 AI。'))
         return messages
@@ -623,6 +597,8 @@ class Environment:
             result = await asyncio.to_thread(self.inspect, env, cli_info, config_dir, minimum_ok)
             pending = any(row["status"] not in {"up_to_date", "extra_files"} for row in result["targets"] if row["target"] in targets)
             result["message"] = (tr('独立 CLI 已就绪；部分接入需要处理。') if pending else tr('环境与所选接入已准备好；AI 内实际调用待验证。')) + "\n" + "\n".join(notes)
+            if not targets:
+                result["message"] = tr('独立 CLI 已就绪；请在“更新 Skills”页面同步所需 Agent。') + "\n" + "\n".join(notes)
             result["steps"][1]["message"] = tr('独立 CLI 完整启动链已通过本地验证')
             self.changed(**result, status="ready", busy=False, can_cancel=False)
         except asyncio.CancelledError:

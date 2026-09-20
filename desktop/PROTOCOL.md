@@ -34,6 +34,10 @@ Methods below return result objects. Ordinary business errors have `ok:false`.
 | `providers.reset` | optional `providers` id array | `ok`, `cleared` |
 | `skills.status` | optional `targets` id array | `ok`, `targets` array |
 | `skills.install` | nonempty `targets` array | `ok`, `run_id` |
+| `skills.catalog` | `{}` | all Agent targets compared with verified stable Skills or clearly labelled bundled/cache fallback; `source`, `cached`, `targets`, `cli_version`, `compatibility`, `plan_id`, `can_sync` |
+| `skills.check` | `{}` | check and cache official npm stable Skills; completion via `skills` event; never writes Agent directories |
+| `skills.auto` | `enabled` boolean | persisted daily Skills check preference; no automatic installation |
+| `skills.sync` | `confirm:true`, nonempty `targets`, `plan_id` from catalog | explicit backup and sync; completion via `skills` event with `result.installed` (paths and backups) / `result.failed` |
 | `activity.list` | optional absolute `directories` array, `limit` 1..1000 | `ok`, `runs`, `errors`, `enabled` |
 | `activity.clear` | `{}` | `ok`, clears completed metadata only |
 | `activity.enabled` | `enabled` boolean | `ok`, `enabled` |
@@ -77,7 +81,7 @@ Full state extends `smart_search.ui_api.state()`:
   getting_started, providers, routing, reliability, diagnostics. Consume
   `metadata.sections` order, label_zh/en and blurb_zh/en instead of alphabetic ordering;
 - `skill_targets`: id, label, default;
-- `protocol_version:1`, `version`, `generation`, `config_dir`, `cli`, `updates`, `environment`,
+- `protocol_version:1`, `version`, `generation`, `config_dir`, `cli`, `updates`, `environment`, `skills`,
   `commands` (catalog below), `activity` (activity.list result).
 
 Catalog entry: `id`, `label`, `description`, `experimental`, `fields`.
@@ -105,7 +109,7 @@ Read-only environment fields show the masked effective value and its source.
 Save sends the displayed revision; conflicts keep the draft and offer refresh.
 
 Native UI destinations: Overview, Providers, Search & Research, Activity,
-AI integration, Settings & About. Use native controls/theme/keyboard/focus.
+Update Skills, Settings & About. Use native controls/theme/keyboard/focus.
 Current results render readable content and sources, with JSON in an advanced
 expander and explicit copy/export. Never make raw JSON the primary UI.
 Business `result.display_text` reuses the existing CLI Markdown formatter, keeping
@@ -162,6 +166,30 @@ backs up the old tree and preserves extra files. Installation is checked again
 against `plan_id` before mutation. Environment writes exclude competing CLI/App
 updates, skills writes and profile switching; clients keep the operation busy
 across page changes and guard exit/reconnect until its actual terminal event.
+
+## Agent Skills updates
+
+Skills state has `auto_check`, `last_attempt`, `checking`, `busy`, `source`
+(`version`, `checked_at`, `integrity`, `url`), `cached`, `error`, all `targets`,
+`cli_version`, `cli_ready`, `compatibility`, `plan_id`, `can_sync`, and `result`.
+Automatic checks use the production handshake opt-in and the independent daily
+Skills preference. They download only official npm data, with SHA512 and bounded
+archive validation; no lifecycle script or package code runs. A failed check keeps
+old installations and labels previous data as cached. Sync requires a successful
+check in this session and a verified independent CLI at least as new as the source.
+The confirmed fingerprint is rechecked against the current source, target files
+and CLI invocation. Skills writes exclude environment/CLI updates, language and
+profile changes; closing waits for the writer. Existing `skills.status/install`
+remain compatible bundled-source APIs; native clients use the new stable-source
+methods and pass no Skill targets to `environment.install`.
+
+Every target uses the shared registry/path resolver, including Cline and Roo Code.
+Managed local invocation notes are composed consistently and recognized by the
+generic CLI comparator. Explicit sync backs up changed trees, atomically replaces
+files, preserves extras and refuses linked paths. `stale` means content differs,
+not an Agent software version or proof that its Skill is loaded. Clients keep
+selection across refresh, show changed filenames and backup paths, and instruct
+users to reload the Agent before testing real invocation.
 
 ## Interface language
 

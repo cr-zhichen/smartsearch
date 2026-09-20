@@ -20,7 +20,7 @@ struct SmartSearchDesktopApp: App {
                 Button(L("服务商")) { model.selectedDestination = .providers }.keyboardShortcut("2", modifiers: .command)
                 Button(L("搜索与研究")) { model.selectedDestination = .search }.keyboardShortcut("3", modifiers: .command)
                 Button(L("活动")) { model.selectedDestination = .activity }.keyboardShortcut("4", modifiers: .command)
-                Button(L("AI 接入")) { model.selectedDestination = .integration }.keyboardShortcut("5", modifiers: .command)
+                Button(L("更新 Skills")) { model.selectedDestination = .integration }.keyboardShortcut("5", modifiers: .command)
                 Button(L("设置与关于")) { model.selectedDestination = .settings }.keyboardShortcut("6", modifiers: .command)
             }
             CommandGroup(after: .appInfo) {
@@ -61,8 +61,8 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if let model, model.isUpdatingCLI || model.environmentBusy {
-            model.noticeMessage = L("环境操作或 CLI 更新正在进行，请等待完成后退出。下载可在 AI 接入页取消。")
+        if let model, model.isUpdatingCLI || model.environmentBusy || model.skillsBusy {
+            model.noticeMessage = L("环境或 Skills 操作正在进行，请等待完成后退出。")
             showMainWindow()
             return .terminateCancel
         }
@@ -93,7 +93,7 @@ private final class MainWindowDelegate: NSObject, NSWindowDelegate {
     weak var model: AppModel?
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if let model, model.isUpdatingCLI || model.environmentBusy {
+        if let model, model.isUpdatingCLI || model.environmentBusy || model.skillsBusy {
             model.noticeMessage = L("环境操作或 CLI 更新正在进行，请等待完成；可以最小化窗口。")
             return false
         }

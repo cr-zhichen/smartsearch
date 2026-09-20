@@ -21,6 +21,7 @@ from .desktop_catalog import command_arguments, command_catalog
 from .desktop_updates import Updates
 from .desktop_cli import discover, managed_cli_info, package_root, path_entries, update_command
 from .desktop_environment import Environment
+from .desktop_skills import Skills
 from .i18n import render_messages, resolve, tr, use_language
 from .provider_errors import sanitize_provider_error_message as sanitize_error_message
 
@@ -64,6 +65,7 @@ class Backend:
         self.cli_info = None
         self.updates = Updates(self.event)
         self.environment = Environment(self.event)
+        self.skills = Skills(self.event, self.environment)
 
     def event(self, name, data):
         self.emit(render_messages({"event": name, "generation": self.generation,
@@ -118,7 +120,7 @@ class Backend:
         data = ui_api.state()
         data.update(protocol_version=PROTOCOL_VERSION, version=cli._get_version(), generation=self.generation,
                     config_dir=self.directory, commands=command_catalog(), activity=self.activity(), cli=self.cli_status(),
-                    updates=self.updates.state, environment=self.environment.state, language=self.language)
+                    updates=self.updates.state, environment=self.environment.state, skills=self.skills.state, language=self.language)
         checks = {}
         for run in sorted(self.runs.values(), key=lambda item: item.get("finished_at", 0)):
             if run["command"] != "provider.test" or run["directory"] != self.directory or not run.get("finished_at"):
@@ -404,6 +406,7 @@ class Backend:
 
     async def close(self):
         self.stopping = True
+        await self.skills.close()
         await self.environment.close()
         await self.updates.close()
         for run_id in list(self.runs):
@@ -417,7 +420,7 @@ class Backend:
         if method == "language.set":
             if not self.initialized:
                 raise ValueError(tr("请先完成协议版本握手。"))
-            if self.environment.state["busy"] or self.updates.state["cli_update"]["status"] == "running":
+            if self.environment.state["busy"] or self.skills.state["busy"] or self.updates.state["cli_update"]["status"] == "running":
                 with use_language(self.language):
                     raise ValueError(tr("环境操作或 CLI 更新正在进行，请等待完成。"))
             with use_language(self.language):
@@ -428,6 +431,8 @@ class Backend:
             return render_messages(await self._handle(method, params), self.language)
 
     async def _handle(self, method, params):
+        if self.skills.state["busy"] and method in {"profile.select", "language.set", "cli.update", "cli.enable", "environment.install", "environment.check", "environment.verify", "skills.install", "updates.installer", "shutdown"}:
+            raise ValueError(tr('Skills 操作正在进行，请等待完成。'))
         if method == "ping":
             return {"protocol_version": 1, "version": cli._get_version(), "generation": self.generation}
         if method == "initialize":
@@ -471,6 +476,25 @@ class Backend:
                 return ui_api.reset_health(params)
             if method == "skills.status":
                 return ui_api.skills_status(params.get("targets"))
+            if method in {"skills.catalog", "skills.check", "skills.sync", "skills.auto"}:
+                if method == "skills.auto":
+                    if type(params.get("enabled")) is not bool:
+                        raise ValueError(tr('enabled 必须为布尔值。'))
+                    self.skills.state["auto_check"] = params["enabled"]
+                    self.skills.save()
+                    self.skills.changed()
+                    return self.skills.state
+                if method in {"skills.catalog", "skills.check", "skills.sync"}:
+                    if self.environment.state["busy"] or self.updates.state["cli_update"]["status"] == "running":
+                        raise ValueError(tr('环境操作或 CLI 更新正在进行，请等待完成。'))
+                    self.cli_info = None
+                    info = self.cli_status()
+                    await asyncio.to_thread(self.skills.snapshot, manager_environment(self.directory), info, self.directory)
+                if method == "skills.sync":
+                    if any(run["command"] == "skills.install" and run["status"] in {"running", "cancelling"} for run in self.runs.values()):
+                        raise ValueError(tr('Skills 操作正在进行，请等待完成。'))
+                    return self.skills.sync(params)
+                return self.skills.check() if method == "skills.check" else self.skills.state
             if method == "activity.list":
                 return self.activity(params)
             if method == "activity.details":
@@ -569,6 +593,8 @@ async def serve():
             if backend.initialized:
                 backend.event("activity", backend.activity())
                 backend.updates.auto_check(backend.cli_status())
+                if backend.updates.enabled:
+                    backend.skills.auto_check(manager_environment(backend.directory), backend.cli_status(), backend.directory)
 
     poller = asyncio.create_task(poll())
     try:

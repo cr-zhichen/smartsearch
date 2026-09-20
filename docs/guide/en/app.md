@@ -18,19 +18,24 @@ Open **Smart Search** from the Start menu or Applications. Existing configuratio
 
 Edits stay in a draft until saved. An empty key field keeps the saved key; select the explicit clear option to remove it. Fields overridden by environment variables show their effective source, and saving does not replace those environment values. Tasks already running keep their original configuration snapshot.
 
-## Connect an AI tool
+## Update Agent Skills
 
-1. Open **AI integration**. Select the installed Codex or Claude Code application you want to connect.
-2. Select **Detect environment**. Detection reads local state without installing components. Review the plan before selecting **Install missing components**.
-3. Follow the progress. Healthy existing Node.js, Python and independent Smart Search CLI installations are reused. Missing components are installed in user-writable directories separate from the App. You do not need to install mise. The App does not install your AI application or sign into it.
-4. Select **Verify availability**. If the CLI starts but search configuration is missing, configure services; reinstalling the runtime will not supply an API key.
-5. Copy the AI test instructions, close Smart Search, and paste the instructions into a new AI conversation. The first test only asks the AI to run the independent CLI's version command, without a network search. Then try a search if you want to test provider connectivity.
+1. Open **Update Skills** and select **Check latest Skills**. The page downloads instruction files from the latest official stable npm package and shows the source version and check time. It does not run package code.
+2. Review the Agents, target paths and changed filenames, then select your targets. Status describes the Smart Search Skill, not the Agent application's installation, version or successful invocation.
+3. Select **Update selected Skills**, review the source and paths, then confirm. Changed content is backed up first; the result shows backup paths. Extra files, unselected targets and legacy copies are kept.
+4. Reopen the Agent session; Gemini can use `/skills reload`. Ask the Agent to run `smart-search --version` first, then test a search when needed.
 
-The page separately reports the runtime, CLI startup, integration files, restart requirements and actual AI invocation. Files being ready does not prove the AI loaded them. Reopen an existing AI or terminal when prompted; the App does not terminate those processes. WSL and remote hosts need their own setup.
+Daily automatic checks are enabled by default and can be turned off. They notify without writing Agent directories. Offline or integrity failures show an error and label cached data; check successfully again before updating. App and CLI upgrades do not automatically sync Skills.
 
-If existing integration files differ, they are kept. Compare them before choosing replacement; an explicit replacement makes a recoverable backup and preserves extra files. Codex uses `~/.agents/skills/smart-search-cli`, while historical `.codex/skills` copies are reported and retained. Claude Code uses `~/.claude/skills/smart-search-cli`. Other existing CLI installation targets remain available through [the CLI](cli.md).
+Codex, Claude Code, Cursor, Copilot, Gemini, OpenCode, Cline, Roo Code and the other listed targets use the same Skill. Codex uses `~/.agents/skills/smart-search-cli`; other compatible Agents may read that shared directory too. Historical `.codex/skills` copies are kept. Claude respects an absolute `CLAUDE_CONFIG_DIR`. OpenCode uses `~/.config/opencode/skills` and reports old `.opencode/skills` copies. WSL, remote hosts and Cloud Agents need their own setup; local files are not automatically synced there.
 
-Installation failure shows the failed step and a recovery action. Detect again and retry the remaining work. During protected installation writes, wait for completion before updating, reconnecting or exiting. Checks and local version verification do not make paid AI requests.
+## Prepare the shared independent CLI
+
+Under **Update Skills → Shared independent CLI environment**, detect the environment, review the plan, install missing components and verify availability. Healthy Node.js, Python and independent Smart Search CLI installations are reused. Missing components go into user-writable directories separate from the App. The App does not install or sign into Agent applications, and does not require mise.
+
+A Skills update refreshes the local independent CLI invocation path. Prepare or verify the CLI first; if it is older than the Skills source, update it in Settings before syncing Skills. Agents share this runtime, but loading the Skill and making real calls still require verification in the Agent. Configure missing provider keys rather than reinstalling the runtime.
+
+Failed installation keeps completed components; detect again and retry the missing work. Wait for installation or Skills writes before quitting. Local checks and version verification do not make paid requests.
 
 ## Everyday pages
 
@@ -40,7 +45,7 @@ Installation failure shows the failed step and a recovery action. Detect again a
 | Providers | Edit, test, preview and save provider settings |
 | Search & research | Search, read URLs, map sites, look up docs, plan offline research or run online research; copy/export results |
 | Activity | See actual stages, providers, models and elapsed time; cancel tasks started by this App |
-| AI integration | Detect and prepare the independent CLI, install selected integration files and verify local readiness |
+| Update Skills | Check stable Skills, back up and sync selected Agent targets; prepare the shared independent CLI |
 | Settings & about | Choose the configuration directory, observe additional activity directories, set theme/language, reset health status and check updates |
 
 Search results need source checking. A hit or snippet is a candidate source, not proof that its page was read. See [Search, research and evidence](research.md).
