@@ -5,6 +5,7 @@ import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import threading
 import time
+from unittest.mock import Mock
 
 import httpx
 import pytest
@@ -121,12 +122,14 @@ async def test_stream_download_retry_cancel_size_hash_and_installer_recheck(tmp_
         manager.download()
         assert manager.download_task is first
         await asyncio.sleep(.08)
+        cancel = Mock(wraps=first.cancel)
+        monkeypatch.setattr(first, "cancel", cancel)
         cancellation = asyncio.create_task(manager.cancel_download())
         await asyncio.sleep(0)
         assert manager.state["download"]["status"] == "cancelling"
         await manager.cancel_download()
         manager.download()
-        assert manager.download_task is first and first.cancelling() == 1
+        assert manager.download_task is first and cancel.call_count == 1
         await cancellation
         assert manager.state["download"]["status"] == "cancelled"
         assert not list(tmp_path.glob("*.part"))

@@ -18,6 +18,7 @@
 | 检查 | 结果与边界 | 本机证据 |
 | --- | --- | --- |
 | Python 3.12 全量 | 834 passed，1 POSIX 平台 skip | `.desktop-artifacts/integrated-updates-pytest.log` |
+| 后续完整 Runtime 回归 | 837 passed，1 POSIX 平台 skip；取消修复及 JEV 边界回归已纳入 | `.desktop-artifacts/native-updates-dispatch2.json`、`runtime-repair2-receipts.json` |
 | npm 实际安装及测试/打包 | 834 passed，1 skip；包含包内容与 Skill 镜像验证 | `.desktop-artifacts/npm-install-updates.log`、`npm-test-updates.log` |
 | mise 隔离 Python 3.13.14 | install、python/CLI help 参数转发、check、parity、test 均执行；834 passed，1 skip | `.desktop-artifacts/mise-interpreter.log`、`mise-*-help.log`、`mise-check.log`、`mise-parity.log`、`mise-test.log` |
 | 后续定向回归 | JEV、更新管理器、包下载和 Tinyfish：116 passed | `.desktop-artifacts/final-focused-tests.log` |
@@ -64,3 +65,5 @@ macOS/ARM64 现有证据来自 CI 构建和协议/模型测试，原生系统安
 JEV 新定向回归验证超长 title/URL、超长问题保留原文，以及过滤限流后请求在 filter 阶段停止。Windows 新增无界面的 `desktop/tests/BackendLifecycleCheck`，使用真实私有协议进程完成“启动 → 停止 → 再启动 → ping → 停止”，确认安装器失败恢复所需的客户端可复用；记录为 `.desktop-artifacts/backend-reconnect-check.log`。这项检查没有再次控制用户界面或执行安装器。
 
 第一轮正式独立验收又发现两处共用遗漏：取消下载缺少“正在取消”与终态前去重；Windows 的已知质量/解析/服务商错误落成中性“状态未知”。已在共享取消方法中先发布 cancelling，再等待下载清理，并处理协程尚未启动就取消的情况；两端保持取消反馈与禁用，Windows 使用后端状态翻译表及错误色调。流式取消回归覆盖重复取消/下载，新 RPC 回归覆盖立即取消和重试。该修复继续使用自动测试、原生构建及源码核验，未恢复用户已停止的 UI 自动操作。
+
+随后 CI 的 Python 3.10 暴露新增测试引用了 3.11 才支持的 `Task.cancelling()`。已改用标准库 Mock 记录真实 `cancel` 调用次数，仍验证重复取消只请求一次；产品实现不依赖该新接口。失败日志保留为 `.desktop-artifacts/ci-py310-cancel-failure.log`，修复后重新执行对应 CI。
