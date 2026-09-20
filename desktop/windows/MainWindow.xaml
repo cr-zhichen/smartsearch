@@ -19,7 +19,7 @@
       <muxc:NavigationView.PaneHeader>
         <StackPanel Orientation="Horizontal" Spacing="10" Margin="12,12,12,16">
           <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" Width="36" Height="36" Padding="2">
-            <Image Source="ms-appx:///Assets/smart-search.png" Stretch="Uniform" AutomationProperties.Name="Smart Search 图标" />
+            <Image x:Name="AppLogo" Source="ms-appx:///Assets/smart-search.png" Stretch="Uniform" AutomationProperties.Name="Smart Search" />
           </Border>
           <TextBlock Text="Smart Search" VerticalAlignment="Center" FontWeight="SemiBold" />
         </StackPanel>

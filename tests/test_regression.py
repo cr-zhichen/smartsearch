@@ -211,9 +211,13 @@ def test_search_timeout_retry_policy_is_distributable():
         assert marker in packaged_contract
 
 
-def test_deep_research_readme_documents_capability_orchestration():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    readme_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+def _guide_text(language):
+    return "\n".join(path.read_text(encoding="utf-8") for path in sorted((ROOT / "docs/guide" / language).glob("*.md")))
+
+
+def test_deep_research_guide_documents_capability_orchestration():
+    readme = _guide_text("en")
+    readme_zh = _guide_text("zh-CN")
     english_markers = [
         "Deep Research is not a fixed topic recipe system",
         "smart-search research",
@@ -265,12 +269,12 @@ def test_deep_research_readme_documents_capability_orchestration():
 
 
 def test_readme_language_split_and_provider_links_are_documented():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    readme_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    readme = _guide_text("en")
+    readme_zh = _guide_text("zh-CN")
     package_json = (ROOT / "package.json").read_text(encoding="utf-8")
 
-    assert "[简体中文](README.zh-CN.md) | English" in readme
-    assert "简体中文 | [English](README.md)" in readme_zh
+    assert "[简体中文](README.zh-CN.md) | English" in (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "简体中文 | [English](README.md)" in (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     assert "## 中文" not in readme
     assert "## English" not in readme
     assert "README.zh-CN.md" in package_json
@@ -300,8 +304,8 @@ def test_deep_research_shared_skill_files_are_synchronized():
 
 
 def test_opencode_skill_path_contract_is_synchronized():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    readme_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    readme = _guide_text("en")
+    readme_zh = _guide_text("zh-CN")
     public_contract = _read_reference_tree(PUBLIC_SKILL_DIR)
     packaged_contract = _read_reference_tree(PACKAGED_SKILL_DIR)
     required_markers = [
@@ -325,8 +329,8 @@ def test_opencode_skill_path_contract_is_synchronized():
 
 
 def test_zhipu_setup_contract_public_and_packaged_assets_match():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    readme_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    readme = _guide_text("en")
+    readme_zh = _guide_text("zh-CN")
     public_text = _read_skill_tree(PUBLIC_SKILL_DIR)
     packaged_text = _read_skill_tree(PACKAGED_SKILL_DIR)
     public_contract = _read_reference_tree(PUBLIC_SKILL_DIR)
@@ -373,8 +377,8 @@ def test_zhipu_setup_contract_public_and_packaged_assets_match():
 
 
 def test_jina_and_zhipu_mcp_contract_public_and_packaged_assets_match():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    readme_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    readme = _guide_text("en")
+    readme_zh = _guide_text("zh-CN")
     public_text = _read_skill_tree(PUBLIC_SKILL_DIR)
     packaged_text = _read_skill_tree(PACKAGED_SKILL_DIR)
     public_contract = _read_reference_tree(PUBLIC_SKILL_DIR)
@@ -432,8 +436,8 @@ def test_jina_and_zhipu_mcp_contract_public_and_packaged_assets_match():
 
 
 def test_streaming_and_anysearch_contract_public_and_packaged_assets_match():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    readme_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    readme = _guide_text("en")
+    readme_zh = _guide_text("zh-CN")
     public_text = _read_skill_tree(PUBLIC_SKILL_DIR)
     packaged_text = _read_skill_tree(PACKAGED_SKILL_DIR)
     public_contract = _read_reference_tree(PUBLIC_SKILL_DIR)
@@ -510,8 +514,8 @@ def test_streaming_and_anysearch_contract_public_and_packaged_assets_match():
 def test_openai_compatible_fallback_is_fail_over_not_time_slice():
     public_contract = _read_reference_tree(PUBLIC_SKILL_DIR)
     packaged_contract = _read_reference_tree(PACKAGED_SKILL_DIR)
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    readme_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    readme = _guide_text("en")
+    readme_zh = _guide_text("zh-CN")
     markers = [
         "fail-over after a hard primary-model failure, not a time slice",
         "remaining shared main-search budget",
@@ -524,8 +528,8 @@ def test_openai_compatible_fallback_is_fail_over_not_time_slice():
 
 
 def test_openai_compatible_responses_mode_contract_is_documented_and_packaged():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    readme_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    readme = _guide_text("en")
+    readme_zh = _guide_text("zh-CN")
     public_text = _read_skill_tree(PUBLIC_SKILL_DIR)
     packaged_text = _read_skill_tree(PACKAGED_SKILL_DIR)
 

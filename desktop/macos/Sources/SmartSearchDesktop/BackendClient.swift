@@ -12,19 +12,19 @@ enum BackendClientError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case let .backendNotFound(path):
-            return "找不到内置后端：\(path)。开发环境请在设置中明确选择后端文件。"
+            return L("找不到内置后端：{0}。开发环境请在设置中明确选择后端文件。", "\(path)")
         case .notConnected:
-            return "后端尚未连接。"
+            return L("后端尚未连接。")
         case .incompatibleProtocol:
-            return "App 与内置后端的协议版本不兼容，未执行任何写入。"
+            return L("App 与内置后端的协议版本不兼容，未执行任何写入。")
         case .timedOut:
-            return "后端未在设定时间内响应。"
+            return L("后端未在设定时间内响应。")
         case .disconnected:
-            return "后端进程已断开。"
+            return L("后端进程已断开。")
         case .malformedMessage:
-            return "后端返回了无法读取的协议消息。"
+            return L("后端返回了无法读取的协议消息。")
         case let .backendRejected(message):
-            return message.isEmpty ? "后端拒绝了该请求。请检查输入或查看脱敏诊断。" : message
+            return message.isEmpty ? L("后端拒绝了该请求。请检查输入或查看脱敏诊断。") : message
         }
     }
 }
@@ -126,10 +126,10 @@ actor BackendClient {
         }
     }
 
-    func initialize(configDirectory: String? = nil, enableUpdateChecks: Bool = true) async throws -> JSONValue {
+    func initialize(configDirectory: String? = nil, enableUpdateChecks: Bool = true, language: String = "auto") async throws -> JSONValue {
         var params: [String: JSONValue] = ["protocol_version": .number(Double(Self.protocolVersion)),
             "app_version": .string(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "development"),
-            "enable_update_checks": .bool(enableUpdateChecks)]
+            "enable_update_checks": .bool(enableUpdateChecks), "lang": .string(language)]
         if let configDirectory, !configDirectory.isEmpty {
             params["config_dir"] = .string(configDirectory)
         }

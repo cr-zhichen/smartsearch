@@ -46,8 +46,10 @@ def sanitize_provider_error_message(
 ) -> str:
     """Return a compact provider error excerpt without credentials."""
     from .config import config
+    from .i18n import Message, render_messages
 
-    text = str(value or "")
+    # Only explicit tool-owned copy is translated. Upstream errors are never guessed.
+    text = render_messages(value) if isinstance(value, Message) else str(value or "")
     for secret in sorted(set(additional_secrets) | set(config.secret_values()), key=len, reverse=True):
         if secret:
             text = text.replace(str(secret), "[REDACTED]")

@@ -2,6 +2,33 @@ import XCTest
 @testable import SmartSearchDesktop
 
 final class ProtocolModelTests: XCTestCase {
+    private var previousLanguage: String?
+
+    override func setUp() {
+        super.setUp()
+        previousLanguage = UserDefaults.standard.string(forKey: Localization.preferenceKey)
+        UserDefaults.standard.set("zh", forKey: Localization.preferenceKey)
+    }
+
+    override func tearDown() {
+        if let previousLanguage {
+            UserDefaults.standard.set(previousLanguage, forKey: Localization.preferenceKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Localization.preferenceKey)
+        }
+        super.tearDown()
+    }
+
+    func testBundledLanguagesKeepArgumentTextLiteral() {
+        XCTAssertFalse(Localization.messages.isEmpty)
+        XCTAssertEqual(L("Task cancelled."), "任务已取消。")
+        UserDefaults.standard.set("en", forKey: Localization.preferenceKey)
+        XCTAssertEqual(L("任务已取消。"), "Task cancelled.")
+        XCTAssertEqual(L("HTTP {0}: {1}", "400", "upstream {0}"), "HTTP 400: upstream {0}")
+        XCTAssertEqual(Localization.resolve("zh"), "zh")
+        XCTAssertEqual(Localization.resolve("en"), "en")
+    }
+
     func testDynamicResponsesUseTypedObjectFields() throws {
         let value = try JSONDecoder().decode(JSONValue.self, from: Data("""
         {"ok":true,"run_id":"owned-run","runs":[],"enabled":false}

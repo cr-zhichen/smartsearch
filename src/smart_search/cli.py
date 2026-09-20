@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 from . import activity, service
+from .i18n import LANGUAGE_KEY, current_language, normalize, parser_error, render_messages, resolve, tr, use_language
 from .embedding_presets import (
     QWEN3_EMBEDDING_8B_PRESET,
     embedding_preset_for_model,
@@ -103,10 +104,22 @@ SKILLS_COMMAND_ALIASES = {
 }
 
 
+class LocalizedHelpFormatter(argparse.HelpFormatter):
+    def _format_usage(self, usage, actions, groups, prefix=None):
+        return super()._format_usage(usage, actions, groups, tr("usage: ") if prefix is None else prefix)
+
+
 class SmartSearchArgumentParser(argparse.ArgumentParser):
     def __init__(self, *args, **kwargs):
         kwargs.setdefault("allow_abbrev", False)
+        kwargs.setdefault("formatter_class", LocalizedHelpFormatter)
         super().__init__(*args, **kwargs)
+        self.add_argument("--lang", type=normalize, choices=["auto", "zh", "en"], default=argparse.SUPPRESS,
+                          help="Interface language for this call; does not change the saved preference.")
+
+    def error(self, message):
+        self.print_usage(sys.stderr)
+        self.exit(EXIT_PARAMETER_ERROR, str(tr("{0}: error: {1}\n", self.prog, parser_error(message))))
 
 
 TAVILY_DEFAULT_API_URL = "https://api.tavily.com"
@@ -155,7 +168,7 @@ def _get_version() -> str:
 
 
 def _json(data: Any) -> str:
-    return json.dumps(data, ensure_ascii=False, indent=2)
+    return json.dumps(render_messages(data), ensure_ascii=False, indent=2)
 
 
 def _json_stdout_safe(data: Any) -> str:
@@ -211,7 +224,7 @@ def _markdown_table(
         return []
     cell_limits = [0 if header in (exact_headers or set()) else MD_CELL_LIMIT for header in headers]
     lines = [
-        "| " + " | ".join(_md_cell(header) for header in headers) + " |",
+        "| " + " | ".join(_md_cell(tr(header)) for header in headers) + " |",
         "| " + " | ".join("---" for _ in headers) + " |",
     ]
     for row in rows:
@@ -231,38 +244,38 @@ def _markdown_code_block(value: Any) -> list[str]:
 
 def _status_label(value: Any) -> str:
     if isinstance(value, bool):
-        return "OK" if value else "FAIL"
+        return tr('OK') if value else tr('FAIL')
     status = str(value or "").strip()
     normalized = status.lower()
     labels = {
-        "ok": "OK",
-        "true": "OK",
-        "healthy": "HEALTHY",
-        "degraded": "DEGRADED",
-        "configured": "CONFIGURED",
-        "disabled": "DISABLED",
-        "warning": "WARN",
-        "timeout": "TIMEOUT",
-        "error": "ERROR",
-        "config_error": "CONFIG ERROR",
-        "not_configured": "NOT CONFIGURED",
-        "false": "FAIL",
-        "failed": "FAIL",
-        "empty": "EMPTY",
-        "skipped": "SKIPPED",
+        "ok": tr('OK'),
+        "true": tr('OK'),
+        "healthy": tr('HEALTHY'),
+        "degraded": tr('DEGRADED'),
+        "configured": tr('CONFIGURED'),
+        "disabled": tr('DISABLED'),
+        "warning": tr('WARN'),
+        "timeout": tr('TIMEOUT'),
+        "error": tr('ERROR'),
+        "config_error": tr('CONFIG ERROR'),
+        "not_configured": tr('NOT CONFIGURED'),
+        "false": tr('FAIL'),
+        "failed": tr('FAIL'),
+        "empty": tr('EMPTY'),
+        "skipped": tr('SKIPPED'),
     }
     return labels.get(normalized, status.upper() if status else "-")
 
 
 def _yes_no(value: Any) -> str:
-    return "YES" if bool(value) else "NO"
+    return tr('YES') if bool(value) else tr('NO')
 
 
 def _latency_text(value: Any) -> str:
     if value in (None, ""):
         return "-"
     if isinstance(value, (int, float)):
-        return f"{value:.2f} ms"
+        return tr('{0:.2f} ms', value)
     return str(value)
 
 
@@ -275,14 +288,14 @@ def _configured_text(items: Any) -> str:
 def _error_lines(data: dict[str, Any]) -> list[str]:
     lines: list[str] = []
     if data.get("error_type") or data.get("error"):
-        lines.extend(["", "## Errors"])
+        lines.extend(["", tr('## Errors')])
         if data.get("error_type"):
-            lines.append(f"- Type: `{data.get('error_type')}`")
+            lines.append(tr('- Type: `{0}`', data.get('error_type')))
         if data.get("error"):
-            lines.append(f"- Message: {data.get('error')}")
+            lines.append(tr('- Message: {0}', data.get('error')))
     parameter_errors = data.get("config_parameter_errors") or []
     for error in parameter_errors:
-        lines.append(f"- Config: {error}")
+        lines.append(tr('- Config: {0}', error))
     return lines
 
 
@@ -300,14 +313,14 @@ def _error_summary(data: dict[str, Any]) -> str:
 
 def _result_title(item: Any, index: int) -> str:
     if not isinstance(item, dict):
-        return f"Result {index}"
+        return tr('Result {0}', index)
     return (
         item.get("title")
         or item.get("id")
         or item.get("library_id")
         or item.get("url")
         or item.get("provider")
-        or f"Result {index}"
+        or tr('Result {0}', index)
     )
 
 
@@ -346,15 +359,15 @@ def _search_timeout_lines(data: dict[str, Any]) -> list[str]:
     timeout_seconds = data.get("timeout_seconds")
     if timeout_seconds is not None:
         try:
-            lines.append(f"Search budget: {_format_seconds(float(timeout_seconds))} seconds")
+            lines.append(tr('Search budget: {0} seconds', _format_seconds(float(timeout_seconds))))
         except (TypeError, ValueError):
             pass
     if data.get("timeout_phase"):
-        lines.append(f"Timeout phase: `{data.get('timeout_phase')}`")
+        lines.append(tr('Timeout phase: `{0}`', data.get('timeout_phase')))
     if data.get("partial_success"):
-        lines.append("Partial success: YES")
+        lines.append(tr('Partial success: YES'))
     if data.get("timeout_warning"):
-        lines.append(f"Timeout warning: {data.get('timeout_warning')}")
+        lines.append(tr('Timeout warning: {0}', data.get('timeout_warning')))
     return lines
 
 
@@ -380,37 +393,37 @@ def _provider_notice_lines(data: dict[str, Any]) -> list[str]:
             if not include_cooldown:
                 continue
             remaining = _format_seconds(float(notice.get("cooldown_remaining_seconds") or 0.0))
-            parts.append(f"{provider} (cooldown {remaining}s, {label})")
+            parts.append(tr('{0} (cooldown {1}s, {2})', provider, remaining, label))
         else:
             parts.append(f"{provider} ({label})")
     if not parts:
         return []
-    return ["", f"> Degraded providers: {', '.join(parts)}. `smart-search providers status` for details."]
+    return ["", tr('> Degraded providers: {0}. `smart-search providers status` for details.', ', '.join(parts))]
 
 
 def _format_result_markdown(command: str, data: dict[str, Any], title: str) -> str:
     lines = [
         f"# {title}",
         "",
-        f"Status: {_status_label(data.get('ok'))}",
+        tr('Status: {0}', _status_label(data.get('ok'))),
     ]
     if data.get("query"):
-        lines.append(f"Query: `{data.get('query')}`")
+        lines.append(tr('Query: `{0}`', data.get('query')))
     if data.get("url"):
-        lines.append(f"URL: {data.get('url')}")
+        lines.append(tr('URL: {0}', data.get('url')))
     if data.get("base_url"):
-        lines.append(f"Base URL: {data.get('base_url')}")
+        lines.append(tr('Base URL: {0}', data.get('base_url')))
     if data.get("provider"):
-        lines.append(f"Provider: {data.get('provider')}")
+        lines.append(tr('Provider: {0}', data.get('provider')))
     if data.get("tool"):
-        lines.append(f"Tool: `{data.get('tool')}`")
+        lines.append(tr('Tool: `{0}`', data.get('tool')))
     if data.get("elapsed_ms") is not None:
-        lines.append(f"Elapsed: {_latency_text(data.get('elapsed_ms'))}")
+        lines.append(tr('Elapsed: {0}', _latency_text(data.get('elapsed_ms'))))
 
     results = data.get("results") or []
     lines.append("")
     if results:
-        lines.append("## Results")
+        lines.append(tr('## Results'))
         lines.extend(
             _markdown_table(
                 ["#", "Title", "URL / ID", "Summary"],
@@ -419,10 +432,10 @@ def _format_result_markdown(command: str, data: dict[str, Any], title: str) -> s
             )
         )
     elif data.get("content"):
-        lines.append("## Content")
+        lines.append(tr('## Content'))
         lines.extend(_markdown_code_block(data.get("content")))
     elif data.get("ok"):
-        lines.append("No results.")
+        lines.append(tr('No results.'))
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
 
@@ -441,34 +454,32 @@ def _format_providers_markdown(data: dict[str, Any]) -> str:
         ]
         return "\n".join(
             [
-                "# Provider Connection Test",
+                tr('# Provider Connection Test'),
                 "",
-                f"Status: {_status_label(data.get('ok'))}",
+                tr('Status: {0}', _status_label(data.get('ok'))),
                 "",
                 *_markdown_table(["Provider", "Status", "Probe", "ms", "Message"], rows),
             ]
         ).strip() + "\n"
     if data.get("error"):
-        lines = ["# Provider Health", "", f"Status: {_status_label(data.get('ok'))}"]
+        lines = [tr('# Provider Health'), "", tr('Status: {0}', _status_label(data.get('ok')))]
         lines.extend(_error_lines(data))
         return "\n".join(lines).strip() + "\n"
     if "cleared" in data:
         cleared = data.get("cleared") or []
         return "\n".join(
             [
-                "# Provider Health Reset",
+                tr('# Provider Health Reset'),
                 "",
-                f"Status: {_status_label(data.get('ok'))}",
-                "Cleared: " + (", ".join(str(item) for item in cleared) if cleared else "no cooldown was active"),
+                tr('Status: {0}', _status_label(data.get('ok'))),
+                tr('Cleared: ') + (", ".join(str(item) for item in cleared) if cleared else tr('no cooldown was active')),
             ]
         ).strip() + "\n"
     lines = [
-        "# Provider Health",
+        tr('# Provider Health'),
         "",
-        f"Cooldown: {'enabled' if data.get('enabled') else 'disabled'}"
-        f" ({_format_seconds(float(data.get('cooldown_seconds') or 0.0))} seconds"
-        f" after {data.get('failure_threshold', '')} consecutive soft failures)",
-        f"Store: `{data.get('store_path', '')}`",
+        tr('Cooldown: {0} ({1} seconds after {2} consecutive soft failures)', 'enabled' if data.get('enabled') else 'disabled', _format_seconds(float(data.get('cooldown_seconds') or 0.0)), data.get('failure_threshold', '')),
+        tr('Store: `{0}`', data.get('store_path', '')),
     ]
     rows = [
         [
@@ -487,51 +498,51 @@ def _format_providers_markdown(data: dict[str, Any]) -> str:
         ["Provider", "Configured", "State", "Failures", "Error type", "Cooldown left (s)", "Last error"],
         rows,
     )
-    lines.extend(["", *table] if table else ["", "No provider is configured or tracked."])
+    lines.extend(["", *table] if table else ["", tr('No provider is configured or tracked.')])
     return "\n".join(lines).strip() + "\n"
 
 
 def _format_doctor_markdown(data: dict[str, Any]) -> str:
     lines = [
-        "# Smart Search Doctor",
+        tr('# Smart Search Doctor'),
         "",
-        f"Overall: {_status_label(data.get('ok'))}",
-        f"Config file: `{data.get('config_file', '')}`",
-        f"Config dir: `{data.get('config_dir', '')}`",
-        f"Config dir source: `{data.get('config_dir_source', '-')}`",
-        f"Default config file: `{data.get('default_config_file', '')}`",
-        f"Config status: {data.get('config_status', '-')}",
-        f"Minimum profile: {_status_label(data.get('minimum_profile_ok'))}",
-        f"Log dir config value: `{data.get('log_dir_config_value', data.get('SMART_SEARCH_LOG_DIR', ''))}`",
-        f"Resolved log dir: `{data.get('resolved_log_dir', '')}`",
-        f"File logging enabled: {_yes_no(data.get('file_logging_enabled'))}",
+        tr('Overall: {0}', _status_label(data.get('ok'))),
+        tr('Config file: `{0}`', data.get('config_file', '')),
+        tr('Config dir: `{0}`', data.get('config_dir', '')),
+        tr('Config dir source: `{0}`', data.get('config_dir_source', '-')),
+        tr('Default config file: `{0}`', data.get('default_config_file', '')),
+        tr('Config status: {0}', data.get('config_status', '-')),
+        tr('Minimum profile: {0}', _status_label(data.get('minimum_profile_ok'))),
+        tr('Log dir config value: `{0}`', data.get('log_dir_config_value', data.get('SMART_SEARCH_LOG_DIR', ''))),
+        tr('Resolved log dir: `{0}`', data.get('resolved_log_dir', '')),
+        tr('File logging enabled: {0}', _yes_no(data.get('file_logging_enabled'))),
     ]
     if data.get("openai_compatible_endpoint"):
-        lines.append(f"OpenAI-compatible endpoint: `{data.get('openai_compatible_endpoint')}`")
+        lines.append(tr('OpenAI-compatible endpoint: `{0}`', data.get('openai_compatible_endpoint')))
     if data.get("legacy_windows_config_file"):
-        lines.append(f"Legacy Windows config file: `{data.get('legacy_windows_config_file')}`")
-        lines.append(f"Legacy Windows config exists: {_status_label(data.get('legacy_windows_config_exists'))}")
+        lines.append(tr('Legacy Windows config file: `{0}`', data.get('legacy_windows_config_file')))
+        lines.append(tr('Legacy Windows config exists: {0}', _status_label(data.get('legacy_windows_config_exists'))))
     if data.get("config_dir_override_value"):
-        lines.append(f"SMART_SEARCH_CONFIG_DIR: `{data.get('config_dir_override_value')}`")
-        lines.append(f"Override matches default: {_yes_no(data.get('config_dir_override_matches_default'))}")
+        lines.append(tr('SMART_SEARCH_CONFIG_DIR: `{0}`', data.get('config_dir_override_value')))
+        lines.append(tr('Override matches default: {0}', _yes_no(data.get('config_dir_override_matches_default'))))
         if data.get("config_dir_source") == "environment" and data.get("config_dir_override_matches_default"):
             lines.append(
-                "The active config path comes from `SMART_SEARCH_CONFIG_DIR`, but that override matches the current Windows default path."
+                tr('The active config path comes from `SMART_SEARCH_CONFIG_DIR`, but that override matches the current Windows default path.')
             )
     if data.get("config_dir_source") == "legacy_windows_home":
         lines.append(
-            "Active config is using the old Windows `~\\.config\\smart-search` location because the new default file does not exist."
+            tr('Active config is using the old Windows `~\\.config\\smart-search` location because the new default file does not exist.')
         )
     missing = data.get("minimum_profile_missing") or []
     if missing:
-        lines.append(f"Missing: `{', '.join(str(item) for item in missing)}`")
+        lines.append(tr('Missing: `{0}`', ', '.join((str(item) for item in missing))))
 
     config_sources = data.get("config_sources") or {}
     if config_sources:
         rows = []
         for key in sorted(config_sources):
             rows.append([key, config_sources.get(key), data.get(key, "-")])
-        lines.extend(["", "## Configuration Values"])
+        lines.extend(["", tr('## Configuration Values')])
         lines.extend(_markdown_table(["Key", "Source", "Value"], rows, exact_headers={"Value"}))
 
     capability_status = data.get("capability_status") or {}
@@ -548,7 +559,7 @@ def _format_doctor_markdown(data: dict[str, Any]) -> str:
                     ]
                 )
         if rows:
-            lines.extend(["", "## Capabilities"])
+            lines.extend(["", tr('## Capabilities')])
             lines.extend(_markdown_table(["Capability", "Status", "Configured", "Fallback chain"], rows))
 
     provider_health = data.get("provider_health") or {}
@@ -568,9 +579,8 @@ def _format_doctor_markdown(data: dict[str, Any]) -> str:
         lines.extend(
             [
                 "",
-                "## Providers On Cooldown",
-                "These optional providers are skipped until the cooldown ends. Fix the credential, "
-                "or run `smart-search providers reset PROVIDER` to retry immediately.",
+                tr('## Providers On Cooldown'),
+                tr('These optional providers are skipped until the cooldown ends. Fix the credential, or run `smart-search providers reset PROVIDER` to retry immediately.'),
             ]
         )
         lines.extend(
@@ -593,27 +603,27 @@ def _format_doctor_markdown(data: dict[str, Any]) -> str:
                         test.get("message", ""),
                     ]
                 )
-        lines.extend(["", "## Main Search Providers"])
+        lines.extend(["", tr('## Main Search Providers')])
         lines.extend(_markdown_table(["Provider", "Status", "Latency", "Message"], rows))
-        lines.extend(_provider_detail_lines("Provider Details", main_tests))
+        lines.extend(_provider_detail_lines(tr('Provider Details'), main_tests))
     inventory = data.get("openai_compatible_fallback_inventory") or {}
     if inventory:
         lines.extend(
             [
                 "",
-                "## OpenAI-compatible Fallback Models",
+                tr('## OpenAI-compatible Fallback Models'),
                 "",
-                f"- Status: {_status_label(inventory.get('status'))}",
-                f"- Timeout policy: `{inventory.get('timeout_policy', 'remaining_budget')}`",
-                f"- Message: {inventory.get('message', '-')}",
+                tr('- Status: {0}', _status_label(inventory.get('status'))),
+                tr('- Timeout policy: `{0}`', inventory.get('timeout_policy', 'remaining_budget')),
+                tr('- Message: {0}', inventory.get('message', '-')),
             ]
         )
         fallback_models = inventory.get("fallback_models") or []
         if fallback_models:
-            lines.append("- Configured: `" + "`, `".join(str(item) for item in fallback_models) + "`")
+            lines.append(tr('- Configured: `') + "`, `".join(str(item) for item in fallback_models) + "`")
         unknown = inventory.get("unknown_fallback_models") or []
         if unknown:
-            lines.append("- Unknown: `" + "`, `".join(str(item) for item in unknown) + "`")
+            lines.append(tr('- Unknown: `') + "`, `".join(str(item) for item in unknown) + "`")
 
     provider_tests = [
         ("exa", data.get("exa_connection_test") or {}),
@@ -637,13 +647,13 @@ def _format_doctor_markdown(data: dict[str, Any]) -> str:
                 ]
             )
     if rows:
-        lines.extend(["", "## Provider Checks"])
+        lines.extend(["", tr('## Provider Checks')])
         lines.extend(_markdown_table(["Provider", "Status", "Latency", "Message"], rows))
-        lines.extend(_provider_detail_lines("Provider Check Details", dict(provider_tests)))
+        lines.extend(_provider_detail_lines(tr('Provider Check Details'), dict(provider_tests)))
 
     router = data.get("intent_router_status") or {}
     if router:
-        lines.extend(["", "## Intent Router"])
+        lines.extend(["", tr('## Intent Router')])
         lines.extend(
             _markdown_table(
                 ["Field", "Value"],
@@ -667,12 +677,12 @@ def _format_doctor_markdown(data: dict[str, Any]) -> str:
             )
         )
         if router.get("embedding_preset_recommendation"):
-            lines.extend(["", "### Embedding Preset Recommendation", "", router.get("embedding_preset_recommendation")])
+            lines.extend(["", tr('### Embedding Preset Recommendation'), "", router.get("embedding_preset_recommendation")])
             commands = router.get("embedding_preset_commands") or []
             if commands:
                 lines.extend(_markdown_code_block("\n".join(str(command) for command in commands)))
         if router.get("error"):
-            lines.append(f"Intent router error: {router.get('error')}")
+            lines.append(tr('Intent router error: {0}', router.get('error')))
 
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
@@ -697,15 +707,15 @@ def _provider_detail_lines(title: str, provider_tests: dict[str, Any]) -> list[s
                 "",
                 f"### {provider}",
                 "",
-                f"- Status: {_status_label(test.get('status'))}",
-                f"- Latency: {_latency_text(test.get('response_time_ms'))}",
+                tr('- Status: {0}', _status_label(test.get('status'))),
+                tr('- Latency: {0}', _latency_text(test.get('response_time_ms'))),
             ]
         )
         if message:
-            details.extend(["- Message:"])
+            details.extend([tr('- Message:')])
             details.extend(_markdown_code_block(message))
         if available_models:
-            details.append("- Available models: `" + "`, `".join(str(model) for model in available_models) + "`")
+            details.append(tr('- Available models: `') + "`, `".join(str(model) for model in available_models) + "`")
         for name, nested in nested_checks:
             if not isinstance(nested, dict):
                 continue
@@ -728,11 +738,11 @@ def _format_smoke_markdown(data: dict[str, Any]) -> str:
     skipped = data.get("skipped_cases") or []
     overall_status = data.get("status") or ("healthy" if data.get("ok") else "failed")
     lines = [
-        "# Smart Search Smoke",
+        tr('# Smart Search Smoke'),
         "",
-        f"Mode: `{data.get('mode', '')}`",
-        f"Overall: {_status_label(overall_status)}",
-        f"Cases: {len(cases)} total, {len(failed)} failed, {len(degraded)} degraded, {len(skipped)} skipped",
+        tr('Mode: `{0}`', data.get('mode', '')),
+        tr('Overall: {0}', _status_label(overall_status)),
+        tr('Cases: {0} total, {1} failed, {2} degraded, {3} skipped', len(cases), len(failed), len(degraded), len(skipped)),
     ]
     if cases:
         rows = []
@@ -745,7 +755,7 @@ def _format_smoke_markdown(data: dict[str, Any]) -> str:
                     case.get("error") or case.get("error_type") or case.get("skipped", ""),
                 ]
             )
-        lines.extend(["", "## Cases"])
+        lines.extend(["", tr('## Cases')])
         lines.extend(_markdown_table(["Case", "Status", "Severity", "Details"], rows))
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
@@ -753,29 +763,29 @@ def _format_smoke_markdown(data: dict[str, Any]) -> str:
 
 def _format_diagnose_markdown(data: dict[str, Any]) -> str:
     lines = [
-        "# Smart Search Diagnose",
+        tr('# Smart Search Diagnose'),
         "",
-        f"Provider: `{data.get('provider', '')}`",
-        f"Status: {_status_label(data.get('ok'))}",
-        f"Summary: {data.get('summary', '-')}",
-        f"Recommendation: {data.get('recommendation', '-')}",
-        f"Config file: `{data.get('config_file', '')}`",
-        f"Config dir source: `{data.get('config_dir_source', '-')}`",
-        f"API URL: `{data.get('api_url', '')}`",
-        f"API key: `{data.get('api_key', '')}`",
-        f"Model: `{data.get('model', '')}`",
-        f"Configured API mode: `{data.get('configured_api_mode', 'chat-completions')}`",
-        f"Endpoint: `{data.get('endpoint', '')}`",
-        f"Configured stream: {_yes_no(data.get('configured_stream'))}",
-        f"Timeout: {_format_seconds(float(data.get('timeout_seconds', 0) or 0))} seconds",
-        f"Timeout policy: `{data.get('timeout_policy', 'remaining_budget')}`",
+        tr('Provider: `{0}`', data.get('provider', '')),
+        tr('Status: {0}', _status_label(data.get('ok'))),
+        tr('Summary: {0}', data.get('summary', '-')),
+        tr('Recommendation: {0}', data.get('recommendation', '-')),
+        tr('Config file: `{0}`', data.get('config_file', '')),
+        tr('Config dir source: `{0}`', data.get('config_dir_source', '-')),
+        tr('API URL: `{0}`', data.get('api_url', '')),
+        tr('API key: `{0}`', data.get('api_key', '')),
+        tr('Model: `{0}`', data.get('model', '')),
+        tr('Configured API mode: `{0}`', data.get('configured_api_mode', 'chat-completions')),
+        tr('Endpoint: `{0}`', data.get('endpoint', '')),
+        tr('Configured stream: {0}', _yes_no(data.get('configured_stream'))),
+        tr('Timeout: {0} seconds', _format_seconds(float(data.get('timeout_seconds', 0) or 0))),
+        tr('Timeout policy: `{0}`', data.get('timeout_policy', 'remaining_budget')),
     ]
     inventory = data.get("fallback_model_inventory") or {}
     if inventory:
-        lines.append("Fallback models: `" + ", ".join(str(item) for item in (inventory.get("fallback_models") or []) or ["-"]) + "`")
+        lines.append(tr('Fallback models: `') + ", ".join(str(item) for item in (inventory.get("fallback_models") or []) or ["-"]) + "`")
         unknown = inventory.get("unknown_fallback_models") or []
         if unknown:
-            lines.append("Unknown fallback models: `" + ", ".join(str(item) for item in unknown) + "`")
+            lines.append(tr('Unknown fallback models: `') + ", ".join(str(item) for item in unknown) + "`")
     checks = data.get("checks") or []
     if checks:
         rows = []
@@ -791,10 +801,10 @@ def _format_diagnose_markdown(data: dict[str, Any]) -> str:
                     check.get("message", ""),
                 ]
             )
-        lines.extend(["", "## Checks"])
+        lines.extend(["", tr('## Checks')])
         lines.extend(_markdown_table(["Check", "Status", "Latency", "HTTP", "Content-Type", "Has content", "Message"], rows))
     if data.get("next_command"):
-        lines.extend(["", "## Next Command"])
+        lines.extend(["", tr('## Next Command')])
         lines.extend(_markdown_code_block(data.get("next_command")))
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
@@ -802,38 +812,38 @@ def _format_diagnose_markdown(data: dict[str, Any]) -> str:
 
 def _format_route_markdown(data: dict[str, Any]) -> str:
     lines = [
-        "# Intent Route",
+        tr('# Intent Route'),
         "",
-        f"Status: {_status_label(data.get('ok'))}",
-        f"Query: `{data.get('query', '')}`",
-        f"Mode: `{data.get('intent_router_mode', '')}`",
-        f"Executed search: {_yes_no(data.get('executed_search'))}",
-        f"Required capabilities: `{', '.join(data.get('required_capabilities') or [])}`",
-        f"Confidence: `{data.get('confidence', '')}`",
-        f"Engines: `{', '.join(data.get('router_engines_used') or [])}`",
-        f"Embedding model: `{data.get('embedding_model', '')}`",
-        f"Embedding threshold: `{data.get('embedding_threshold', '')}` ({data.get('embedding_threshold_source', '')})",
-        f"Embedding margin: `{data.get('embedding_margin', '')}` ({data.get('embedding_margin_source', '')})",
-        f"Degraded: {_yes_no(data.get('degraded'))}",
+        tr('Status: {0}', _status_label(data.get('ok'))),
+        tr('Query: `{0}`', data.get('query', '')),
+        tr('Mode: `{0}`', data.get('intent_router_mode', '')),
+        tr('Executed search: {0}', _yes_no(data.get('executed_search'))),
+        tr('Required capabilities: `{0}`', ', '.join(data.get('required_capabilities') or [])),
+        tr('Confidence: `{0}`', data.get('confidence', '')),
+        tr('Engines: `{0}`', ', '.join(data.get('router_engines_used') or [])),
+        tr('Embedding model: `{0}`', data.get('embedding_model', '')),
+        tr('Embedding threshold: `{0}` ({1})', data.get('embedding_threshold', ''), data.get('embedding_threshold_source', '')),
+        tr('Embedding margin: `{0}` ({1})', data.get('embedding_margin', ''), data.get('embedding_margin_source', '')),
+        tr('Degraded: {0}', _yes_no(data.get('degraded'))),
     ]
     if data.get("embedding_preset_recommendation"):
-        lines.extend(["", "## Embedding Preset Recommendation", "", data.get("embedding_preset_recommendation")])
+        lines.extend(["", tr('## Embedding Preset Recommendation'), "", data.get("embedding_preset_recommendation")])
         commands = data.get("embedding_preset_commands") or []
         if commands:
             lines.extend(_markdown_code_block("\n".join(str(command) for command in commands)))
     if data.get("degraded_reason"):
-        lines.append(f"Degraded reason: {data.get('degraded_reason')}")
+        lines.append(tr('Degraded reason: {0}', data.get('degraded_reason')))
     if data.get("intent_router_mode") == "jev":
-        lines.append("Selected channels: " + ", ".join(item["id"] for item in data.get("selected_channels", [])))
+        lines.append(tr('Selected channels: ') + ", ".join(item["id"] for item in data.get("selected_channels", [])))
     reasons = data.get("reasons") or []
     if reasons:
-        lines.extend(["", "## Reasons"])
+        lines.extend(["", tr('## Reasons')])
         for reason in reasons:
             lines.append(f"- {reason}")
     signals = data.get("intent_signals") or {}
     if signals:
         rows = [[key, value] for key, value in sorted(signals.items())]
-        lines.extend(["", "## Signals"])
+        lines.extend(["", tr('## Signals')])
         lines.extend(_markdown_table(["Signal", "Value"], rows))
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
@@ -841,14 +851,14 @@ def _format_route_markdown(data: dict[str, Any]) -> str:
 
 def _format_route_calibrate_markdown(data: dict[str, Any]) -> str:
     lines = [
-        "# Route Calibration",
+        tr('# Route Calibration'),
         "",
-        f"Status: {_status_label(data.get('ok'))}",
-        f"Primary metric: `{data.get('primary_metric', data.get('metric', ''))}`",
-        f"Dataset size: `{data.get('dataset_size', '')}`",
-        f"Recommended model: `{data.get('recommended_model') or '-'}`",
-        f"Recommended threshold: `{data.get('recommended_threshold') if data.get('recommended_threshold') is not None else '-'}`",
-        f"Recommended margin: `{data.get('recommended_margin') if data.get('recommended_margin') is not None else '-'}`",
+        tr('Status: {0}', _status_label(data.get('ok'))),
+        tr('Primary metric: `{0}`', data.get('primary_metric', data.get('metric', ''))),
+        tr('Dataset size: `{0}`', data.get('dataset_size', '')),
+        tr('Recommended model: `{0}`', data.get('recommended_model') or '-'),
+        tr('Recommended threshold: `{0}`', data.get('recommended_threshold') if data.get('recommended_threshold') is not None else '-'),
+        tr('Recommended margin: `{0}`', data.get('recommended_margin') if data.get('recommended_margin') is not None else '-'),
     ]
     results = data.get("model_results") or []
     if results:
@@ -867,7 +877,7 @@ def _format_route_calibrate_markdown(data: dict[str, Any]) -> str:
                     item.get("error", ""),
                 ]
             )
-        lines.extend(["", "## Models"])
+        lines.extend(["", tr('## Models')])
         lines.extend(
             _markdown_table(
                 ["Model", "Status", "Dim", "Latency", "Semantic F1", "Full-route F1", "Threshold", "Margin", "Error"],
@@ -876,14 +886,14 @@ def _format_route_calibrate_markdown(data: dict[str, Any]) -> str:
         )
     failed = data.get("failed_models") or []
     if failed:
-        lines.extend(["", "## Failed Models"])
+        lines.extend(["", tr('## Failed Models')])
         for model in failed:
             lines.append(f"- `{model}`")
     best = next((item for item in results if item.get("model") == data.get("recommended_model")), None)
     if isinstance(best, dict):
         failures = best.get("semantic_failures") or []
         if failures:
-            lines.extend(["", "## Representative Semantic Failures"])
+            lines.extend(["", tr('## Representative Semantic Failures')])
             rows = []
             for failure in failures[:8]:
                 rows.append(
@@ -903,83 +913,83 @@ def _format_route_calibrate_markdown(data: dict[str, Any]) -> str:
 
 
 def _format_config_markdown(data: dict[str, Any]) -> str:
-    lines = ["# Smart Search Config", "", f"Status: {_status_label(data.get('ok'))}"]
+    lines = [tr('# Smart Search Config'), "", tr('Status: {0}', _status_label(data.get('ok')))]
     if data.get("config_file"):
-        lines.append(f"Config file: `{data.get('config_file')}`")
+        lines.append(tr('Config file: `{0}`', data.get('config_file')))
     if data.get("config_dir"):
-        lines.append(f"Config dir: `{data.get('config_dir')}`")
+        lines.append(tr('Config dir: `{0}`', data.get('config_dir')))
     if data.get("config_dir_source"):
-        lines.append(f"Config dir source: `{data.get('config_dir_source')}`")
+        lines.append(tr('Config dir source: `{0}`', data.get('config_dir_source')))
     if data.get("default_config_file"):
-        lines.append(f"Default config file: `{data.get('default_config_file')}`")
+        lines.append(tr('Default config file: `{0}`', data.get('default_config_file')))
     if data.get("legacy_windows_config_file"):
-        lines.append(f"Legacy Windows config file: `{data.get('legacy_windows_config_file')}`")
-        lines.append(f"Legacy Windows config exists: {_status_label(data.get('legacy_windows_config_exists'))}")
+        lines.append(tr('Legacy Windows config file: `{0}`', data.get('legacy_windows_config_file')))
+        lines.append(tr('Legacy Windows config exists: {0}', _status_label(data.get('legacy_windows_config_exists'))))
     if data.get("config_dir_override_value"):
-        lines.append(f"SMART_SEARCH_CONFIG_DIR: `{data.get('config_dir_override_value')}`")
-        lines.append(f"Override matches default: {_yes_no(data.get('config_dir_override_matches_default'))}")
+        lines.append(tr('SMART_SEARCH_CONFIG_DIR: `{0}`', data.get('config_dir_override_value')))
+        lines.append(tr('Override matches default: {0}', _yes_no(data.get('config_dir_override_matches_default'))))
     if "exists" in data:
-        lines.append(f"Exists: {_status_label(bool(data.get('exists')))}")
+        lines.append(tr('Exists: {0}', _status_label(bool(data.get('exists')))))
     if data.get("key"):
-        lines.append(f"Key: `{data.get('key')}`")
+        lines.append(tr('Key: `{0}`', data.get('key')))
     if data.get("value"):
-        lines.append(f"Value: `{data.get('value')}`")
+        lines.append(tr('Value: `{0}`', data.get('value')))
     values = data.get("values") or {}
     if values:
-        lines.extend(["", "## Values"])
+        lines.extend(["", tr('## Values')])
         lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in values.items()], exact_headers={"Value"}))
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
 
 
 def _format_model_markdown(data: dict[str, Any]) -> str:
-    lines = ["# Smart Search Model", "", f"Status: {_status_label(data.get('ok'))}"]
+    lines = [tr('# Smart Search Model'), "", tr('Status: {0}', _status_label(data.get('ok')))]
     rows = []
     if data.get("xai_model"):
         rows.append(["xai-responses", data.get("xai_model")])
     if data.get("openai_compatible_model"):
         rows.append(["openai-compatible", data.get("openai_compatible_model")])
     if data.get("openai_compatible_api_mode"):
-        rows.append(["openai-compatible API mode", data.get("openai_compatible_api_mode")])
+        rows.append([tr('openai-compatible API mode'), data.get("openai_compatible_api_mode")])
     fallback_models = data.get("openai_compatible_fallback_models") or []
     if fallback_models:
-        rows.append(["openai-compatible fallback", ", ".join(fallback_models)])
+        rows.append([tr('openai-compatible fallback'), ", ".join(fallback_models)])
     if data.get("current_model"):
         rows.append(["current", data.get("current_model")])
     if rows:
-        lines.extend(["", "## Models"])
+        lines.extend(["", tr('## Models')])
         lines.extend(_markdown_table(["Provider", "Model"], rows))
     if data.get("config_file"):
-        lines.extend(["", f"Config file: `{data.get('config_file')}`"])
+        lines.extend(["", tr('Config file: `{0}`', data.get('config_file'))])
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
 
 
 def _format_setup_markdown(data: dict[str, Any]) -> str:
-    lines = ["# Smart Search Setup", "", f"Status: {_status_label(data.get('ok'))}"]
+    lines = [tr('# Smart Search Setup'), "", tr('Status: {0}', _status_label(data.get('ok')))]
     if data.get("config_file"):
-        lines.append(f"Config file: `{data.get('config_file')}`")
+        lines.append(tr('Config file: `{0}`', data.get('config_file')))
     saved = data.get("saved") or data.get("values") or {}
     if saved:
-        lines.extend(["", "## Saved Values"])
+        lines.extend(["", tr('## Saved Values')])
         lines.extend(_markdown_table(["Key", "Value"], [[key, value] for key, value in saved.items()], exact_headers={"Value"}))
     skills = data.get("skills") or {}
     if isinstance(skills, dict) and skills:
         installed = skills.get("installed") or []
         failed = skills.get("failed") or []
-        lines.extend(["", "## Skills", f"Installed: {len(installed)}", f"Failed: {len(failed)}"])
+        lines.extend(["", tr('## Skills'), tr('Installed: {0}', len(installed)), tr('Failed: {0}', len(failed))])
     lines.extend(_error_lines(data))
     return "\n".join(lines).strip() + "\n"
 
 
 def _format_skills_markdown(data: dict[str, Any]) -> str:
-    lines = ["# Smart Search Skills", "", f"Status: {_status_label(data.get('ok'))}"]
+    lines = [tr('# Smart Search Skills'), "", tr('Status: {0}', _status_label(data.get('ok')))]
     if data.get("root"):
-        lines.append(f"Root: `{data.get('root')}`")
+        lines.append(tr('Root: `{0}`', data.get('root')))
     if data.get("skill"):
-        lines.append(f"Skill: `{data.get('skill')}`")
+        lines.append(tr('Skill: `{0}`', data.get('skill')))
     if data.get("bundled_files") is not None:
-        lines.append(f"Bundled files: {data.get('bundled_files')}")
+        lines.append(tr('Bundled files: {0}', data.get('bundled_files')))
 
     targets = data.get("targets") or data.get("installed") or []
     if targets:
@@ -996,7 +1006,7 @@ def _format_skills_markdown(data: dict[str, Any]) -> str:
                     item.get("path", ""),
                 ]
             )
-        lines.extend(["", "## Targets"])
+        lines.extend(["", tr('## Targets')])
         lines.extend(
             _markdown_table(
                 ["Target", "Status", "Files", "Installed", "Hash match", "Extra", "Path"],
@@ -1019,8 +1029,8 @@ def _format_skills_markdown(data: dict[str, Any]) -> str:
     if legacy_rows:
         lines.extend([
             "",
-            "## Legacy Locations",
-            "Reported read-only; setup and update write only to the canonical target.",
+            tr('## Legacy Locations'),
+            tr('Reported read-only; setup and update write only to the canonical target.'),
         ])
         lines.extend(
             _markdown_table(
@@ -1030,7 +1040,7 @@ def _format_skills_markdown(data: dict[str, Any]) -> str:
             )
         )
     if data.get("failed"):
-        lines.extend(["", "## Failed"])
+        lines.extend(["", tr('## Failed')])
         lines.extend(
             _markdown_table(
                 ["Target", "Path", "Error"],
@@ -1045,23 +1055,23 @@ def _format_skills_markdown(data: dict[str, Any]) -> str:
 def _format_markdown(command: str, data: dict[str, Any]) -> str:
     if command == "search":
         if not data.get("ok", False) and (data.get("error") or data.get("error_type")):
-            lines = ["# Smart Search Search", ""]
+            lines = [tr('# Smart Search Search'), ""]
             if data.get("query"):
-                lines.append(f"Query: `{data.get('query')}`")
+                lines.append(tr('Query: `{0}`', data.get('query')))
             if data.get("provider") is not None:
-                lines.append(f"Provider: `{data.get('provider')}`")
+                lines.append(tr('Provider: `{0}`', data.get('provider')))
             if data.get("model") is not None:
-                lines.append(f"Model: `{data.get('model')}`")
+                lines.append(tr('Model: `{0}`', data.get('model')))
             if data.get("stream") is not None:
-                lines.append(f"Stream: {_yes_no(data.get('stream'))}")
+                lines.append(tr('Stream: {0}', _yes_no(data.get('stream'))))
             lines.extend(_search_timeout_lines(data))
             if data.get("content"):
-                lines.extend(["", "## Content"])
+                lines.extend(["", tr('## Content')])
                 lines.extend(_markdown_code_block(data.get("content")))
             if data.get("recommendation"):
-                lines.extend(["", "## Recommendation", str(data.get("recommendation"))])
+                lines.extend(["", tr('## Recommendation'), str(data.get("recommendation"))])
             if data.get("diagnose_command"):
-                lines.extend(["", "## Next Command"])
+                lines.extend(["", tr('## Next Command')])
                 lines.extend(_markdown_code_block(data.get("diagnose_command")))
             lines.extend(_provider_notice_lines(data))
             lines.extend(_error_lines(data))
@@ -1069,9 +1079,9 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
         lines = [data.get("content", "")]
         if data.get("primary_api_mode") == "jev":
             assessment = data.get("evidence_assessment", {})
-            lines.append(f"\nEvidence: {assessment.get('status', 'unknown')}")
+            lines.append(tr('\nEvidence: {0}', assessment.get('status', 'unknown')))
             for warning in data.get("warnings", []):
-                lines.append(f"Warning: {warning}")
+                lines.append(tr('Warning: {0}', warning))
         lines.extend(_search_timeout_lines(data))
         lines.extend(_provider_notice_lines(data))
         primary_sources = data.get("primary_sources") or []
@@ -1081,13 +1091,13 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
             if warning:
                 lines.append(f"\n> {warning}")
             if primary_sources:
-                lines.append("\n## Primary Sources")
+                lines.append(tr('\n## Primary Sources'))
                 for item in primary_sources:
                     url = item.get("url", "")
                     title = item.get("title") or item.get("provider") or url
                     lines.append(f"- [{title}]({url})")
             if extra_sources:
-                lines.append("\n## Extra Sources")
+                lines.append(tr('\n## Extra Sources'))
                 for item in extra_sources:
                     url = item.get("url", "")
                     title = item.get("title") or item.get("provider") or url
@@ -1096,7 +1106,7 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
 
         sources = data.get("sources") or []
         if sources:
-            lines.append("\n## Sources")
+            lines.append(tr('\n## Sources'))
             for item in sources:
                 url = item.get("url", "")
                 title = item.get("title") or item.get("provider") or url
@@ -1107,11 +1117,11 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
     if command == "context7-docs":
         content = data.get("content") or ""
         lines = [
-            "# Context7 Docs",
+            tr('# Context7 Docs'),
             "",
-            f"Status: {_status_label(data.get('ok'))}",
-            f"Library: `{data.get('library_id', '')}`",
-            f"Query: `{data.get('query', '')}`",
+            tr('Status: {0}', _status_label(data.get('ok'))),
+            tr('Library: `{0}`', data.get('library_id', '')),
+            tr('Query: `{0}`', data.get('query', '')),
         ]
         if content:
             lines.extend(["", content])
@@ -1119,14 +1129,14 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
         return "\n".join(lines).strip() + "\n"
     if command == "deep":
         lines = [
-            "# Deep Research Plan",
+            tr('# Deep Research Plan'),
             "",
-            f"**Question:** {data.get('question', '')}",
-            f"**Mode:** {data.get('mode', '')}",
-            f"**Difficulty:** {data.get('difficulty', '')}",
-            f"**Evidence policy:** {data.get('evidence_policy', '')}",
+            tr('**Question:** {0}', data.get('question', '')),
+            tr('**Mode:** {0}', data.get('mode', '')),
+            tr('**Difficulty:** {0}', data.get('difficulty', '')),
+            tr('**Evidence policy:** {0}', data.get('evidence_policy', '')),
             "",
-            "## Boundary",
+            tr('## Boundary'),
         ]
         usage_boundary = data.get("usage_boundary") or {}
         for key in ("search", "deep", "execution"):
@@ -1134,18 +1144,18 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
                 lines.append(f"- **{key}:** {usage_boundary[key]}")
         decomposition = data.get("decomposition") or []
         if decomposition:
-            lines.extend(["", "## Decomposition"])
+            lines.extend(["", tr('## Decomposition')])
             for item in decomposition:
                 lines.append(f"- **{item.get('id', '')}:** {item.get('question', '')}")
         steps = data.get("steps") or []
         if steps:
-            lines.extend(["", "## Steps"])
+            lines.extend(["", tr('## Steps')])
             for step in steps:
                 lines.append(f"{step.get('id', '')}. `{step.get('tool', '')}` ({step.get('subquestion_id', '')}) - {step.get('purpose', '')}")
                 lines.append(f"   ```powershell\n   {step.get('command', '')}\n   ```")
         gap_check = data.get("gap_check") or {}
         if gap_check:
-            lines.extend(["", "## Gap Check", gap_check.get("rule", "")])
+            lines.extend(["", tr('## Gap Check'), gap_check.get("rule", "")])
         return "\n".join(lines).strip() + "\n"
     if command == "route":
         return _format_route_markdown(data)
@@ -1153,21 +1163,21 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
         return _format_route_calibrate_markdown(data)
     if command == "research":
         lines = [
-            "# Research Report",
+            tr('# Research Report'),
             "",
-            f"**Question:** {data.get('question', '')}",
-            f"**Status:** {_status_label(data.get('ok'))}",
-            f"**Route policy:** {data.get('route_policy_version', '')}",
-            f"**Evidence dir:** `{data.get('evidence_dir', '')}`",
-            f"**Fallback used:** {bool(data.get('fallback_used'))}",
-            f"**Degraded:** {bool(data.get('degraded'))}",
+            tr('**Question:** {0}', data.get('question', '')),
+            tr('**Status:** {0}', _status_label(data.get('ok'))),
+            tr('**Route policy:** {0}', data.get('route_policy_version', '')),
+            tr('**Evidence dir:** `{0}`', data.get('evidence_dir', '')),
+            tr('**Fallback used:** {0}', bool(data.get('fallback_used'))),
+            tr('**Degraded:** {0}', bool(data.get('degraded'))),
             "",
-            "## Answer",
+            tr('## Answer'),
             data.get("final_answer") or data.get("content") or "",
         ]
         citations = data.get("citations") or []
         if citations:
-            lines.extend(["", "## Citations"])
+            lines.extend(["", tr('## Citations')])
             for item in citations:
                 url = item.get("url", "")
                 title = item.get("title") or url
@@ -1175,7 +1185,7 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
                 lines.append(f"- [{title}]({url})" + (f" ({provider})" if provider else ""))
         gaps = (data.get("gap_check") or {}).get("gaps") or []
         if gaps:
-            lines.extend(["", "## Gaps"])
+            lines.extend(["", tr('## Gaps')])
             for gap in gaps:
                 reason = gap.get("reason", "")
                 url = gap.get("url", "")
@@ -1198,25 +1208,25 @@ def _format_markdown(command: str, data: dict[str, Any]) -> str:
     if command == "providers":
         return _format_providers_markdown(data)
     titles = {
-        "map": "Site Map",
-        "exa-search": "Exa Search",
-        "exa-similar": "Exa Similar Pages",
-        "zhipu-search": "Zhipu Search",
-        "zhipu-mcp-search": "Zhipu Coding Plan MCP Search",
-        "zhipu-mcp-reader": "Zhipu Coding Plan MCP Reader",
-        "zhipu-mcp-search-doc": "Zhipu Coding Plan MCP Search Doc",
-        "zhipu-mcp-repo-structure": "Zhipu Coding Plan MCP Repo Structure",
-        "zhipu-mcp-read-file": "Zhipu Coding Plan MCP Read File",
-        "anysearch-domains": "AnySearch Domains",
-        "anysearch-search": "AnySearch Search",
-        "anysearch-extract": "AnySearch Extract",
-        "anysearch-batch": "AnySearch Batch",
-        "sciverse-catalog": "Sciverse Catalog",
-        "sciverse-search": "Sciverse Search",
-        "sciverse-semantic": "Sciverse Semantic Search",
-        "sciverse-read": "Sciverse Read",
-        "sciverse-relations": "Sciverse Relations",
-        "context7-library": "Context7 Library Search",
+        "map": tr('Site Map'),
+        "exa-search": tr('Exa Search'),
+        "exa-similar": tr('Exa Similar Pages'),
+        "zhipu-search": tr('Zhipu Search'),
+        "zhipu-mcp-search": tr('Zhipu Coding Plan MCP Search'),
+        "zhipu-mcp-reader": tr('Zhipu Coding Plan MCP Reader'),
+        "zhipu-mcp-search-doc": tr('Zhipu Coding Plan MCP Search Doc'),
+        "zhipu-mcp-repo-structure": tr('Zhipu Coding Plan MCP Repo Structure'),
+        "zhipu-mcp-read-file": tr('Zhipu Coding Plan MCP Read File'),
+        "anysearch-domains": tr('AnySearch Domains'),
+        "anysearch-search": tr('AnySearch Search'),
+        "anysearch-extract": tr('AnySearch Extract'),
+        "anysearch-batch": tr('AnySearch Batch'),
+        "sciverse-catalog": tr('Sciverse Catalog'),
+        "sciverse-search": tr('Sciverse Search'),
+        "sciverse-semantic": tr('Sciverse Semantic Search'),
+        "sciverse-read": tr('Sciverse Read'),
+        "sciverse-relations": tr('Sciverse Relations'),
+        "context7-library": tr('Context7 Library Search'),
     }
     if command in titles:
         return _format_result_markdown(command, data, titles[command])
@@ -1255,44 +1265,39 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
     if command == "route":
         capabilities = ", ".join(data.get("required_capabilities") or []) or "none"
         lines = [
-            f"Intent route {_status_label(data.get('ok'))}: capabilities={capabilities}",
-            f"mode={data.get('intent_router_mode', '')}; confidence={data.get('confidence', '')}; engines={','.join(data.get('router_engines_used') or [])}",
-            f"embedding_model={data.get('embedding_model', '')}; threshold={data.get('embedding_threshold', '')}({data.get('embedding_threshold_source', '')}); margin={data.get('embedding_margin', '')}({data.get('embedding_margin_source', '')})",
+            tr('Intent route {0}: capabilities={1}', _status_label(data.get('ok')), capabilities),
+            tr('mode={0}; confidence={1}; engines={2}', data.get('intent_router_mode', ''), data.get('confidence', ''), ','.join(data.get('router_engines_used') or [])),
+            tr('embedding_model={0}; threshold={1}({2}); margin={3}({4})', data.get('embedding_model', ''), data.get('embedding_threshold', ''), data.get('embedding_threshold_source', ''), data.get('embedding_margin', ''), data.get('embedding_margin_source', '')),
         ]
         if data.get("embedding_preset_recommendation"):
             lines.append(
-                "embedding_preset_recommendation="
-                f"threshold={data.get('embedding_preset_threshold')} "
-                f"margin={data.get('embedding_preset_margin')}"
+                tr('embedding_preset_recommendation=threshold={0} margin={1}', data.get('embedding_preset_threshold'), data.get('embedding_preset_margin'))
             )
         if data.get("degraded_reason"):
-            lines.append(f"degraded={data.get('degraded_reason')}")
+            lines.append(tr('degraded={0}', data.get('degraded_reason')))
         if data.get("error"):
-            lines.append(f"Error: {_error_summary(data)}")
+            lines.append(tr('Error: {0}', _error_summary(data)))
         return "\n".join(lines).strip() + "\n"
     if command == "route-calibrate":
         results = data.get("model_results") or []
         ok_count = sum(1 for item in results if item.get("ok"))
         lines = [
-            f"Route calibration {_status_label(data.get('ok'))}: {ok_count}/{len(results)} models calibrated",
-            f"primary_metric={data.get('primary_metric', data.get('metric', ''))}; dataset={data.get('dataset_size', '')}",
+            tr('Route calibration {0}: {1}/{2} models calibrated', _status_label(data.get('ok')), ok_count, len(results)),
+            tr('primary_metric={0}; dataset={1}', data.get('primary_metric', data.get('metric', '')), data.get('dataset_size', '')),
         ]
         if data.get("recommended_model"):
             lines.append(
-                "recommended="
-                f"{data.get('recommended_model')} "
-                f"threshold={data.get('recommended_threshold')} "
-                f"margin={data.get('recommended_margin')}"
+                tr('recommended={0} threshold={1} margin={2}', data.get('recommended_model'), data.get('recommended_threshold'), data.get('recommended_margin'))
             )
         if data.get("failed_models"):
             lines.append("failed=" + ",".join(str(item) for item in data.get("failed_models") or []))
         if data.get("error"):
-            lines.append(f"Error: {_error_summary(data)}")
+            lines.append(tr('Error: {0}', _error_summary(data)))
         return "\n".join(lines).strip() + "\n"
     if command == "deep" or data.get("mode") == "deep_research":
         lines = [
-            f"Deep Research plan for: {data.get('question', '')}",
-            "This command only plans; execute the listed CLI steps to perform live research.",
+            tr('Deep Research plan for: {0}', data.get('question', '')),
+            tr('This command only plans; execute the listed CLI steps to perform live research.'),
         ]
         return "\n".join(lines) + "\n"
     if command == "providers":
@@ -1301,20 +1306,20 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
                 f"{item.get('provider', '')}: {item.get('status', '')} - {_one_line(item.get('message', '') or '-', 100)}"
                 for item in (data.get("results") or [])
             ]
-            return "\n".join(lines) + "\n" if lines else "No provider tested\n"
+            return "\n".join(lines) + "\n" if lines else tr('No provider tested\n')
         if data.get("error"):
-            return f"Providers {_status_label(data.get('ok'))}: {_error_summary(data)}\n"
+            return tr('Providers {0}: {1}\n', _status_label(data.get('ok')), _error_summary(data))
         if "cleared" in data:
             cleared = data.get("cleared") or []
             return (
-                f"Providers reset {_status_label(data.get('ok'))}: "
-                + (", ".join(str(item) for item in cleared) if cleared else "no cooldown to clear")
+                tr('Providers reset {0}: ', _status_label(data.get('ok')))
+                + (", ".join(str(item) for item in cleared) if cleared else tr('no cooldown to clear'))
                 + "\n"
             )
         cooling = data.get("cooldown_providers") or []
         tracked = data.get("providers") or []
         summary = ", ".join(str(item) for item in cooling) if cooling else "none"
-        return f"Provider health: {len(tracked)} tracked, cooldown={summary}\n"
+        return tr('Provider health: {0} tracked, cooldown={1}\n', len(tracked), summary)
     if command == "doctor":
         configured = data.get("capability_status", {})
         capability_bits = []
@@ -1322,36 +1327,34 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
             if isinstance(status, dict):
                 capability_bits.append(f"{name}={_status_label(status.get('ok'))}")
         lines = [
-            f"Doctor {_status_label(data.get('ok'))}: {data.get('config_status', '')}".strip(),
-            f"Minimum profile: {_status_label(data.get('minimum_profile_ok'))}",
+            tr('Doctor {0}: {1}', _status_label(data.get('ok')), data.get('config_status', '')).strip(),
+            tr('Minimum profile: {0}', _status_label(data.get('minimum_profile_ok'))),
         ]
         if capability_bits:
-            lines.append("Capabilities: " + ", ".join(capability_bits))
+            lines.append(tr('Capabilities: ') + ", ".join(capability_bits))
         router = data.get("intent_router_status") or {}
         if router.get("embedding_preset_recommendation"):
             lines.append(
-                "Embedding preset recommendation: "
-                f"threshold={router.get('embedding_preset_threshold')} "
-                f"margin={router.get('embedding_preset_margin')}"
+                tr('Embedding preset recommendation: threshold={0} margin={1}', router.get('embedding_preset_threshold'), router.get('embedding_preset_margin'))
             )
         cooling = (data.get("provider_health") or {}).get("cooldown_providers") or []
         if cooling:
             lines.append(
-                "Providers on cooldown: "
+                tr('Providers on cooldown: ')
                 + ", ".join(str(item) for item in cooling)
                 + " (`smart-search providers status`)"
             )
         if data.get("error"):
-            lines.append(f"Error: {_error_summary(data)}")
+            lines.append(tr('Error: {0}', _error_summary(data)))
         return "\n".join(lines).strip() + "\n"
     if command == "diagnose":
         lines = [
-            f"Diagnose {data.get('provider', '')} {_status_label(data.get('ok'))}: {data.get('summary', '')}".strip(),
+            tr('Diagnose {0} {1}: {2}', data.get('provider', ''), _status_label(data.get('ok')), data.get('summary', '')).strip(),
         ]
         if data.get("recommendation"):
-            lines.append(f"Recommendation: {data.get('recommendation')}")
+            lines.append(tr('Recommendation: {0}', data.get('recommendation')))
         if data.get("error"):
-            lines.append(f"Error: {_error_summary(data)}")
+            lines.append(tr('Error: {0}', _error_summary(data)))
         return "\n".join(lines).strip() + "\n"
     if command == "smoke":
         cases = data.get("cases") or []
@@ -1360,52 +1363,51 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
         skipped = data.get("skipped_cases") or []
         status = data.get("status") or ("healthy" if data.get("ok") else "failed")
         return (
-            f"Smoke {data.get('mode', '')} {_status_label(status)}: {len(cases)} cases, "
-            f"{len(failed)} failed, {len(degraded)} degraded, {len(skipped)} skipped\n"
+            tr('Smoke {0} {1}: {2} cases, {3} failed, {4} degraded, {5} skipped\n', data.get('mode', ''), _status_label(status), len(cases), len(failed), len(degraded), len(skipped))
         )
     if command == "config":
-        parts = [f"Config {_status_label(data.get('ok'))}"]
+        parts = [tr('Config {0}', _status_label(data.get('ok')))]
         if data.get("config_file"):
-            parts.append(f"file={data.get('config_file')}")
+            parts.append(tr('file={0}', data.get('config_file')))
         if data.get("config_dir_source"):
-            parts.append(f"source={data.get('config_dir_source')}")
+            parts.append(tr('source={0}', data.get('config_dir_source')))
         if data.get("config_dir_override_value"):
-            parts.append(f"override={data.get('config_dir_override_value')}")
+            parts.append(tr('override={0}', data.get('config_dir_override_value')))
         if data.get("key"):
-            parts.append(f"key={data.get('key')}")
+            parts.append(tr('key={0}', data.get('key')))
         if data.get("value"):
-            parts.append(f"value={data.get('value')}")
+            parts.append(tr('value={0}', data.get('value')))
         values = data.get("values") or {}
         if values:
-            parts.append(f"values={len(values)}")
+            parts.append(tr('values={0}', len(values)))
         if data.get("error"):
-            parts.append(f"error={_error_summary(data)}")
+            parts.append(tr('error={0}', _error_summary(data)))
         return "; ".join(parts) + "\n"
     if command == "model":
         if data.get("error"):
-            return f"Model {_status_label(data.get('ok'))}: {_error_summary(data)}\n"
+            return tr('Model {0}: {1}\n', _status_label(data.get('ok')), _error_summary(data))
         rows = []
         if data.get("xai_model"):
-            rows.append(f"xai-responses={data.get('xai_model')}")
+            rows.append(tr('xai-responses={0}', data.get('xai_model')))
         if data.get("openai_compatible_model"):
-            rows.append(f"openai-compatible={data.get('openai_compatible_model')}")
+            rows.append(tr('openai-compatible={0}', data.get('openai_compatible_model')))
         if data.get("current_model"):
-            rows.append(f"current={data.get('current_model')}")
-        return ("Models: " + ", ".join(rows) if rows else f"Model {_status_label(data.get('ok'))}") + "\n"
+            rows.append(tr('current={0}', data.get('current_model')))
+        return (tr('Models: ') + ", ".join(rows) if rows else tr('Model {0}', _status_label(data.get('ok')))) + "\n"
     if command == "setup":
         if data.get("error"):
-            return f"Setup {_status_label(data.get('ok'))}: {_error_summary(data)}\n"
+            return tr('Setup {0}: {1}\n', _status_label(data.get('ok')), _error_summary(data))
         saved = data.get("saved") or data.get("values") or {}
-        return f"Setup {_status_label(data.get('ok'))}: {len(saved)} values saved\n"
+        return tr('Setup {0}: {1} values saved\n', _status_label(data.get('ok')), len(saved))
     if command == "skills":
         if data.get("error"):
-            return f"Skills {_status_label(data.get('ok'))}: {_error_summary(data)}\n"
+            return tr('Skills {0}: {1}\n', _status_label(data.get('ok')), _error_summary(data))
         targets = data.get("targets") or data.get("installed") or []
         counts = data.get("status_counts") or {}
         if counts:
             summary = ", ".join(f"{key}={value}" for key, value in sorted(counts.items()))
-            return f"Skills {_status_label(data.get('ok'))}: {summary}\n"
-        return f"Skills {_status_label(data.get('ok'))}: {len(targets)} targets\n"
+            return tr('Skills {0}: {1}\n', _status_label(data.get('ok')), summary)
+        return tr('Skills {0}: {1} targets\n', _status_label(data.get('ok')), len(targets))
     if command in {
         "map",
         "exa-search",
@@ -1429,7 +1431,7 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
     }:
         lines = _plain_result_lines(data)
         if data.get("error"):
-            lines.append(f"Error: {_error_summary(data)}")
+            lines.append(tr('Error: {0}', _error_summary(data)))
         return "\n".join(lines).strip() + "\n"
     if data.get("error"):
         return f"{_status_label(data.get('ok'))}: {_error_summary(data)}\n"
@@ -1437,6 +1439,7 @@ def _format_content(command: str, data: dict[str, Any]) -> str:
 
 
 def _render(command: str, data: dict[str, Any], fmt: str) -> str:
+    data = render_messages(data)
     if fmt == "content":
         return _format_content(command, data)
     if fmt == "markdown":
@@ -1540,9 +1543,9 @@ def _parse_json_object_arg(value: str, option_name: str) -> dict[str, Any] | Non
     try:
         data = json.loads(value)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"{option_name} must be a JSON object: {exc.msg}") from exc
+        raise ValueError(tr('{0} must be a JSON object: {1}', option_name, exc.msg)) from exc
     if not isinstance(data, dict):
-        raise ValueError(f"{option_name} must be a JSON object")
+        raise ValueError(tr('{0} must be a JSON object', option_name))
     return data
 
 
@@ -1552,9 +1555,9 @@ def _parse_json_array_arg(value: str, option_name: str) -> list[Any] | None:
     try:
         data = json.loads(value)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"{option_name} must be a JSON array: {exc.msg}") from exc
+        raise ValueError(tr('{0} must be a JSON array: {1}', option_name, exc.msg)) from exc
     if not isinstance(data, list):
-        raise ValueError(f"{option_name} must be a JSON array")
+        raise ValueError(tr('{0} must be a JSON array', option_name))
     return data
 
 
@@ -1787,7 +1790,7 @@ def _prompt_choice(prompt: str, default: str = "") -> str:
 def _prompt_yes_no(prompt: str, default: bool = False) -> bool:
     default_text = "Y/n" if default else "y/N"
     answer = _prompt_choice(f"{prompt} [{default_text}]: ", "y" if default else "n").strip().lower()
-    return answer in {"y", "yes", "是", "好", "1", "true"}
+    return answer in {"y", "yes", tr('是'), tr('好'), "1", "true"}
 
 
 def _prompt_value(key: str, label: str, current: str = "", optional: bool = False, lang: str = "en") -> str:
@@ -1928,10 +1931,10 @@ def _select_setup_language(lang: str = "") -> str:
     if lang in {"zh", "en"}:
         return lang
     choices = [
-        {"name": "中文", "value": "zh"},
+        {"name": tr('中文'), "value": "zh"},
         {"name": "English", "value": "en"},
     ]
-    answer = _prompt_select("Language / 语言", choices, "zh").strip().lower()
+    answer = _prompt_select(tr('Language / 语言'), choices, "zh").strip().lower()
     if answer in {"en", "english"}:
         return "en"
     return "zh"
@@ -2867,7 +2870,7 @@ async def _run_async_impl(args: argparse.Namespace) -> int:
             return _print_result("diagnose", data, args.format, args.output)
         return _print_result(
             "diagnose",
-            {"ok": False, "error_type": "parameter_error", "error": f"Unknown diagnose target: {args.diagnose_target}"},
+            {"ok": False, "error_type": "parameter_error", "error": tr('Unknown diagnose target: {0}', args.diagnose_target)},
             args.format,
             args.output,
         )
@@ -2880,7 +2883,7 @@ def _run_model(args: argparse.Namespace) -> int:
     elif args.model_command == "current":
         data = service.current_model()
     else:
-        data = {"ok": False, "error_type": "parameter_error", "error": "Unknown model command"}
+        data = {"ok": False, "error_type": "parameter_error", "error": tr('Unknown model command')}
     return _print_result("model", data, args.format, args.output)
 
 
@@ -2894,7 +2897,7 @@ def _run_config(args: argparse.Namespace) -> int:
     elif args.config_command == "unset":
         data = service.config_unset(args.key)
     else:
-        data = {"ok": False, "error_type": "parameter_error", "error": "Unknown config command"}
+        data = {"ok": False, "error_type": "parameter_error", "error": tr('Unknown config command')}
     return _print_result("config", data, args.format, args.output)
 
 
@@ -2924,16 +2927,13 @@ def _run_providers(args: argparse.Namespace) -> int:
     elif args.providers_command == "test":
         data = asyncio.run(_run_providers_test(list(args.providers), args.timeout))
     else:
-        data = {"ok": False, "error_type": "parameter_error", "error": "Unknown providers command"}
+        data = {"ok": False, "error_type": "parameter_error", "error": tr('Unknown providers command')}
     return _print_result("providers", data, args.format, args.output)
 
 
 def _default_ui_lang() -> str:
     """Guess from the locale; the page has a toggle either way, so never prompt."""
-    locale_text = (os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or "").lower()
-    if locale_text and not locale_text.startswith("zh"):
-        return "en"
-    return "zh"
+    return current_language()
 
 
 def _run_ui(args: argparse.Namespace) -> int:
@@ -2946,7 +2946,7 @@ def _run_ui(args: argparse.Namespace) -> int:
         try:
             page = ui_server.load_page_source()
         except (OSError, FileNotFoundError, ModuleNotFoundError) as e:
-            data = {"ok": False, "error_type": "runtime_error", "error": f"UI asset missing: {e}"}
+            data = {"ok": False, "error_type": "runtime_error", "error": tr('UI asset missing: {0}', e)}
             return _print_result("ui", data, args.format, args.output)
         data = {"ok": True, "error_type": "", "error": "", "asset_bytes": len(page.encode("utf-8"))}
         return _print_result("ui", data, args.format, args.output)
@@ -2960,7 +2960,7 @@ def _run_ui(args: argparse.Namespace) -> int:
     try:
         data = ui_server.serve(options, announce=_write_stderr_line)
     except OSError as e:
-        data = {"ok": False, "error_type": "runtime_error", "error": f"无法启动本地服务: {e}"}
+        data = {"ok": False, "error_type": "runtime_error", "error": tr('无法启动本地服务: {0}', e)}
     return _print_result("ui", data, args.format, args.output)
 
 
@@ -2998,7 +2998,7 @@ def _run_skills(args: argparse.Namespace) -> int:
             data = {"ok": False, "error_type": "runtime_error", "error": str(e), "selected": target_ids}
         return _print_result("skills", data, args.format, args.output)
 
-    data = {"ok": False, "error_type": "parameter_error", "error": "Unknown skills command", "selected": target_ids}
+    data = {"ok": False, "error_type": "parameter_error", "error": tr('Unknown skills command'), "selected": target_ids}
     return _print_result("skills", data, args.format, args.output)
 
 
@@ -3668,7 +3668,6 @@ def build_parser() -> argparse.ArgumentParser:
         default=900.0,
         help="Exit after this many idle seconds; 0 keeps it running (default: %(default)s).",
     )
-    ui_parser.add_argument("--lang", choices=["zh", "en"], default="", help="Interface language.")
     ui_parser.add_argument("--check", action="store_true", help="Verify the bundled page is installed, then exit.")
     _add_format_args(ui_parser)
 
@@ -3677,7 +3676,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     setup_parser.set_defaults(command="setup")
     setup_parser.add_argument("--non-interactive", action="store_true", help="Only save values passed as flags.")
-    setup_parser.add_argument("--lang", choices=["zh", "en"], default="", help="Interactive setup language.")
     setup_parser.add_argument("--advanced", action="store_true", help="Show every low-level config key in interactive setup.")
     setup_parser.add_argument("--skip-skills", action="store_true", help="Skip user-level smart-search-cli skill installation.")
     setup_parser.add_argument(
@@ -3788,12 +3786,30 @@ def build_parser() -> argparse.ArgumentParser:
         "regression", aliases=COMMAND_ALIASES["regression"], help="Run offline CLI regression tests."
     )
     regression_parser.set_defaults(command="regression")
+    _localize_parser(parser)
     return parser
+
+
+def _localize_parser(parser):
+    if parser.description:
+        parser.description = tr(parser.description)
+    for group in parser._action_groups:
+        group.title = tr(group.title)
+    for action in parser._actions:
+        if action.help and action.help != argparse.SUPPRESS:
+            action.help = tr(action.help)
+        if isinstance(action, argparse._SubParsersAction):
+            for choice in action._choices_actions:
+                if choice.help:
+                    choice.help = tr(choice.help)
+            for child in set(action.choices.values()):
+                _localize_parser(child)
 
 
 def _main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    args.lang = resolve(getattr(args, "lang", current_language()))
     try:
         if args.command == "regression":
             return _run_regression()
@@ -3820,11 +3836,61 @@ def main(argv: list[str] | None = None) -> int:
     if arguments == ["--desktop-capabilities"]:
         print(json.dumps({"version": _get_version(), "activity_protocol_version": 1}))
         return EXIT_OK
+    try:
+        arguments, language, warning = _command_language(arguments)
+    except ValueError as error:
+        with use_language("auto"):
+            _write_stderr(render_messages(tr(str(error))) + "\n")
+        return EXIT_PARAMETER_ERROR
+    with use_language(language):
+        if warning:
+            _write_stderr(str(tr(warning)) + "\n")
+        return _observed_main(arguments)
+
+
+def _command_language(arguments):
+    """Resolve before argparse handles --help, including flags after a subcommand."""
+    cleaned, explicit, index = [], None, 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--":
+            cleaned.extend(arguments[index:])
+            break
+        if argument == "--lang":
+            if index + 1 == len(arguments):
+                raise ValueError(tr('--lang requires auto, zh, or en.'))
+            explicit = normalize(arguments[index + 1])
+            index += 2
+            continue
+        if argument.startswith("--lang="):
+            explicit = normalize(argument.partition("=")[2])
+        else:
+            cleaned.append(argument)
+        index += 1
+    if explicit is not None:
+        return cleaned, resolve(explicit), ""
+    if LANGUAGE_KEY in os.environ:
+        return cleaned, resolve(os.environ[LANGUAGE_KEY]), ""
+    # Reading the preference must not create a configuration directory for --help.
+    directory, _ = service.config._resolve_config_dir()
+    try:
+        saved = json.loads((directory / "config.json").read_text(encoding="utf-8"))
+        if not isinstance(saved, dict):
+            raise ValueError("config must be an object")
+        preference = saved.get(LANGUAGE_KEY, "auto")
+        return cleaned, resolve(preference), ""
+    except FileNotFoundError:
+        return cleaned, resolve("auto"), ""
+    except (OSError, UnicodeError, ValueError, TypeError):
+        return cleaned, resolve("auto"), "The saved language preference could not be read; using the system language."
+
+
+def _observed_main(arguments):
     first = arguments[0] if arguments else ""
     command = next((name for name, aliases in COMMAND_ALIASES.items() if first in [name, *aliases]), "unknown")
     command = {"--help": "help", "-h": "help", "--version": "version", "ui": "ui", "web": "ui"}.get(first, command)
     with activity.observe(command, version=_get_version()) as run:
-        code = _main(argv)
+        code = _main(arguments)
         run.finish(code)
         return code
 

@@ -5,6 +5,7 @@ import argparse
 from functools import lru_cache
 
 from .cli import build_parser
+from .i18n import tr
 
 _MANAGED = {"setup", "config", "skills", "providers", "ui"}
 _LABELS = {"search": "搜索", "route": "查看路由", "deep": "离线研究计划", "research": "在线研究",
@@ -128,7 +129,7 @@ def command_catalog() -> list[dict]:
             return
         fields = []
         for arg in parser._actions:
-            if arg.dest in {"help", "format"} or arg.help == argparse.SUPPRESS:
+            if arg.dest in {"help", "format", "lang"} or arg.help == argparse.SUPPRESS:
                 continue
             flags = [s for s in arg.option_strings if s.startswith("--")]
             if isinstance(arg, (argparse._StoreTrueAction, argparse._StoreFalseAction)):
@@ -138,14 +139,14 @@ def command_catalog() -> list[dict]:
                 default = None if arg.default == argparse.SUPPRESS else arg.default
             field_name = flags[0][2:].replace("-", "_") if flags else arg.dest
             fields.append({"name": field_name,
-                           "label": _FIELD_LABELS.get(field_name, flags[0] if flags else arg.dest),
-                           "help": _FIELD_HELP.get(field_name) or arg.help or "", "flags": flags[:1],
+                           "label": tr(_FIELD_LABELS.get(field_name, flags[0] if flags else arg.dest)),
+                           "help": tr(_FIELD_HELP.get(field_name) or arg.help or ""), "flags": flags[:1],
                            "kind": kind, "choices": list(arg.choices or []), "required": arg.required,
                            "default": default, "multiple": isinstance(arg, argparse._AppendAction) or arg.nargs in {"+", "*"},
                            "nargs": arg.nargs, "advanced": bool(flags) and arg.dest not in {"budget", "evidence_dir"}})
         identifier = "/".join(tokens)
-        entries.append({"id": identifier, "label": _LABELS.get(identifier, identifier),
-                        "description": _DESCRIPTIONS.get(identifier) or help_text or parser.description or "",
+        entries.append({"id": identifier, "label": tr(_LABELS.get(identifier, identifier)),
+                        "description": tr(_DESCRIPTIONS.get(identifier) or help_text or parser.description or ""),
                         "fields": fields,
                         "experimental": tokens[0].startswith(("anysearch-", "sciverse-"))})
 
@@ -155,11 +156,11 @@ def command_catalog() -> list[dict]:
 
 def command_arguments(command: str, arguments: list[str]) -> list[str]:
     if command not in {item["id"] for item in command_catalog()}:
-        raise ValueError("未知或不可从工具页调用的命令。")
+        raise ValueError(tr("未知或不可从工具页调用的命令。"))
     if not isinstance(arguments, list) or any(not isinstance(arg, str) for arg in arguments):
-        raise ValueError("arguments 必须是字符串数组。")
+        raise ValueError(tr("arguments 必须是字符串数组。"))
     if len(arguments) > 256 or sum(len(arg) for arg in arguments) > 256 * 1024:
-        raise ValueError("命令参数过长。")
+        raise ValueError(tr("命令参数过长。"))
     if any(arg in {"--format", "-h", "--help"} or arg.startswith("--format=") for arg in arguments):
-        raise ValueError("桌面结果格式由 App 管理。")
+        raise ValueError(tr("桌面结果格式由 App 管理。"))
     return [*command.split("/"), *arguments]

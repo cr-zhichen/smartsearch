@@ -19,7 +19,9 @@ from .activity import ActivityStore, RETENTION_SECONDS
 from .config import config
 from .desktop_catalog import command_arguments, command_catalog
 from .desktop_updates import Updates
-from .desktop_cli import discover, update_command
+from .desktop_cli import discover, managed_cli_info, package_root, path_entries, update_command
+from .desktop_environment import Environment
+from .i18n import render_messages, resolve, tr, use_language
 from .provider_errors import sanitize_provider_error_message as sanitize_error_message
 
 PROTOCOL_VERSION = 1
@@ -35,7 +37,7 @@ def engine_command(*arguments):
 
 def absolute_directory(value):
     if not isinstance(value, str) or not value.strip() or not Path(value).expanduser().is_absolute():
-        raise ValueError("配置目录必须是绝对路径。")
+        raise ValueError(tr('配置目录必须是绝对路径。'))
     return str(Path(value).expanduser().resolve())
 
 
@@ -56,22 +58,25 @@ class Backend:
         self.generation = uuid.uuid4().hex
         self.directory = ""
         self.initialized = False
+        self.language = "zh"  # Protocol v1 clients without a language keep their existing presentation.
         self.stopping = False
         self.runs = {}
         self.cli_info = None
         self.updates = Updates(self.event)
+        self.environment = Environment(self.event)
 
     def event(self, name, data):
-        self.emit({"event": name, "generation": self.generation, "data": {**data, "generation": self.generation}})
+        self.emit(render_messages({"event": name, "generation": self.generation,
+                                   "data": {**data, "generation": self.generation}}, self.language))
 
     def activity(self, params=None):
         params = params or {}
         directories = params.get("directories", [self.directory])
         if not isinstance(directories, list) or len(directories) > 20:
-            raise ValueError("最多可观察 20 个明确选择的配置目录。")
+            raise ValueError(tr('最多可观察 20 个明确选择的配置目录。'))
         limit = params.get("limit", 100)
         if type(limit) is not int or not 1 <= limit <= 1000:
-            raise ValueError("limit 必须介于 1 与 1000。")
+            raise ValueError(tr('limit 必须介于 1 与 1000。'))
         runs, errors, enabled = [], [], True
         directories = list(dict.fromkeys(absolute_directory(value) for value in directories))
         for directory in directories:
@@ -81,7 +86,7 @@ class Backend:
                 if directory == self.directory:
                     enabled = store.enabled()
             except (OSError, ValueError, sqlite3.Error):
-                errors.append({"config_dir": directory, "error": "活动记录不可读，当前状态未知。"})
+                errors.append({"config_dir": directory, "error": tr('活动记录不可读，当前状态未知。')})
         by_id = {row["run_id"]: row for row in runs}
         for run in self.runs.values():
             if run["directory"] not in directories or run.get("history_cleared") or time.time() - run.get("finished_at", time.time()) > RETENTION_SECONDS:
@@ -113,7 +118,7 @@ class Backend:
         data = ui_api.state()
         data.update(protocol_version=PROTOCOL_VERSION, version=cli._get_version(), generation=self.generation,
                     config_dir=self.directory, commands=command_catalog(), activity=self.activity(), cli=self.cli_status(),
-                    updates=self.updates.state)
+                    updates=self.updates.state, environment=self.environment.state, language=self.language)
         checks = {}
         for run in sorted(self.runs.values(), key=lambda item: item.get("finished_at", 0)):
             if run["command"] != "provider.test" or run["directory"] != self.directory or not run.get("finished_at"):
@@ -130,28 +135,37 @@ class Backend:
             return self.cli_info
         bundled = sys.executable if getattr(sys, "frozen", False) else " ".join(engine_command())
         external = shutil.which("smart-search")
+        managed = managed_cli_info(manager_environment(self.directory), self.environment.directory)
+        if not external and managed:
+            external = managed["external_path"]
         data = {"bundled_path": bundled, "external_path": external, "version": cli._get_version(),
                 "external_version": None, "activity_protocol_version": 1, "external_activity_protocol_version": None,
                 "external_runtime_verified": False,
-                "manager": "none", "manager_label": "未安装独立 CLI", "can_update": False,
-                "external_status": "未发现外部 CLI" if not external else "版本及观测能力尚未验证"}
+                "manager": "none", "manager_label": tr('未安装独立 CLI'), "can_update": False,
+                "external_status": tr('未发现外部 CLI') if not external else tr('版本及观测能力尚未验证')}
         if external:
             external_path = Path(external).resolve()
             probe_command = None
             if getattr(sys, "frozen", False) and external_path == Path(sys.executable).resolve():
                 probe_command = [str(external_path)]
-                data.update(manager="bundled", manager_label="随 App 更新", can_update=False)
+                data.update(manager="bundled", manager_label=tr('随 App 更新'), can_update=False)
             else:
                 # npm's public wrapper repairs a missing runtime on invocation. Discovery
                 # must never trigger that installer; probe an existing private Python only.
-                data.update(discover(external, manager_environment(self.directory)))
+                if managed and Path(external).resolve() == Path(managed["external_path"]).resolve():
+                    data.update(managed)
+                    data["other_paths"] = [str(path) for path in path_entries() if package_root(path)[0] != Path(managed["package_root"])]
+                    if data["other_paths"]:
+                        data.update(can_update=False, update_note=tr('PATH 中存在其他同名 CLI，请先处理冲突。'))
+                else:
+                    data.update(discover(external, manager_environment(self.directory)))
                 if data.get("package_root"):
                     root = Path(data["package_root"])
                     python = root / ".smart-search-python" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
                     if python.is_file():
                         probe_command = [str(python), "-m", "smart_search.cli"]
                     else:
-                        data["external_status"] = "外部 npm CLI 的运行环境缺失；App 不会自动修复该安装。"
+                        data["external_status"] = tr('外部 npm CLI 的运行环境缺失；App 不会自动修复该安装。')
             if probe_command is None:
                 self.cli_info = data
                 return data
@@ -168,15 +182,17 @@ class Backend:
                 if capabilities.returncode == 0:
                     parsed = json.loads(capabilities.stdout)
                     data["external_activity_protocol_version"] = parsed.get("activity_protocol_version")
-                data["external_status"] = "支持实时活动" if data["external_activity_protocol_version"] == 1 else "该 CLI 尚未接入活动观测；升级后可见新调用。"
+                data["external_status"] = tr('支持实时活动') if data["external_activity_protocol_version"] == 1 else tr('该 CLI 尚未接入活动观测；升级后可见新调用。')
             except (OSError, ValueError, subprocess.TimeoutExpired):
-                data["external_status"] = "外部 CLI 检查未完成；不能判断是否支持活动观测。"
+                data["external_status"] = tr('外部 CLI 检查未完成；不能判断是否支持活动观测。')
         self.cli_info = data
         return data
 
     def update_cli(self, params):
         if params.get("confirm") is not True:
-            raise ValueError("只有明确点击更新 CLI 后才可执行。")
+            raise ValueError(tr('只有明确点击更新 CLI 后才可执行。'))
+        if self.environment.state["busy"]:
+            raise ValueError(tr('环境准备或检查正在进行，请等待完成。'))
         if self.updates.cli_task and not self.updates.cli_task.done():
             return self.updates.state
         latest = self.updates.state["cli"]
@@ -185,18 +201,18 @@ class Backend:
         current = self.cli_status()
         identity = ("external_path", "resolved_path", "external_version", "manager", "manager_command", "manager_options")
         if any(previous.get(key) != current.get(key) for key in identity):
-            raise ValueError("CLI 来源或版本刚刚发生变化，请刷新并重新检查更新。")
+            raise ValueError(tr('CLI 来源或版本刚刚发生变化，请刷新并重新检查更新。'))
         version = latest.get("latest_version")
         if latest.get("error") or not latest.get("available") or params.get("version") != version or latest.get("current_version") != current.get("external_version"):
-            raise ValueError("请先成功检查当前 CLI 的目标版本。")
+            raise ValueError(tr('请先成功检查当前 CLI 的目标版本。'))
         if any(run["status"] in {"running", "cancelling"} for run in self.runs.values()):
-            raise ValueError("请先等待 App 自有任务完成，再更新 CLI。")
+            raise ValueError(tr('请先等待 App 自有任务完成，再更新 CLI。'))
         observed = self.activity().get("runs", [])
         if any(row.get("origin") == "cli" and row.get("status") in {"running", "cancelling"} for row in observed):
-            raise ValueError("当前配置目录有 CLI 正在运行，请等待它完成后更新。")
+            raise ValueError(tr('当前配置目录有 CLI 正在运行，请等待它完成后更新。'))
         command = update_command(current, version)
         self.updates.state["cli_update"] = {"status": "running", "target_version": version, "error": "",
-                                             "command": subprocess.list2cmdline(command), "log": "正在调用原管理器，请保持 App 打开。"}
+                                             "command": subprocess.list2cmdline(command), "log": tr('正在调用原管理器，请保持 App 打开。')}
         self.updates.changed()
         self.updates.cli_task = asyncio.create_task(self.execute_cli_update(command, version, current["manager"]))
         return self.updates.state
@@ -206,7 +222,13 @@ class Backend:
         log_path = self.updates.directory / "cli-update.log"
         try:
             self.updates.directory.mkdir(parents=True, exist_ok=True)
-            process = await asyncio.create_subprocess_exec(*command, cwd=Path.home(), env=manager_environment(self.directory),
+            env = manager_environment(self.directory)
+            info = self.cli_status()
+            if info.get("managed_tools"):
+                node = info["manager_command"][0]
+                env["PATH"] = os.pathsep.join([str(Path(node).parent), str(Path(info["python_path"]).parent), env.get("PATH", "")])
+                env["SMART_SEARCH_PYTHON"] = info["python_path"]
+            process = await asyncio.create_subprocess_exec(*command, cwd=Path.home(), env=env,
                 stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             tail = ""
@@ -223,23 +245,25 @@ class Backend:
             current = self.cli_status()
             verified = exit_code == 0 and current.get("external_version") == version and current.get("manager") == manager and current.get("external_runtime_verified") is True
             state.update(status="finished" if verified else "failed", exit_code=exit_code, log=tail,
-                         error="" if verified else "管理器执行失败，或 CLI 实际版本/运行环境未通过验证；请在原终端执行 smart-search --version 检查，再刷新状态。",
+                         error="" if verified else tr('管理器执行失败，或 CLI 实际版本/运行环境未通过验证；请在原终端执行 smart-search --version 检查，再刷新状态。'),
                          actual_version=current.get("external_version"), log_path=str(log_path), cli=current)
             self.updates.state["cli"].update(current_version=current.get("external_version"), available=not verified)
         except (OSError, ValueError):
-            state.update(status="failed", error="无法完成 CLI 更新，请使用原管理器检查安装并刷新状态。")
+            state.update(status="failed", error=tr('无法完成 CLI 更新，请使用原管理器检查安装并刷新状态。'))
         finally:
             self.updates.changed()
 
     def enable_cli(self, params):
+        if self.environment.state["busy"]:
+            raise ValueError(tr('环境操作正在进行，请等待完成。'))
         if params.get("confirm") is not True:
-            raise ValueError("只有用户点击启用后才可配置内置 CLI。")
+            raise ValueError(tr('只有用户点击启用后才可配置内置 CLI。'))
         if not getattr(sys, "frozen", False):
-            raise ValueError("请从已打包的 App 启用 CLI；开发环境不更改 PATH。")
+            raise ValueError(tr('请从已打包的 App 启用 CLI；开发环境不更改 PATH。'))
         existing = shutil.which("smart-search")
         executable = Path(sys.executable).resolve()
         if existing and Path(existing).resolve() != executable:
-            raise ValueError("已存在同名 CLI。请保留原命令或直接复制内置路径，不会覆盖。")
+            raise ValueError(tr('已存在同名 CLI。请保留原命令或直接复制内置路径，不会覆盖。'))
         if os.name == "nt":
             import winreg
             with winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Environment") as key:
@@ -252,20 +276,22 @@ class Backend:
                 if directory.casefold() not in {part.casefold() for part in parts}:
                     winreg.SetValueEx(key, "Path", 0, value_type, ";".join([*parts, directory]))
             self.cli_info = None
-            return {"ok": True, "path": str(executable), "message": "已加入当前用户 PATH，请重新打开终端。"}
+            return {"ok": True, "path": str(executable), "message": tr('已加入当前用户 PATH，请重新打开终端。')}
         target = Path.home() / ".local" / "bin" / "smart-search"
         if target.exists() or target.is_symlink():
             if target.resolve() != executable:
-                raise ValueError("~/.local/bin/smart-search 已存在，不会覆盖。")
+                raise ValueError(tr('~/.local/bin/smart-search 已存在，不会覆盖。'))
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.symlink_to(executable)
         self.cli_info = None
-        return {"ok": True, "path": str(target), "message": "已创建用户 CLI 入口。若 ~/.local/bin 不在 PATH，请使用所示完整路径。"}
+        return {"ok": True, "path": str(target), "message": tr('已创建用户 CLI 入口。若 ~/.local/bin 不在 PATH，请使用所示完整路径。')}
 
     def start(self, method, params):
+        if method == "skills.install" and self.environment.state["busy"]:
+            raise ValueError(tr('环境操作正在配置接入文件，请等待完成。'))
         if sum(run["status"] in {"running", "cancelling"} for run in self.runs.values()) >= 8:
-            raise ValueError("最多同时运行 8 个 App 任务。")
+            raise ValueError(tr('最多同时运行 8 个 App 任务。'))
         command = params.get("command") if method == "run.start" else method
         if method == "run.start":
             argv = command_arguments(command, params.get("arguments", []))
@@ -273,28 +299,29 @@ class Backend:
                 try:
                     cli.build_parser().parse_args(argv)
                 except SystemExit as error:
-                    raise ValueError("参数无效，请检查必填项和参数范围。") from error
+                    raise ValueError(tr('参数无效，请检查必填项和参数范围。')) from error
         elif method == "provider.test":
             if params.get("provider") not in service.PROBE_KIND:
-                raise ValueError("未知服务商。")
+                raise ValueError(tr('未知服务商。'))
             overrides = params.get("overrides", {})
             if not isinstance(overrides, dict) or any(not isinstance(v, str) for v in overrides.values()):
-                raise ValueError("overrides 必须是字符串键值对象。")
+                raise ValueError(tr('overrides 必须是字符串键值对象。'))
             for key, value in overrides.items():
                 if key not in config._CONFIG_KEYS:
-                    raise ValueError("未知配置键。")
+                    raise ValueError(tr('未知配置键。'))
                 if value:
                     config._validate_config_value(key, value)
         elif method == "skills.install":
             if not isinstance(params.get("targets"), list) or not params["targets"]:
-                raise ValueError("请选择要安装的 Skills 目标。")
+                raise ValueError(tr('请选择要安装的 Skills 目标。'))
             ui_api._resolve_targets(params["targets"])
         values = config.effective_values(masked=False)
         if method == "provider.test":
             values.update(params.get("overrides", {}))
         run_id = uuid.uuid4().hex
         payload = {"method": method, "command": command, "params": params, "values": values,
-                   "sources": config.get_config_sources(), "config_dir": self.directory, "run_id": run_id}
+                   "sources": config.get_config_sources(), "config_dir": self.directory, "run_id": run_id,
+                   "language": self.language}
         run = {"run_id": run_id, "status": "running", "result": None, "process": None, "cancel_requested": False,
                "directory": self.directory, "command": command, "started_at": time.time(),
                "provider": params.get("provider", "") if method == "provider.test" else "",
@@ -324,18 +351,18 @@ class Backend:
                 size += len(chunk)
                 if size > 32 * 1024 * 1024:
                     process.kill()
-                    raise ValueError("结果超过 32 MiB；请缩小请求或选择输出文件。")
+                    raise ValueError(tr('结果超过 32 MiB；请缩小请求或选择输出文件。'))
                 chunks.append(chunk)
             output = b"".join(chunks)
             await process.wait()
             if not output or process.returncode:
-                raise ValueError("任务进程已中断。")
+                raise ValueError(tr('任务进程已中断。'))
             envelope = json.loads(output)
             run.update(status=envelope["status"], result=envelope["result"])
         except (Exception, asyncio.CancelledError):
             run.update(status="cancelled" if run["cancel_requested"] else "failed",
                        result={"ok": False, "error_type": "cancelled" if run["cancel_requested"] else "runtime_error",
-                               "error": "任务已取消。" if run["cancel_requested"] else "任务进程中断或响应无效。"})
+                               "error": tr('任务已取消。') if run["cancel_requested"] else tr('任务进程中断或响应无效。')})
         finally:
             run["finished_at"] = time.time()
             process = run["process"]
@@ -349,7 +376,7 @@ class Backend:
 
     def run_result(self, run_id):
         if run_id not in self.runs:
-            raise ValueError("该任务不属于当前 App 后端；外部 CLI 只能观察。")
+            raise ValueError(tr('该任务不属于当前 App 后端；外部 CLI 只能观察。'))
         run = self.runs[run_id]
         return {"ok": True, "run_id": run_id, "status": run["status"], "result": run["result"]}
 
@@ -377,27 +404,50 @@ class Backend:
 
     async def close(self):
         self.stopping = True
+        await self.environment.close()
         await self.updates.close()
         for run_id in list(self.runs):
             await self.cancel(run_id)
         await asyncio.gather(*(run["task"] for run in self.runs.values()), return_exceptions=True)
 
     async def handle(self, method, params):
+        if method == "initialize":
+            with use_language(self.language):
+                self.language = resolve(params.get("lang", "zh"))
+        if method == "language.set":
+            if not self.initialized:
+                raise ValueError(tr("请先完成协议版本握手。"))
+            if self.environment.state["busy"] or self.updates.state["cli_update"]["status"] == "running":
+                with use_language(self.language):
+                    raise ValueError(tr("环境操作或 CLI 更新正在进行，请等待完成。"))
+            with use_language(self.language):
+                self.language = resolve(params.get("lang", "auto"))
+            self.cli_info = None
+            method = "get_state"
+        with use_language(self.language):
+            return render_messages(await self._handle(method, params), self.language)
+
+    async def _handle(self, method, params):
         if method == "ping":
             return {"protocol_version": 1, "version": cli._get_version(), "generation": self.generation}
         if method == "initialize":
             if type(params.get("protocol_version")) is not int or params["protocol_version"] != PROTOCOL_VERSION:
-                raise ValueError("App 与后端协议版本不匹配，请安装完整的同版本 App。")
+                raise ValueError(tr('App 与后端协议版本不匹配，请安装完整的同版本 App。'))
             self.directory = absolute_directory(params["config_dir"]) if params.get("config_dir") else str(config.config_file.parent)
             self.initialized = True
             self.updates.current_version = str(params.get("app_version", cli._get_version()))
             self.updates.state["app"]["current_version"] = self.updates.current_version
             self.updates.enabled = params.get("enable_update_checks") is True
         if not self.initialized:
-            raise ValueError("请先完成协议版本握手。")
+            raise ValueError(tr('请先完成协议版本握手。'))
         if method == "profile.select":
+            if self.environment.state["busy"]:
+                raise ValueError(tr('环境操作正在进行，请完成后再切换配置目录。'))
             self.directory = absolute_directory(params.get("config_dir"))
             self.cli_info = None
+            self.environment.state.update(plan_id="", can_install=False, checked_at=0, steps=[], targets=[], plan=[],
+                                          invocation="", config_dir=self.directory,
+                                          message=tr('配置目录已切换，请重新检测环境与接入状态。'))
         with config.snapshot(directory=self.directory):
             if method in {"initialize", "profile.select", "get_state"}:
                 if method == "get_state":
@@ -409,7 +459,7 @@ class Backend:
                 return ui_api.preview({"values": values})
             if method == "config.apply":
                 if not isinstance(params.get("revision"), str):
-                    raise ValueError("保存必须带上当前配置 revision。")
+                    raise ValueError(tr('保存必须带上当前配置 revision。'))
                 return ui_api.apply_config(params)
             if method in {"run.start", "provider.test", "skills.install"}:
                 return self.start(method, params)
@@ -435,7 +485,7 @@ class Backend:
                     details = {"ok": False}
                 if not details["ok"] and own_run is not None and own_run["directory"] == directory:
                     return {"ok": True, "run": self.run_metadata(own_run), "events": [], "events_truncated": False,
-                            "note": "这次任务的活动未持久记录，当前状态来自 App 自有进程。"}
+                            "note": tr('这次任务的活动未持久记录，当前状态来自 App 自有进程。')}
                 return details
             if method == "activity.clear":
                 ActivityStore(self.directory).clear()
@@ -445,12 +495,32 @@ class Backend:
                 return {"ok": True}
             if method == "activity.enabled":
                 if type(params.get("enabled")) is not bool:
-                    raise ValueError("enabled 必须为布尔值。")
+                    raise ValueError(tr('enabled 必须为布尔值。'))
                 ActivityStore(self.directory).set_enabled(params["enabled"])
                 return {"ok": True, "enabled": params["enabled"]}
             if method == "cli.status":
                 self.cli_info = None
                 return self.cli_status()
+            if method == "environment.status":
+                return self.environment.state
+            if method in {"environment.check", "environment.verify", "environment.install"}:
+                if self.updates.state["cli_update"]["status"] == "running":
+                    raise ValueError(tr('CLI 正在更新，请等待完成。'))
+                self.cli_info = None
+                info = self.cli_status()
+                env = manager_environment(self.directory)
+                minimum_ok = bool(ui_api.state().get("minimum_profile", {}).get("ok"))
+                if method != "environment.install":
+                    return self.environment.start_check(env, info, self.directory, minimum_ok, verify=method == "environment.verify")
+                if any(run["status"] in {"running", "cancelling"} for run in self.runs.values()) or any(
+                    row.get("origin") == "cli" and row.get("status") in {"running", "cancelling"} for row in self.activity().get("runs", [])):
+                    raise ValueError(tr('请先等待 App 和当前配置目录的 CLI 任务完成，再准备环境。'))
+                def refresh_cli():
+                    self.cli_info = None
+                    return self.cli_status()
+                return self.environment.install(params, env, info, self.directory, minimum_ok, refresh_cli)
+            if method == "environment.cancel":
+                return await self.environment.cancel()
             if method == "cli.enable":
                 return self.enable_cli(params)
             if method == "cli.update":
@@ -462,7 +532,7 @@ class Backend:
                 return self.updates.state
             if method == "updates.auto":
                 if type(params.get("enabled")) is not bool:
-                    raise ValueError("enabled 必须为布尔值。")
+                    raise ValueError(tr('enabled 必须为布尔值。'))
                 self.updates.state["auto_check"] = params["enabled"]
                 self.updates.save()
                 self.updates.changed()
@@ -472,15 +542,19 @@ class Backend:
             if method == "updates.cancel":
                 return await self.updates.cancel_download()
             if method == "updates.installer":
+                if self.environment.state["busy"]:
+                    raise ValueError(tr('环境准备正在进行，请等待完成后再升级 App。'))
                 if any(run["status"] in {"running", "cancelling"} for run in self.runs.values()):
-                    raise ValueError("请先等待或取消 App 自有任务，再启动安装。")
+                    raise ValueError(tr('请先等待或取消 App 自有任务，再启动安装。'))
                 if self.updates.state["cli_update"]["status"] == "running":
-                    raise ValueError("CLI 正在更新，请等待结果。")
+                    raise ValueError(tr('CLI 正在更新，请等待结果。'))
                 return await self.updates.installer()
             if method == "shutdown":
+                if self.environment.state["busy"] and self.environment.state["status"] == "installing" and not self.environment.state["can_cancel"]:
+                    raise ValueError(tr('正在写入独立运行环境，请保持 App 打开直到完成。'))
                 await self.close()
                 return {"ok": True}
-        raise ValueError("未知协议方法。")
+        raise ValueError(tr('未知协议方法。'))
 
 
 async def serve():
@@ -505,18 +579,19 @@ async def serve():
             identifier = None
             try:
                 if len(line) > MAX_LINE:
-                    raise ValueError("请求超过允许长度。")
+                    raise ValueError(tr('请求超过允许长度。'))
                 request = json.loads(line)
                 if not isinstance(request, dict) or type(request.get("id")) is not int or request["id"] <= 0:
-                    raise ValueError("请求必须包含正整数 id。")
+                    raise ValueError(tr('请求必须包含正整数 id。'))
                 identifier = request["id"]
                 params = request.get("params", {})
                 if not isinstance(params, dict):
-                    raise ValueError("params 必须是对象。")
+                    raise ValueError(tr('params 必须是对象。'))
                 result = await backend.handle(request.get("method"), params)
                 emit({"id": identifier, "generation": backend.generation, "result": result})
             except Exception as error:
-                message = sanitize_error_message(str(error)) if isinstance(error, ValueError) else "本地操作失败，请检查目录权限或重新启动 App。"
+                with use_language(backend.language):
+                    message = sanitize_error_message(str(error)) if isinstance(error, ValueError) else tr("本地操作失败，请检查目录权限或重新启动 App。")
                 emit({"id": identifier, "generation": backend.generation, "error": {"code": "parameter_error" if isinstance(error, ValueError) else "runtime_error", "message": message}})
                 if len(line) > MAX_LINE:
                     break

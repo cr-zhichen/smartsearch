@@ -10,6 +10,14 @@ from unittest.mock import Mock
 import httpx
 import pytest
 
+from smart_search.i18n import use_language
+
+
+@pytest.fixture(autouse=True)
+def chinese_presentation():
+    with use_language("zh"):
+        yield
+
 from smart_search import desktop_updates as updates
 from smart_search.desktop_backend import Backend
 

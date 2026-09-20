@@ -1,5 +1,6 @@
 """Explicit desktop package updates; no shell, service, or implicit installation."""
 from __future__ import annotations
+from .i18n import tr
 
 import asyncio
 import contextlib
@@ -60,7 +61,7 @@ async def asset_response(client, url):
     """Validate every redirect before making the next request (including host)."""
     for hop in range(6):
         if not trusted_asset_url(url, redirected=hop > 0):
-            raise ValueError("安装包地址不是受信任的官方发行地址。")
+            raise ValueError(tr('安装包地址不是受信任的官方发行地址。'))
         response = await client.send(client.build_request("GET", url), stream=True)
         if response.is_redirect:
             location = response.headers.get("location", "")
@@ -70,7 +71,7 @@ async def asset_response(client, url):
             continue
         response.raise_for_status()
         return response
-    raise ValueError("安装包下载跳转次数过多。")
+    raise ValueError(tr('安装包下载跳转次数过多。'))
 
 
 def asset_for(release, system, arch):
@@ -103,7 +104,7 @@ async def asset_checksum(client, release, asset):
         async for chunk in response.aiter_bytes():
             content.extend(chunk)
             if len(content) > 65536:
-                raise ValueError("校验清单过大。")
+                raise ValueError(tr('校验清单过大。'))
     finally:
         await response.aclose()
     for line in content.decode("utf-8").splitlines():
@@ -125,12 +126,12 @@ def verified_file(path, asset):
 
 def check_error(error):
     if isinstance(error, httpx.TimeoutException):
-        return "timeout", "请求超时，请稍后重试。"
+        return "timeout", tr('请求超时，请稍后重试。')
     if isinstance(error, httpx.HTTPStatusError) and error.response.status_code in {403, 429}:
-        return "rate_limited", "发行服务拒绝请求或限流，请稍后重试。"
+        return "rate_limited", tr('发行服务拒绝请求或限流，请稍后重试。')
     if isinstance(error, httpx.HTTPError):
-        return "network_error", "无法连接发行服务，请检查网络后重试。"
-    return "invalid_metadata", "发行信息不完整或无效，请查看官方发行页面。"
+        return "network_error", tr('无法连接发行服务，请检查网络后重试。')
+    return "invalid_metadata", tr('发行信息不完整或无效，请查看官方发行页面。')
 
 
 class Updates:
@@ -154,7 +155,7 @@ class Updates:
                 if isinstance(saved.get(key), dict):
                     self.state[key] = {k: v for k, v in saved[key].items()
                                        if k in {"latest_version", "latest_release", "checked_at", "package_pending"}}
-                    self.state[key].update(available=False, error="此前检查结果，需重新检查后才能更新。", cached=True)
+                    self.state[key].update(available=False, error=tr('此前检查结果，需重新检查后才能更新。'), cached=True)
         except (OSError, ValueError, TypeError):
             pass
 
@@ -210,7 +211,7 @@ class Updates:
                                          "version_known": stable_version(self.current_version) is not None}
                 except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError) as error:
                     error_type, message = check_error(error)
-                    errors.append("App 检查失败：" + message)
+                    errors.append(tr('App 检查失败：') + message)
                     self.state["app"] = {**self.state["app"], "error": errors[-1], "error_type": error_type}
                 try:
                     if isinstance(cli_response, Exception):
@@ -218,7 +219,7 @@ class Updates:
                     cli_response.raise_for_status()
                     latest = cli_response.json()["version"]
                     if stable_version(latest) is None:
-                        raise ValueError("invalid stable version")
+                        raise ValueError(tr('invalid stable version'))
                     self.state["cli"] = {"current_version": cli_info.get("external_version"), "latest_version": latest,
                                          "available": newer(latest, cli_info.get("external_version")), "checked_at": time.time(), "error": ""}
                     if cli_info.get("can_update"):
@@ -227,7 +228,7 @@ class Updates:
                         self.state["cli"]["command"] = subprocess.list2cmdline(command) if os.name == "nt" else shlex.join(command)
                 except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
                     error_type, message = check_error(error)
-                    errors.append("CLI 检查失败：" + message)
+                    errors.append(tr('CLI 检查失败：') + message)
                     self.state["cli"] = {**self.state["cli"], "error": errors[-1], "error_type": error_type}
                 self.state["error"] = "\n".join(errors)
                 if not errors:
@@ -242,7 +243,7 @@ class Updates:
             return self.state
         app = self.state["app"]
         if not app.get("available") or not app.get("asset") or app.get("error"):
-            raise ValueError("请先成功检查并选择与当前平台匹配的新版安装包。")
+            raise ValueError(tr('请先成功检查并选择与当前平台匹配的新版安装包。'))
         asset = dict(app["asset"])
         self.state["download"] = {"status": "downloading", "asset": asset, "received": 0, "total": asset["size"], "error": ""}
         self.changed()
@@ -260,7 +261,7 @@ class Updates:
                 await task
             # A task cancelled before its first step never enters _download's cleanup.
             if status["status"] == "cancelling":
-                status.update(status="cancelled", error="下载已取消，可重新下载。")
+                status.update(status="cancelled", error=tr('下载已取消，可重新下载。'))
                 self.changed()
         return self.state
 
@@ -280,25 +281,25 @@ class Updates:
                         with partial.open("wb") as stream:
                             async for chunk in response.aiter_bytes(65536):
                                 if time.monotonic() - started > 1800:
-                                    raise ValueError("下载超过 30 分钟，请重试。")
+                                    raise ValueError(tr('下载超过 30 分钟，请重试。'))
                                 status["received"] += len(chunk)
                                 if status["received"] > asset["size"]:
-                                    raise ValueError("安装包大小与发布记录不符。")
+                                    raise ValueError(tr('安装包大小与发布记录不符。'))
                                 stream.write(chunk)
                                 digest.update(chunk)
                                 if time.monotonic() - last_notice >= .2:
                                     self.changed()
                                     last_notice = time.monotonic()
                         if status["received"] != asset["size"] or digest.hexdigest() != asset["sha256"]:
-                            raise ValueError("安装包大小或 SHA256 校验失败，请重试。")
+                            raise ValueError(tr('安装包大小或 SHA256 校验失败，请重试。'))
                         partial.replace(target)
                     finally:
                         await response.aclose()
             status.update(status="ready", received=asset["size"], path=str(target))
         except asyncio.CancelledError:
-            status.update(status="cancelled", error="下载已取消，可重新下载。")
+            status.update(status="cancelled", error=tr('下载已取消，可重新下载。'))
         except (httpx.HTTPError, OSError, ValueError):
-            status.update(status="failed", error="下载失败或完整性校验不符；未执行安装，可重试。")
+            status.update(status="failed", error=tr('下载失败或完整性校验不符；未执行安装，可重试。'))
         finally:
             with contextlib.suppress(OSError):
                 partial.unlink(missing_ok=True)
@@ -309,7 +310,7 @@ class Updates:
         asset = state.get("asset", {})
         path = self.directory / asset.get("name", "missing")
         if state.get("status") != "ready" or (asset.get("platform"), asset.get("architecture")) != platform_target() or not await asyncio.to_thread(verified_file, path, asset):
-            raise ValueError("安装包尚未就绪或校验已失效，请重新下载。")
+            raise ValueError(tr('安装包尚未就绪或校验已失效，请重新下载。'))
         return {"ok": True, "path": str(path.resolve()), "version": asset["version"], "signature_verified": False}
 
     async def close(self):

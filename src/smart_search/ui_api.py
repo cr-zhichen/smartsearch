@@ -10,6 +10,7 @@ and ``config_list(show_secrets=True)`` is never called from here.
 """
 
 from __future__ import annotations
+from .i18n import source_message
 
 from typing import Any
 import math
@@ -88,17 +89,17 @@ async def test_provider(payload: dict[str, Any]) -> dict[str, Any]:
     """Probe one provider. Every call costs a real request, so the page asks first."""
     provider = str(payload.get("provider") or "").strip()
     if not provider:
-        return _parameter_error("provider is required", known_providers=sorted(service.PROBE_KIND))
+        return _parameter_error(source_message('provider is required'), known_providers=sorted(service.PROBE_KIND))
     overrides = payload.get("overrides")
     if overrides is not None and not isinstance(overrides, dict):
-        return _parameter_error("overrides must be an object")
+        return _parameter_error(source_message('overrides must be an object'))
     timeout = payload.get("timeout_seconds")
     try:
         timeout_seconds = float(timeout) if timeout is not None else None
     except (TypeError, ValueError):
-        return _parameter_error("timeout_seconds must be a number")
+        return _parameter_error(source_message('timeout_seconds must be a number'))
     if timeout_seconds is not None and (not math.isfinite(timeout_seconds) or timeout_seconds <= 0):
-        return _parameter_error("timeout_seconds must be a positive finite number")
+        return _parameter_error(source_message('timeout_seconds must be a positive finite number'))
     return await service.test_provider_connection(
         provider,
         overrides={str(k): str(v) for k, v in overrides.items()} if overrides is not None else None,
@@ -116,9 +117,9 @@ def apply_config(payload: dict[str, Any]) -> dict[str, Any]:
     set_values = payload.get("set", {})
     unset_keys = payload.get("unset", [])
     if not isinstance(set_values, dict):
-        return _parameter_error("set must be an object")
+        return _parameter_error(source_message('set must be an object'))
     if not isinstance(unset_keys, list):
-        return _parameter_error("unset must be a list")
+        return _parameter_error(source_message('unset must be a list'))
 
     normalized = {str(key).strip().upper(): "" if value is None else str(value) for key, value in set_values.items()}
     unset = [str(key).strip().upper() for key in unset_keys]
@@ -129,14 +130,13 @@ def apply_config(payload: dict[str, Any]) -> dict[str, Any]:
     )
     if shadowed:
         return _parameter_error(
-            "These keys are set by environment variables, which win over the config file: "
-            + ", ".join(shadowed),
+            source_message('These keys are set by environment variables, which win over the config file: {0}', ", ".join(shadowed)),
             shadowed=shadowed,
         )
 
     revision = payload.get("revision")
     if revision is not None and not isinstance(revision, str):
-        return _parameter_error("revision must be a string")
+        return _parameter_error(source_message('revision must be a string'))
     result = service.config_update(normalized, unset, expected_revision=revision)
     with config.snapshot(directory=str(config.config_file.parent)):
         result["status"] = status()
@@ -147,7 +147,7 @@ def preview(payload: dict[str, Any]) -> dict[str, Any]:
     """Answer "would this configuration pass?" without saving or calling anything."""
     values = payload.get("values")
     if not isinstance(values, dict):
-        return _parameter_error("values must be an object")
+        return _parameter_error(source_message('values must be an object'))
     merged = {str(key).strip().upper(): "" if value is None else str(value) for key, value in values.items()}
     with config.snapshot(merged):
         capability_status = service.get_capability_status()
@@ -181,14 +181,14 @@ async def run_query(payload: dict[str, Any]) -> dict[str, Any]:
     command = str(payload.get("command") or "route").strip().lower()
     if command not in RUNNABLE_COMMANDS:
         return _parameter_error(
-            f"command must be one of {', '.join(RUNNABLE_COMMANDS)}",
+            source_message('command must be one of {0}', ', '.join(RUNNABLE_COMMANDS)),
             known_commands=list(RUNNABLE_COMMANDS),
         )
     query = str(payload.get("query") or "").strip()
     if not query:
-        return _parameter_error("query is required")
+        return _parameter_error(source_message('query is required'))
     if len(query) > 2000:
-        return _parameter_error("query is too long")
+        return _parameter_error(source_message('query is too long'))
 
     if command == "route":
         return await service.route(query, allow_remote=False)
@@ -197,7 +197,7 @@ async def run_query(payload: dict[str, Any]) -> dict[str, Any]:
     try:
         timeout_seconds = float(timeout) if timeout is not None else None
     except (TypeError, ValueError):
-        return _parameter_error("timeout_seconds must be a number")
+        return _parameter_error(source_message('timeout_seconds must be a number'))
     return await service.search(query, timeout_seconds=timeout_seconds)
 
 
@@ -206,7 +206,7 @@ def reset_health(payload: dict[str, Any]) -> dict[str, Any]:
     if providers is None:
         return service.reset_provider_health(None)
     if not isinstance(providers, list):
-        return _parameter_error("providers must be a list or null")
+        return _parameter_error(source_message('providers must be a list or null'))
     return service.reset_provider_health([str(item) for item in providers])
 
 
@@ -232,7 +232,7 @@ def skills_install(payload: dict[str, Any]) -> dict[str, Any]:
     except SkillInstallError as e:
         return _parameter_error(str(e), selected=[])
     if not target_ids:
-        return _parameter_error("no skill targets selected", selected=[])
+        return _parameter_error(source_message('no skill targets selected'), selected=[])
     try:
         return install_skill_targets(target_ids)
     except SkillInstallError as e:

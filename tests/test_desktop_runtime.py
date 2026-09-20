@@ -12,6 +12,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
 
+from smart_search.i18n import use_language
+
+
+@pytest.fixture(autouse=True)
+def chinese_presentation():
+    with use_language("zh"):
+        yield
+
 from smart_search import activity, cli
 from smart_search.config import config
 from smart_search.desktop_backend import Backend, child_environment

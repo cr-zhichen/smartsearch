@@ -32,6 +32,7 @@ smart_search = [
     "assets/skills/smart-search-cli/agents/*.yaml",
     "assets/skills/smart-search-cli/references/*.md",
     "assets/ui/*.html",
+    "assets/i18n/*.json",
 ]
 
 [project.scripts]

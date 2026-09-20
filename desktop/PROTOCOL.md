@@ -21,7 +21,8 @@ Methods below return result objects. Ordinary business errors have `ok:false`.
 | Method | Parameters | Result |
 | --- | --- | --- |
 | `ping` | `{}` | `protocol_version`, `version`, `generation` |
-| `initialize` | `protocol_version:1`, optional absolute `config_dir`, `app_version`, `enable_update_checks:true` for production native clients | full state below |
+| `initialize` | `protocol_version:1`, optional absolute `config_dir`, `app_version`, `lang:auto\|zh\|en`, `enable_update_checks:true` for production native clients | full state below |
+| `language.set` | `lang:auto\|zh\|en` | refreshed state; refuses changes during environment writes or CLI updates |
 | `get_state` | `{}` | full state, local/read-only |
 | `profile.select` | absolute `config_dir` | full state |
 | `config.preview` | `set` object, `unset` key array | `ok`, `minimum_profile_ok`, `missing`, `capability_status` |
@@ -39,6 +40,11 @@ Methods below return result objects. Ordinary business errors have `ok:false`.
 | `activity.details` | `run_id`, optional absolute `config_dir` | `ok`, `run`, metadata-only `events`, `events_truncated` |
 | `cli.status` | `{}` | `bundled_path`, `external_path`, `version`, external version or null |
 | `cli.enable` | `confirm:true`, sent only by explicit user action | `ok`, `path`, `message`; refuses command conflicts |
+| `environment.status` | `{}` | current environment snapshot without probing or network |
+| `environment.check` | `{}` | starts read-only local discovery; completion via `environment` event |
+| `environment.verify` | `{}` | starts local Node/independent-engine checks; no repair or provider/AI request |
+| `environment.install` | `confirm:true`, `plan_id` from detection, `targets` (`codex`/`claude`), optional `replace_modified:false` | starts the checked plan; completion via `environment` event |
+| `environment.cancel` | `{}` | cancels only the cancellable download stage; package-manager writes are not force-cancelled |
 | `app.update-check` | `{}`; explicit manual check | update state immediately; completion via `updates` event |
 | `updates.state` | `{}` | latest update state (no network) |
 | `updates.auto` | `enabled` boolean | save automatic-check preference, return update state |
@@ -71,7 +77,7 @@ Full state extends `smart_search.ui_api.state()`:
   getting_started, providers, routing, reliability, diagnostics. Consume
   `metadata.sections` order, label_zh/en and blurb_zh/en instead of alphabetic ordering;
 - `skill_targets`: id, label, default;
-- `protocol_version:1`, `version`, `generation`, `config_dir`, `cli`, `updates`,
+- `protocol_version:1`, `version`, `generation`, `config_dir`, `cli`, `updates`, `environment`,
   `commands` (catalog below), `activity` (activity.list result).
 
 Catalog entry: `id`, `label`, `description`, `experimental`, `fields`.
@@ -130,3 +136,40 @@ CLI updates use the original manager with an exact checked version, no shell or
 bulk upgrade. The frontends prevent quit/reconnect during the manager operation;
 no forced cancellation or rollback is promised. Readback must confirm the target
 effective version before `cli_update.status` becomes `finished`.
+
+Environment snapshots/events contain `status`, `busy`, `can_cancel`, `message`,
+`error`, bounded sanitized `log`, `steps`, `node`, `python`, `cli`, `targets`,
+`plan`, `plan_id`, `can_install`, `blocked`, `checked_at`, `tools_dir`, `config_dir`
+and a shell-quoted `invocation` for the user's AI test instructions. Download
+stages add actual `received`/`total` bytes. `ready` means the operation ended;
+each step and target must still be inspected. It never means an AI has invoked
+the skill. Files, installed AI commands, local engine execution and provider
+configuration are distinct facts. Checks do not run legacy auto-repair wrappers.
+
+New runtimes and the npm prefix live in `%LOCALAPPDATA%/SmartSearchTools` or
+`~/.local/share/smart-search-tools`, outside the App bundle. Their manifest stores
+only independent paths, not secrets. AI skills invoke that independent Node/npm
+installation with absolute paths; no App executable or running App is required.
+Windows publishes only the new installation's user PATH entries and preserves
+existing entries; already running clients require a refreshed environment. A
+sibling node.exe makes the npm shim independent of another Node earlier in PATH.
+macOS GUI clients use the absolute invocation without modifying shell profiles.
+
+Codex user skills use `.agents/skills`, with `.codex/skills` reported as a legacy
+location; Claude uses `.claude/skills` or its explicit `CLAUDE_CONFIG_DIR`. Changed
+skill files are kept unless replacement was explicitly chosen; replacement first
+backs up the old tree and preserves extra files. Installation is checked again
+against `plan_id` before mutation. Environment writes exclude competing CLI/App
+updates, skills writes and profile switching; clients keep the operation busy
+across page changes and guard exit/reconnect until its actual terminal event.
+
+## Interface language
+
+Native clients resolve their independent App preference and pass `lang` at initialize.
+Legacy protocol v1 clients omitting it keep Chinese presentation. State includes the
+resolved `language`. `language.set` refreshes local metadata without reconnecting,
+restarting tasks, changing CLI preferences or making provider requests. Subsequent
+status events render owned message templates in the current App language. Completed
+results and task input snapshots retain their original contents. JSON keys, status
+codes, provider/model IDs and upstream/user content remain unchanged. Raw third-party
+errors are redacted but not translated by matching their text against a dictionary.

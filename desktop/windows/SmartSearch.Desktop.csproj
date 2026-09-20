@@ -16,8 +16,10 @@
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <LocalizationPath Condition="'$(LocalizationPath)' == ''">..\..\src\smart_search\assets\i18n\messages.json</LocalizationPath>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="$(LocalizationPath)" LogicalName="SmartSearch.Localizations.json" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <Content Include="Assets\smart-search.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\smart-search.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

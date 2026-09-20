@@ -5,6 +5,7 @@ import json
 import pytest
 
 from smart_search.config import Config
+from smart_search.i18n import use_language
 
 
 @pytest.fixture
@@ -75,7 +76,7 @@ def test_failed_write_leaves_existing_config_intact(cfg, monkeypatch):
         raise OSError("disk full")
 
     monkeypatch.setattr(json, "dump", boom)
-    with pytest.raises(ValueError, match="无法保存配置文件"):
+    with use_language("zh"), pytest.raises(ValueError, match="无法保存配置文件"):
         cfg.update_config_values({"EXA_API_KEY": "replacement"})
 
     assert cfg.config_file.read_bytes() == before, "a torn write must not clobber the old config"

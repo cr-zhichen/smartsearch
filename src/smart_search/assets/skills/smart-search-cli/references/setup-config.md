@@ -58,7 +58,7 @@
 ## Skill Installation Sync
 
 - Skill installation installs the bundled `smart-search-cli` skill into selected AI-tool skill directories and must not run `trellis init`, create hooks, create agents, create commands, or modify other skills.
-- Targets are user-level/global directories under the current user's home directory, for example Codex `~/.codex/skills/`, Claude Code `~/.claude/skills/`, Cursor `~/.cursor/skills/`, OpenCode `~/.config/opencode/skills/`, GitHub Copilot `~/.copilot/skills/`, and Hermes Agent `~/.hermes/skills/`.
+- Targets are user-level/global directories under the current user's home directory, for example Codex `~/.agents/skills/`, Claude Code `~/.claude/skills/`, Cursor `~/.cursor/skills/`, OpenCode `~/.config/opencode/skills/`, GitHub Copilot `~/.copilot/skills/`, and Hermes Agent `~/.hermes/skills/`.
 - Skill targets are `codex`, `claude`, `cursor`, `opencode`, `copilot`, `gemini`, `kiro`, `qoder`, `codebuddy`, `droid`, `pi`, `kilo`, `antigravity`, `windsurf`, and `hermes`.
 - OpenCode's canonical global skill directory is `~/.config/opencode/skills/smart-search-cli`. `skills status` reports a discovered legacy `~/.opencode/skills/smart-search-cli` directory as read-only `legacy_locations` metadata; it never migrates or deletes that tree.
 - `--skip-skills` disables skill installation.
@@ -114,3 +114,9 @@
 - Default guided setup can configure `SMART_SEARCH_INTENT_ROUTER`, `INTENT_EMBEDDING_*`, `INTENT_CLASSIFIER_*`, and `INTENT_ROUTER_TIMEOUT_SECONDS` without `--advanced`.
 - Default guided setup recommends SiliconFlow + `Qwen/Qwen3-Embedding-8B` for embeddings and auto-fills threshold `0.475` plus margin `0.053` when no explicit threshold/margin exists.
 - Existing mismatched threshold/margin values should produce a warning rather than being silently overwritten.
+
+## Language and complete handbook
+
+The current source supports `smart-search --lang en --help`, `smart-search search QUERY --lang zh`, and saved `SMART_SEARCH_LANGUAGE=auto|zh|en` through `config set`. Priority is per-call flag, dedicated environment variable, saved configuration, then system locale. Command/JSON identifiers and source content stay unchanged. App language is independent. These additions are not in stable v0.1.20; consult the selected release notes.
+
+The [bilingual handbook](https://github.com/konbakuyomu/smartsearch/tree/main/docs/guide) contains the [complete command reference](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/cli-reference.md) and [all saved configuration keys](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/configuration-reference.md).

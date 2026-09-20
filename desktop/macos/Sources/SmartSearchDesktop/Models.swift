@@ -140,12 +140,12 @@ enum Destination: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .overview: return "概览"
-        case .providers: return "服务商"
-        case .search: return "搜索与研究"
-        case .activity: return "活动"
-        case .integration: return "AI 接入"
-        case .settings: return "设置与关于"
+        case .overview: return L("概览")
+        case .providers: return L("服务商")
+        case .search: return L("搜索与研究")
+        case .activity: return L("活动")
+        case .integration: return L("AI 接入")
+        case .settings: return L("设置与关于")
         }
     }
 
@@ -189,8 +189,8 @@ struct ConfigField: Identifiable, Hashable {
         section = raw.string("section") ?? "providers"
         tier = raw.string("tier") ?? "common"
         kind = raw.string("kind") ?? "text"
-        label = raw.string("label_zh") ?? raw.string("label_en") ?? key
-        help = raw.string("help_zh") ?? raw.string("help_en") ?? ""
+        label = raw.string("label_" + Localization.language) ?? raw.string("label_en") ?? key
+        help = raw.string("help_" + Localization.language) ?? raw.string("help_en") ?? ""
         choices = raw.array("choices").compactMap(\.stringValue)
         provider = raw.string("provider")
         capabilities = raw.array("capabilities").compactMap(\.stringValue)
@@ -211,8 +211,8 @@ struct ConfigSection: Identifiable, Hashable {
         guard let raw = value.objectValue, let id = raw.string("id") else { return nil }
         self.id = id
         order = raw["order"]?.integerValue ?? Int.max
-        label = raw.string("label_zh") ?? raw.string("label_en") ?? id
-        blurb = raw.string("blurb_zh") ?? raw.string("blurb_en") ?? ""
+        label = raw.string("label_" + Localization.language) ?? raw.string("label_en") ?? id
+        blurb = raw.string("blurb_" + Localization.language) ?? raw.string("blurb_en") ?? ""
     }
 }
 
@@ -331,7 +331,7 @@ struct ActivityRun: Identifiable, Hashable {
     init?(_ value: JSONValue) {
         guard let raw = value.objectValue, let runID = raw.string("run_id") else { return nil }
         self.runID = runID
-        command = raw.string("command") ?? "未知命令"
+        command = raw.string("command") ?? L("未知命令")
         origin = raw.string("origin") ?? "unknown"
         configDirectory = raw.string("config_dir")
         status = raw.string("status") ?? "unknown"
@@ -349,7 +349,7 @@ struct ActivityRun: Identifiable, Hashable {
     var elapsedText: String {
         let milliseconds = elapsedMilliseconds ?? 0
         if milliseconds < 1_000 { return "\(milliseconds) ms" }
-        return String(format: "%.1f 秒", Double(milliseconds) / 1_000)
+        return String(format: L("%.1f 秒"), Double(milliseconds) / 1_000)
     }
 }
 
@@ -443,7 +443,7 @@ struct DesktopState {
         minimumProfile = raw["minimum_profile"]
         capabilityStatus = raw["capability_status"]
         capabilityChains = raw.object("capability_chains").mapValues { $0.arrayValue?.compactMap(\.stringValue) ?? [] }
-        statusLabels = raw.object("metadata").object("status_labels").mapValues { $0["zh"]?.stringValue ?? "状态未知" }
+        statusLabels = raw.object("metadata").object("status_labels").mapValues { $0[Localization.language]?.stringValue ?? L("状态未知") }
         providerHealth = raw["provider_health"]
         providerChecks = raw["provider_checks"]
         cli = raw["cli"]
@@ -471,11 +471,11 @@ struct DesktopState {
     }
 
     func phaseLabel(_ phase: String) -> String {
-        ["provider.test": "服务商测试", "version": "版本查询", "skills.install": "安装 / 更新 Skills",
-         "started": "已启动", "planning": "制定计划"][phase]
+        ["provider.test": L("服务商测试"), "version": L("版本查询"), "skills.install": L("安装 / 更新 Skills"),
+         "started": L("已启动"), "planning": L("制定计划")][phase]
             ?? commands.first { $0.id == phase }?.label
             ?? statusLabels[phase]
-            ?? "处理中"
+            ?? L("处理中")
     }
 
     func activityRuns() -> [ActivityRun] {

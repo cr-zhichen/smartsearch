@@ -1,5 +1,6 @@
 """One private process per desktop operation; credentials arrive through stdin."""
 from __future__ import annotations
+from .i18n import tr
 
 import asyncio
 import contextlib
@@ -11,6 +12,7 @@ import threading
 from . import activity, cli, service, ui_api
 from .config import config
 from .desktop_catalog import command_arguments
+from .i18n import Message, render_messages, use_language
 from .provider_errors import sanitize_provider_error_message as sanitize_error_message
 
 
@@ -58,17 +60,19 @@ async def execute(payload: dict) -> dict:
                 return {"status": "finished" if code == 0 else "failed", "result": redact(result), "exit_code": code}
             except asyncio.CancelledError:
                 run.finish(5, "cancelled")
-                return {"status": "cancelled", "result": {"ok": False, "error_type": "cancelled", "error": "任务已取消。"}, "exit_code": 5}
+                return {"status": "cancelled", "result": {"ok": False, "error_type": "cancelled", "error": tr('任务已取消。')}, "exit_code": 5}
             except (Exception, SystemExit) as error:
                 run.finish(2 if isinstance(error, SystemExit) else 5)
                 return {"status": "failed", "result": {"ok": False, "error_type": "parameter_error" if isinstance(error, (ValueError, SystemExit)) else "runtime_error",
-                        "error": "参数无效。请检查必填项及参数范围。" if isinstance(error, SystemExit) else sanitize_error_message(str(error))}, "exit_code": 5}
+                        "error": tr('参数无效。请检查必填项及参数范围。') if isinstance(error, SystemExit) else sanitize_error_message(str(error))}, "exit_code": 5}
             finally:
                 cli._print_result = original_print
 
 
 def redact(value):
     # Results stay in memory, but upstream errors can echo a raw credential anywhere.
+    if isinstance(value, Message):
+        value = render_messages(value)
     if isinstance(value, str):
         for secret in sorted(config.secret_values(), key=len, reverse=True):
             value = value.replace(secret, "[REDACTED]")
@@ -105,7 +109,8 @@ async def _run(payload):
 def main():
     payload = json.loads(sys.stdin.readline(2 * 1024 * 1024))
     # Only the final envelope uses stdout. Parsing/provider diagnostics are private.
-    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), use_language(payload.get("language", "zh")):
         envelope = asyncio.run(_run(payload))
+        envelope = render_messages(envelope)
     print(json.dumps(envelope, ensure_ascii=False), flush=True)
     return 0

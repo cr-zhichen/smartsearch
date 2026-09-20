@@ -1,3 +1,4 @@
+from ..i18n import source_message
 import json
 import time
 from typing import Any
@@ -68,7 +69,7 @@ def _raise_for_payload_error(data: dict[str, Any], api_key: str = "") -> None:
     detail = sanitize_provider_error_message(message or "Zhipu reported a request failure", additional_secrets=(api_key,))
     raise ProviderCallError(
         _classify_payload_error(code, message),
-        f"Zhipu error {code}: {detail}" if code else detail,
+        source_message('Zhipu error {0}: {1}', code, detail) if code else detail,
         additional_secrets=(api_key,),
     )
 

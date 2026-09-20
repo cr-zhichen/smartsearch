@@ -1,6 +1,7 @@
 """Provider selection, execution feedback, and optional evidence pruning for Jev."""
 
 from __future__ import annotations
+from .i18n import source_message
 
 import asyncio
 import hashlib
@@ -18,7 +19,7 @@ def available_channels(svc: Any, query: str, evidence: list[dict], providers: st
     provider_filter = svc._parse_provider_filter(providers)
     disabled = set(svc.config.research_disabled_providers)
     preferred = svc.config.research_preferred_providers
-    queries = queries or [{"query": query, "reason": "original question", "subquestion_id": ""}]
+    queries = queries or [{"query": query, "reason": source_message('original question'), "subquestion_id": ""}]
     urls = list(dict.fromkeys(svc._extract_urls(query) + [item.get("url", "") for item in evidence]))
     urls = [url for url in urls if url.startswith(("https://", "http://"))][:5]
     channels = []
@@ -34,7 +35,7 @@ def available_channels(svc: Any, query: str, evidence: list[dict], providers: st
             if capability == "site_map":
                 continue
             operation = "fetch" if capability == "web_fetch" else "search"
-            targets = [{"url": url, "query": query, "reason": "read discovered source", "subquestion_id": ""} for url in urls] if operation == "fetch" else queries
+            targets = [{"url": url, "query": query, "reason": source_message('read discovered source'), "subquestion_id": ""} for url in urls] if operation == "fetch" else queries
             for target in targets:
                 actual_query, url = target["query"], target.get("url", "")
                 identity = url if operation == "fetch" else (actual_query if actual_query != query else "")
@@ -54,7 +55,7 @@ def available_channels(svc: Any, query: str, evidence: list[dict], providers: st
 
 def candidate_queries(query: str, assessment: dict, plan: dict | None = None) -> list[dict]:
     """Reuse the offline planner; Jev chooses candidates instead of inventing text."""
-    candidates = [{"query": query, "reason": "original question", "subquestion_id": "sq1"}]
+    candidates = [{"query": query, "reason": source_message('original question'), "subquestion_id": "sq1"}]
     for item in (plan or {}).get("decomposition", []):
         candidates.append({"query": item["question"], "reason": item["reason"], "subquestion_id": item["id"]})
     suffixes = {
@@ -67,7 +68,7 @@ def candidate_queries(query: str, assessment: dict, plan: dict | None = None) ->
     }
     for gap in assessment.get("gaps", []):
         if gap in suffixes:
-            candidates.append({"query": f"{query} {suffixes[gap]}", "reason": f"evidence gap: {gap}", "subquestion_id": ""})
+            candidates.append({"query": f"{query} {suffixes[gap]}", "reason": source_message('evidence gap: {0}', gap), "subquestion_id": ""})
     unique = {item["query"]: item for item in candidates}
     return list(unique.values())[:6]
 
@@ -90,7 +91,7 @@ def fallback_channels(svc: Any, query: str, candidates: list[dict], limit: int, 
 
 def _check_data(data: dict) -> dict:
     if not data.get("ok"):
-        raise ProviderCallError(data.get("error_type") or "provider_error", data.get("error") or "Provider returned no usable response")
+        raise ProviderCallError(data.get("error_type") or "provider_error", data.get("error") or source_message('Provider returned no usable response'))
     return data
 
 
@@ -131,7 +132,7 @@ class ChannelExecutor:
         # Check again immediately before dispatch; model output never selects a fallback.
         if (not svc._provider_configured(provider) or provider in svc.config.research_disabled_providers
                 or svc._provider_health_status(provider).get("state") == "cooldown"):
-            raise ProviderCallError("provider_error", "Selected channel is no longer enabled")
+            raise ProviderCallError("provider_error", source_message('Selected channel is no longer enabled'))
         if operation == "fetch":
             url = channel["url"]
             if provider == "tavily":
@@ -145,7 +146,7 @@ class ChannelExecutor:
             elif provider == "tinyfish":
                 content = _check_data(await svc.call_tinyfish_fetch(url)).get("content")
             else:
-                raise ProviderCallError("parameter_error", "Unsupported fetch channel")
+                raise ProviderCallError("parameter_error", source_message('Unsupported fetch channel'))
             results = [{"url": url, "content": content}]
         elif provider == "exa":
             results = _check_data(await svc.exa_search(query, num_results=self.count, include_highlights=True)).get("results", [])
@@ -175,7 +176,7 @@ class ChannelExecutor:
             # An answer's prose is not silently attributed to each cited page.
             results.extend({**source, "content": source.get("description") or source.get("title") or source.get("url", ""), "kind": "citation"} for source in sources)
         else:
-            raise ProviderCallError("parameter_error", "Unsupported search channel")
+            raise ProviderCallError("parameter_error", source_message('Unsupported search channel'))
         return _normalize_results(results, provider, operation)
 
     async def _context7(self, query: str) -> list[dict]:
@@ -228,7 +229,7 @@ class ChannelExecutor:
     async def synthesize(self, query: str, evidence: list[dict], providers: str) -> tuple[str, str]:
         cfg = self.synthesis_config(providers)
         if cfg is None:
-            raise ProviderCallError("provider_error", "Jev synthesis requires an allowed configured main model")
+            raise ProviderCallError("provider_error", source_message('Jev synthesis requires an allowed configured main model'))
         # Both native xAI and relays accept Responses; no search tools are attached.
         provider = self.svc.OpenAICompatibleSearchProvider(
             cfg["api_url"], cfg["api_key"], cfg["model"], False,
@@ -237,7 +238,7 @@ class ChannelExecutor:
         provider.set_search_deadline(self.client.deadline)
         content = await provider.synthesize(query, evidence)
         if not content.strip():
-            raise ProviderCallError("provider_error", "Synthesis returned empty content")
+            raise ProviderCallError("provider_error", source_message('Synthesis returned empty content'))
         return content, cfg["model"]
 
 
@@ -274,11 +275,11 @@ async def plan(query: str, validation: str, *, allow_remote: bool = True) -> dic
                 "provider_selection": "not_executed", "router_engines_used": [],
                 "required_capabilities": svc.build_rules_route(query, mode="rules").required_capabilities,
                 "validation_level": validation, "remote_judgment_required": True,
-                "message": "仅列出本地可用渠道；实际 JEV 选择在搜索或显式 --remote 诊断时执行。",
+                "message": source_message('仅列出本地可用渠道；实际 JEV 选择在搜索或显式 --remote 诊断时执行。'),
                 "elapsed_ms": svc._elapsed_ms(start),
             }
         if not settings.api_key:
-            return {**base, "ok": False, "error_type": "config_error", "error": "TYPESAFE_API_KEY is not configured"}
+            return {**base, "ok": False, "error_type": "config_error", "error": source_message('TYPESAFE_API_KEY is not configured')}
         client = JevClient(settings, time.monotonic() + settings.timeout, verify=svc.config.ssl_verify_enabled)
         selected, scores = await select_channels(client, query, candidates, evidence=[], history=[], validation=validation)
         return {
@@ -313,9 +314,9 @@ async def search(
     try:
         settings = svc.config.jev_settings()
         if not query.strip():
-            raise ValueError("Search question must not be empty")
+            raise ValueError(source_message('Search question must not be empty'))
         if extra_sources < 0:
-            raise ValueError("extra_sources must not be negative")
+            raise ValueError(source_message('extra_sources must not be negative'))
         if not settings.api_key and fallback == "off":
             return failed("config_error", "TYPESAFE_API_KEY is not configured and fallback is off")
         if research_plan is not None:
@@ -502,7 +503,7 @@ async def search(
     if synthesis["enabled"] and useful_evidence:
         try:
             if budget.remaining_seconds() <= 0:
-                raise ProviderCallError("timeout", "No budget remains for synthesis")
+                raise ProviderCallError("timeout", source_message('No budget remains for synthesis'))
             content, synthesis_model = await asyncio.wait_for(executor.synthesize(query, answer_evidence, providers), budget.remaining_seconds())
             synthesis.update(status="ok", model=synthesis_model)
         except Exception as exc:
@@ -553,9 +554,9 @@ def _research_result(svc, result, query, evidence, plan):
              subquestion_id=item.get("subquestion_id", "")) for item in evidence if item["read"]]
     gaps = [{"subquestion_id": "", "reason": gap} for gap in assessment["gaps"]]
     if not items:
-        gaps.append({"subquestion_id": "", "reason": "no fetched/read evidence items were produced"})
+        gaps.append({"subquestion_id": "", "reason": source_message('no fetched/read evidence items were produced')})
     if degraded and not gaps:
-        gaps.append({"subquestion_id": "", "reason": "Jev judgment unavailable; results are unverified"})
+        gaps.append({"subquestion_id": "", "reason": source_message('Jev judgment unavailable; results are unverified')})
     if gaps and not result.get("degraded_reason"):
         result["degraded_reason"] = f"Research stopped with unresolved evidence gaps: {stopped}."
     final_answer = result["content"] if result.get("synthesis", {}).get("status") == "ok" else svc._evidence_only_synthesis(query, items, gaps)

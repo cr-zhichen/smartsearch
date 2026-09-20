@@ -3,6 +3,7 @@
 Search and fetch run on their own product hosts rather than the automation API
 on `agent.tinyfish.ai`. Both authenticate with the `X-API-Key` header.
 """
+from ..i18n import source_message
 
 import json
 import time
@@ -81,7 +82,7 @@ class TinyFishSearchProvider(BaseSearchProvider):
                     "ok": False,
                     "provider": "tinyfish",
                     "error_type": "config_error",
-                    "error": "TINYFISH_API_KEY is not configured.",
+                    "error": source_message('TINYFISH_API_KEY is not configured.'),
                     "elapsed_ms": _elapsed_ms(start),
                 },
                 ensure_ascii=False,
@@ -95,10 +96,10 @@ class TinyFishSearchProvider(BaseSearchProvider):
                 response.raise_for_status()
                 payload = response.json()
             if not isinstance(payload, dict):
-                raise ProviderCallError("parse_error", "TinyFish search response is not a JSON object")
+                raise ProviderCallError("parse_error", source_message('TinyFish search response is not a JSON object'))
             results = payload.get("results")
             if not isinstance(results, list):
-                raise ProviderCallError("parse_error", "TinyFish search response is missing results")
+                raise ProviderCallError("parse_error", source_message('TinyFish search response is missing results'))
             normalized = [
                 _normalize_search_result(item)
                 for item in results[:max_results]
@@ -143,7 +144,7 @@ class TinyFishFetchProvider:
                     "provider": "tinyfish",
                     "url": url,
                     "error_type": "config_error",
-                    "error": "TINYFISH_API_KEY is not configured.",
+                    "error": source_message('TINYFISH_API_KEY is not configured.'),
                     "elapsed_ms": _elapsed_ms(start),
                 },
                 ensure_ascii=False,
@@ -162,18 +163,18 @@ class TinyFishFetchProvider:
                 response.raise_for_status()
                 payload = response.json()
             if not isinstance(payload, dict):
-                raise ProviderCallError("parse_error", "TinyFish fetch response is not a JSON object")
+                raise ProviderCallError("parse_error", source_message('TinyFish fetch response is not a JSON object'))
             results = payload.get("results")
             if not isinstance(results, list):
-                raise ProviderCallError("parse_error", "TinyFish fetch response is missing results")
+                raise ProviderCallError("parse_error", source_message('TinyFish fetch response is missing results'))
             if not results:
                 raise _fetch_error(payload.get("errors"), self.api_key)
             first = results[0]
             if not isinstance(first, dict):
-                raise ProviderCallError("parse_error", "TinyFish fetch result is not an object")
+                raise ProviderCallError("parse_error", source_message('TinyFish fetch result is not an object'))
             content = first.get("text")
             if not isinstance(content, str):
-                raise ProviderCallError("parse_error", "TinyFish fetch content is not text")
+                raise ProviderCallError("parse_error", source_message('TinyFish fetch content is not text'))
             challenge = _challenge_marker(content)
             if challenge:
                 return json.dumps(
@@ -182,7 +183,7 @@ class TinyFishFetchProvider:
                         "provider": "tinyfish",
                         "url": url,
                         "error_type": "quality_error",
-                        "error": f"low-quality challenge page detected: {challenge}",
+                        "error": source_message('low-quality challenge page detected: {0}', challenge),
                         "content": content,
                         "elapsed_ms": _elapsed_ms(start),
                     },

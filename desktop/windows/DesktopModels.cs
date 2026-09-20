@@ -1,3 +1,4 @@
+using static SmartSearch.Desktop.Localization;
 using System.Diagnostics;
 
 namespace SmartSearch.Desktop;
@@ -5,7 +6,7 @@ namespace SmartSearch.Desktop;
 internal sealed record BackendEvent(string Name, System.Text.Json.JsonElement Data);
 
 internal sealed class BackendRpcException(string code, string? message) : Exception(
-    string.IsNullOrWhiteSpace(message) ? $"后端拒绝了请求（{code}）。" : message)
+    string.IsNullOrWhiteSpace(message) ? L("后端拒绝了请求（{0}）。", code) : message)
 {
     public string Code { get; } = code;
 }
@@ -24,8 +25,8 @@ internal sealed record CommandValue(string? Text, bool IsChecked = false);
 internal static class ActivityPresentation
 {
     public static string ProviderModel(string provider, string model) => string.Join(" · ",
-        new[] { string.IsNullOrWhiteSpace(provider) ? null : $"服务商：{provider}",
-                string.IsNullOrWhiteSpace(model) ? null : $"模型：{model}" }.Where(value => value is not null));
+        new[] { string.IsNullOrWhiteSpace(provider) ? null : L("服务商：{0}", provider),
+                string.IsNullOrWhiteSpace(model) ? null : L("模型：{0}", model) }.Where(value => value is not null));
 }
 
 internal static class ControlValueComparer
