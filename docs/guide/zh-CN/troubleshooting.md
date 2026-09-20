@@ -39,4 +39,4 @@ App 在“设置与关于”选择语言，独立 CLI 用 `smart-search config s
 
 ## AI 接入仍显示待验证
 
-在“AI 接入”依次检测、补齐缺项，再验证本地启动。CLI 可运行、文件一致和 AI 实际调用是不同状态。按提示重新打开 AI，复制测试指引，关闭 Smart Search，让 AI 执行独立 CLI 的版本命令。缺少 Key 应去配置服务商；Skill 内容不同则先决定是否替换，详见 [App 配置](app.md)。
+在“更新 Skills”检查正式版、选择 Agent 并更新。若提示 CLI 未就绪，展开“共用独立 CLI 环境”检测和准备；版本较旧则到设置页更新。Skill 文件一致不代表 Agent 已加载，重新打开会话或使用 Gemini `/skills reload` 后验证实际版本。内容不同会先备份，结果显示恢复副本路径。详见 [App 配置](app.md)。

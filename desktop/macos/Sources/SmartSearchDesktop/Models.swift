@@ -144,7 +144,7 @@ enum Destination: String, CaseIterable, Identifiable, Hashable {
         case .providers: return L("服务商")
         case .search: return L("搜索与研究")
         case .activity: return L("活动")
-        case .integration: return L("AI 接入")
+        case .integration: return L("更新 Skills")
         case .settings: return L("设置与关于")
         }
     }

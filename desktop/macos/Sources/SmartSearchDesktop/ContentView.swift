@@ -1100,24 +1100,9 @@ private struct EnvironmentSetupView: View {
     @ObservedObject var model: AppModel
     private var environment: JSONValue { model.environmentState ?? .object([:]) }
 
-    private func targetDescription(_ id: String) -> String {
-        guard let target = environment["targets"]?.arrayValue?.first(where: { $0["target"]?.stringValue == id }) else {
-            return L("检测环境后显示安装与接入状态。")
-        }
-        let label: String
-        switch target["status"]?.stringValue {
-        case "up_to_date", "extra_files": label = L("接入文件已就绪；AI 内加载与调用待验证")
-        case "stale": label = L("接入内容不同，默认保留")
-        case "missing": label = L("尚未配置接入文件")
-        default: label = L("接入文件需要检查")
-        }
-        return (target["application"]?.displayString ?? "") + "\n" + label +
-            (target["legacy_path"] == nil ? "" : L("\n发现历史技能副本，保留原文件；请核对 AI 中的同名技能。"))
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            GroupBox(L("准备 AI 使用环境")) {
+            GroupBox(L("准备独立 CLI")) {
                 VStack(alignment: .leading, spacing: 14) {
                     Text(environment["message"]?.displayString ?? L("先检测环境，再安装缺少的组件。"))
                         .textSelection(.enabled)
@@ -1136,23 +1121,23 @@ private struct EnvironmentSetupView: View {
                         }
                     }
                     if environment["plan_id"]?.stringValue?.isEmpty == false {
-                        Text(model.environmentActions.isEmpty ? L("没有需要安装的软件或接入文件。请按上方提示完成服务商配置和 AI 内测试。") :
+                        Text(model.environmentActions.isEmpty ? L("独立 CLI 已就绪。可返回上方检查并更新 Skills。") :
                             L("本次将执行：\n") + model.environmentActions.map { "• " + $0 }.joined(separator: "\n"))
                     } else { Text(L("检测后会在这里列出将要安装或配置的内容。")).foregroundStyle(.secondary) }
                     HStack {
                         Button { Task { await model.environmentAction("environment.check") } } label: {
                             BusyLabel(text: L("检测环境"), busyText: L("检测中…"), busy: model.environmentBusy && environment["operation"]?.stringValue == "check")
                         }
-                            .disabled(model.environmentBusy || model.isUpdatingCLI)
+                            .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI)
                         Button { Task { await model.prepareEnvironment() } } label: {
                             BusyLabel(text: model.environmentActionLabel, busyText: L("准备中…"), busy: model.environmentBusy && environment["operation"]?.stringValue == "install")
                         }
                             .buttonStyle(.borderedProminent)
-                            .disabled(model.environmentBusy || model.isUpdatingCLI || model.environmentActions.isEmpty || environment["can_install"]?.boolValue != true || environment["plan_id"]?.stringValue?.isEmpty != false)
+                            .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.environmentActions.isEmpty || environment["can_install"]?.boolValue != true || environment["plan_id"]?.stringValue?.isEmpty != false)
                         Button { Task { await model.environmentAction("environment.verify") } } label: {
                             BusyLabel(text: L("验证可用性"), busyText: L("验证中…"), busy: model.environmentBusy && environment["operation"]?.stringValue == "verify")
                         }
-                            .disabled(model.environmentBusy || model.isUpdatingCLI)
+                            .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI)
                         if environment["can_cancel"]?.boolValue == true {
                             Button(L("取消下载")) { Task { await model.environmentAction("environment.cancel") } }
                         }
@@ -1162,21 +1147,6 @@ private struct EnvironmentSetupView: View {
                         Button(L("复制 AI 测试指引"), action: model.copyEnvironmentTest)
                             .disabled(environment["invocation"]?.stringValue?.isEmpty != false)
                     }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }
-            GroupBox(L("选择接入的 AI")) {
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(["codex", "claude"], id: \.self) { id in
-                        Toggle(id == "codex" ? "Codex" : "Claude Code", isOn: Binding(
-                            get: { model.environmentTargets.contains(id) },
-                            set: { if $0 { model.environmentTargets.insert(id) } else { model.environmentTargets.remove(id) } }))
-                            .disabled(model.environmentBusy)
-                        Text(targetDescription(id)).font(.callout).foregroundStyle(.secondary)
-                    }
-                    Toggle(L("备份后替换内容不同的接入文件"), isOn: $model.replaceEnvironmentSkills)
-                        .disabled(model.environmentBusy)
-                    Text(L("默认保留个人修改。这里只检测已有 AI 软件，不代为安装或登录。"))
-                        .font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
             DisclosureGroup(L("安装位置与检查详情")) {
@@ -1199,21 +1169,107 @@ private struct EnvironmentSetupView: View {
     }
 }
 
+private struct AgentSkillsView: View {
+    @ObservedObject var model: AppModel
+    private var skills: JSONValue { model.skillsState ?? .object([:]) }
+    private var unavailable: Bool { model.connection != .ready || model.environmentBusy || model.isUpdatingCLI || model.skillsBusy || model.skillsChecking }
+
+    private func status(_ value: JSONValue) -> String {
+        switch value["status"]?.stringValue {
+        case "missing": return L("未安装")
+        case "stale": return L("内容不同，可同步")
+        case "up_to_date", "extra_files": return L("与来源一致")
+        case "error": return L("读取失败")
+        default: return L("状态未知")
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            GroupBox(L("最新正式版 Skills")) {
+                VStack(alignment: .leading, spacing: 12) {
+                    if let version = skills["source"]?["version"]?.stringValue {
+                        KeyValueLine(label: L("来源版本"), value: "npm " + version)
+                        if let checked = skills["source"]?["checked_at"]?.numberValue {
+                            KeyValueLine(label: L("最近成功检查"), value: Date(timeIntervalSince1970: checked).formatted())
+                        }
+                        if skills["cached"]?.boolValue == true { Text(L("显示上次缓存；请检查最新 Skills 后再更新。")) }
+                    } else { Text(L("尚未获取正式版 Skills；当前文件仅与 App 内置副本比较。")) }
+                    KeyValueLine(label: L("独立 CLI"), value: skills["cli_version"]?.displayString ?? L("未发现"))
+                    Text(skills["error"]?.displayString ?? "").foregroundStyle(.red)
+                    Text(skills["compatibility"]?.displayString ?? "").foregroundStyle(.secondary)
+                    Toggle(L("每天自动检查 Skills，只提示，不写入"), isOn: Binding(
+                        get: { skills["auto_check"]?.boolValue ?? true },
+                        set: { enabled in Task { await model.skillsAction("skills.auto", params: .object(["enabled": .bool(enabled)])) } }))
+                    HStack {
+                        Button { Task { await model.skillsAction("skills.check") } } label: {
+                            BusyLabel(text: L("检查最新 Skills"), busyText: L("检查中…"), busy: model.skillsChecking)
+                        }
+                        Button { Task { await model.refreshSkillStatus() } } label: { Text(L("刷新本机状态")) }
+                    }.disabled(unavailable)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            GroupBox(L("选择 Agent")) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(L("状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。"))
+                        .font(.callout).foregroundStyle(.secondary)
+                    ForEach(skills["targets"]?.arrayValue ?? [], id: \.self) { target in
+                        let id = target["target"]?.stringValue ?? ""
+                        VStack(alignment: .leading, spacing: 4) {
+                            Toggle((target["label"]?.displayString ?? id) + " · " + status(target), isOn: Binding(
+                                get: { model.selectedSkillTargets.contains(id) },
+                                set: { if $0 { model.selectedSkillTargets.insert(id) } else { model.selectedSkillTargets.remove(id) } }))
+                                .disabled(model.skillsBusy)
+                            Text(target["path"]?.displayString ?? "").font(.caption).textSelection(.enabled)
+                            let changed = (target["stale_files"]?.arrayValue ?? []) + (target["missing_files"]?.arrayValue ?? [])
+                            if !changed.isEmpty { Text(L("将同步：{0}", changed.map(\.displayString).joined(separator: ", "))).font(.caption).foregroundStyle(.secondary) }
+                            ForEach(target["legacy_locations"]?.arrayValue ?? [], id: \.self) { legacy in
+                                Text(L("历史副本，保留：{0}", legacy["path"]?.displayString ?? "")).font(.caption)
+                            }
+                            if let error = target["error"]?.stringValue { Text(error).foregroundStyle(.red) }
+                        }
+                    }
+                    Button { Task { await model.installSelectedSkills() } } label: {
+                        BusyLabel(text: L("更新所选 Skills"), busyText: L("更新中…"), busy: model.skillsBusy)
+                    }.buttonStyle(.borderedProminent)
+                        .disabled(unavailable || model.selectedSkillTargets.isEmpty || skills["can_sync"]?.boolValue != true)
+                    ForEach(skills["result"]?["installed"]?.arrayValue ?? [], id: \.self) { receipt in
+                        Text((receipt["target"]?.displayString ?? "") + L("：已同步"))
+                        if let backup = receipt["backup"]?.stringValue, !backup.isEmpty {
+                            Text(L("\n备份：{0}", backup)).font(.caption).textSelection(.enabled)
+                        }
+                    }
+                    ForEach(skills["result"]?["failed"]?.arrayValue ?? [], id: \.self) { failure in
+                        Text((failure["target"]?.displayString ?? "") + ": " + (failure["error"]?.displayString ?? "")).foregroundStyle(.red)
+                    }
+                    Text(L("不同内容会先备份；额外文件与未选目标保持原样。更新后重新打开 Agent 会话；Gemini 可运行 /skills reload。实际调用仍需在 Agent 中验证。"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+}
+
 private struct IntegrationView: View {
     @ObservedObject var model: AppModel
     @State private var confirmEnableCLI = false
 
     var body: some View {
-        guard let state = model.state else { return AnyView(BackendUnavailableView(model: model)) }
+        guard model.state != nil else { return AnyView(BackendUnavailableView(model: model)) }
         return AnyView(ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(L("AI 接入")).font(.largeTitle.weight(.bold))
-                    Text(L("App 管理环境，AI 使用独立 CLI。关闭或卸载 App 后，CLI 仍可使用。"))
+                    Text(L("更新 Skills")).font(.largeTitle.weight(.bold))
+                    Text(L("为编程 Agent 安装或更新 Smart Search Skill。软件更新不会自动同步这些文件。"))
                         .foregroundStyle(.secondary)
                 }
 
-                EnvironmentSetupView(model: model)
+                AgentSkillsView(model: model)
+                DisclosureGroup(L("共用独立 CLI 环境")) {
+                    Text(L("所有 Agent 共用独立 CLI。此处只准备运行环境，Skills 在上方单独更新。"))
+                    EnvironmentSetupView(model: model)
+                    Button(L("去设置更新 CLI")) { model.selectedDestination = .settings }
+                }
 
                 DisclosureGroup(L("高级：App 内置入口（依赖 App）")) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -1234,37 +1290,7 @@ private struct IntegrationView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                DisclosureGroup(L("高级：其他 AI 工具")) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        if state.skillTargets.isEmpty {
-                            Text(L("后端尚未提供可管理的 Skills 目标。"))
-                                .foregroundStyle(.secondary)
-                        } else {
-                            ForEach(state.skillTargets.filter { !["codex", "claude"].contains($0.id) }) { target in
-                                Toggle(isOn: Binding(
-                                    get: { model.selectedSkillTargets.contains(target.id) },
-                                    set: { selected in
-                                        if selected { model.selectedSkillTargets.insert(target.id) }
-                                        else { model.selectedSkillTargets.remove(target.id) }
-                                    }
-                                )) {
-                                    HStack {
-                                        Text(target.label)
-                                        Spacer()
-                                        StatusTag(status: model.skillStatuses[target.id] ?? target.status ?? "unknown", label: (model.skillStatuses[target.id] ?? target.status) == "stale" ? L("可更新") : state.statusLabels[model.skillStatuses[target.id] ?? target.status ?? "unknown"])
-                                    }
-                                }
-                            }
-                            HStack {
-                                Button { Task { await model.refreshSkillStatus() } } label: { BusyLabel(text: L("刷新状态"), busyText: L("刷新中…"), busy: model.isBusy.contains("skills.status")) }.disabled(model.isBusy.contains("skills.status"))
-                                Button { Task { await model.installSelectedSkills() } } label: { BusyLabel(text: L("安装或更新所选目标"), busyText: L("安装中…"), busy: model.isBusy.contains("skills")) }
-                                    .buttonStyle(.borderedProminent)
-                                    .disabled(model.selectedSkillTargets.isEmpty || model.connection != .ready || model.environmentBusy || model.isBusy.contains("skills"))
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+
             }
             .padding(24)
             .frame(maxWidth: 900, alignment: .leading)
@@ -1299,7 +1325,7 @@ private struct SettingsAboutView: View {
                             Text(L("简体中文")).tag("zh")
                             Text("English").tag("en")
                         }
-                        .disabled(model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("language"))
+                        .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("language"))
                         Text(L("App 与独立 CLI 分别保存语言选择。环境写入期间请等待操作完成。"))
                             .font(.caption).foregroundStyle(.secondary)
                     }.frame(maxWidth: .infinity, alignment: .leading)
@@ -1432,7 +1458,7 @@ private struct UpdatesView: View {
                 Text(model.cliStatus?["update_note"]?.displayString ?? "").font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Button(model.isUpdatingCLI ? L("更新中…") : L("更新 CLI")) { Task { await model.updateCLI() } }
-                        .disabled(model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("cli.update") || checking || cli?["available"]?.boolValue != true || model.cliStatus?["can_update"]?.boolValue != true || !(cli?["error"]?.stringValue ?? "").isEmpty)
+                        .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("cli.update") || checking || cli?["available"]?.boolValue != true || model.cliStatus?["can_update"]?.boolValue != true || !(cli?["error"]?.stringValue ?? "").isEmpty)
                     Button(L("复制更新命令"), action: model.copyCLIUpdateCommand).disabled(cli?["command"] == nil)
                 }
                 if model.isUpdatingCLI { Text(L("请保持 App 打开，等待原管理器完成。")).foregroundStyle(.orange) }

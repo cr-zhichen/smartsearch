@@ -15282,5 +15282,225 @@
   "Malformed Responses stream event: {0}": [
     "Responses 流事件格式错误：{0}",
     "Malformed Responses stream event: {0}"
+  ],
+  "\n备份：{0}": [
+    "\n备份：{0}",
+    "\nBackup: {0}"
+  ],
+  "Skills 下载地址不是受信任的官方地址。": [
+    "Skills 下载地址不是受信任的官方地址。",
+    "The Skills download URL is not a trusted official address."
+  ],
+  "Skills 下载大小超限。": [
+    "Skills 下载大小超限。",
+    "The Skills download exceeds the size limit."
+  ],
+  "Skills 写入失败；备份位置：{0}": [
+    "Skills 写入失败；备份位置：{0}",
+    "Skills could not be written. Backup location: {0}"
+  ],
+  "Skills 可同步": [
+    "Skills 可同步",
+    "Skills can be synced"
+  ],
+  "Skills 归档与正式版包信息不一致。": [
+    "Skills 归档与正式版包信息不一致。",
+    "The Skills archive does not match the stable package metadata."
+  ],
+  "Skills 归档包含不安全的路径、类型或大小。": [
+    "Skills 归档包含不安全的路径、类型或大小。",
+    "The Skills archive contains unsafe paths, file types or sizes."
+  ],
+  "Skills 归档包含重复或无效文件名。": [
+    "Skills 归档包含重复或无效文件名。",
+    "The Skills archive contains duplicate or invalid filenames."
+  ],
+  "Skills 归档包含重复文件。": [
+    "Skills 归档包含重复文件。",
+    "The Skills archive contains duplicate files."
+  ],
+  "Skills 归档完整性校验失败。": [
+    "Skills 归档完整性校验失败。",
+    "Skills archive integrity verification failed."
+  ],
+  "Skills 归档缺少 SHA512 完整性校验。": [
+    "Skills 归档缺少 SHA512 完整性校验。",
+    "The Skills archive has no SHA512 integrity checksum."
+  ],
+  "Skills 操作未完成。": [
+    "Skills 操作未完成。",
+    "The Skills operation did not complete."
+  ],
+  "Skills 操作正在进行，请等待完成。": [
+    "Skills 操作正在进行，请等待完成。",
+    "A Skills operation is in progress. Please wait."
+  ],
+  "Skills 文件大小超限。": [
+    "Skills 文件大小超限。",
+    "The Skill files exceed the size limit."
+  ],
+  "Skills 来源不是有效的官方稳定版本。": [
+    "Skills 来源不是有效的官方稳定版本。",
+    "The Skills source is not a valid official stable release."
+  ],
+  "Skills 来源或本机状态已变化，请重新检查后确认更新。": [
+    "Skills 来源或本机状态已变化，请重新检查后确认更新。",
+    "The Skills source or local files changed. Check again before confirming the update."
+  ],
+  "Skills 来源：官方 npm 正式版 {0}\n最近成功检查：{1}\n独立 CLI：{2}": [
+    "Skills 来源：官方 npm 正式版 {0}\n最近成功检查：{1}\n独立 CLI：{2}",
+    "Skills source: official npm release {0}\nLast successful check: {1}\nIndependent CLI: {2}"
+  ],
+  "Skills 检查或完整性校验失败；保留原文件，请重试。": [
+    "Skills 检查或完整性校验失败；保留原文件，请重试。",
+    "The Skills check or integrity verification failed. Existing files were kept; please retry."
+  ],
+  "不同内容会先备份；额外文件与未选目标保持原样。更新后重新打开 Agent 会话；Gemini 可运行 /skills reload。实际调用仍需在 Agent 中验证。": [
+    "不同内容会先备份；额外文件与未选目标保持原样。更新后重新打开 Agent 会话；Gemini 可运行 /skills reload。实际调用仍需在 Agent 中验证。",
+    "Changed content is backed up first; extra files and unselected targets are kept. Reopen the Agent session after updating; Gemini can use /skills reload. Verify actual CLI calls in the Agent."
+  ],
+  "与来源一致": [
+    "与来源一致",
+    "Matches source"
+  ],
+  "为编程 Agent 安装或更新 Smart Search Skill。软件更新不会自动同步这些文件。": [
+    "为编程 Agent 安装或更新 Smart Search Skill。软件更新不会自动同步这些文件。",
+    "Install or update the Smart Search Skill for coding Agents. Software updates do not automatically sync these files."
+  ],
+  "共用独立 CLI 环境": [
+    "共用独立 CLI 环境",
+    "Shared independent CLI environment"
+  ],
+  "内容不同，可同步": [
+    "内容不同，可同步",
+    "Content differs; can sync"
+  ],
+  "准备独立 CLI": [
+    "准备独立 CLI",
+    "Prepare independent CLI"
+  ],
+  "历史副本，保留：{0}": [
+    "历史副本，保留：{0}",
+    "Legacy copy, kept: {0}"
+  ],
+  "去设置更新 CLI": [
+    "去设置更新 CLI",
+    "Update CLI in Settings"
+  ],
+  "发现内容不同的 Smart Search Skill，请到“更新 Skills”页选择目标。": [
+    "发现内容不同的 Smart Search Skill，请到“更新 Skills”页选择目标。",
+    "Some Smart Search Skill files differ. Choose targets on the Update Skills page."
+  ],
+  "备份并更新": [
+    "备份并更新",
+    "Back up and update"
+  ],
+  "将同步：{0}": [
+    "将同步：{0}",
+    "Files to sync: {0}"
+  ],
+  "尚未获取正式版 Skills；当前文件仅与 App 内置副本比较。": [
+    "尚未获取正式版 Skills；当前文件仅与 App 内置副本比较。",
+    "Stable Skills have not been downloaded. Local files are only compared with the bundled App copy."
+  ],
+  "所有 Agent 共用独立 CLI。此处只准备运行环境，Skills 在上方单独更新。": [
+    "所有 Agent 共用独立 CLI。此处只准备运行环境，Skills 在上方单独更新。",
+    "All Agents share the independent CLI. Prepare its runtime here and update Skills separately above."
+  ],
+  "技能路径包含链接，未覆盖：{0}": [
+    "技能路径包含链接，未覆盖：{0}",
+    "The Skill path contains a link and was not overwritten: {0}"
+  ],
+  "显示上次缓存；请检查最新 Skills 后再更新。": [
+    "显示上次缓存；请检查最新 Skills 后再更新。",
+    "Showing a cached result. Check the latest Skills before updating."
+  ],
+  "更新 Skills": [
+    "更新 Skills",
+    "Update Skills"
+  ],
+  "更新所选 Skills": [
+    "更新所选 Skills",
+    "Update selected Skills"
+  ],
+  "最新正式版 Skills": [
+    "最新正式版 Skills",
+    "Latest stable Skills"
+  ],
+  "最近成功检查": [
+    "最近成功检查",
+    "Last successful check"
+  ],
+  "来源版本": [
+    "来源版本",
+    "Source version"
+  ],
+  "来源版本：{0}\n{1}\n将同步所选目标的托管文件；不同内容先备份，额外文件保留。": [
+    "来源版本：{0}\n{1}\n将同步所选目标的托管文件；不同内容先备份，额外文件保留。",
+    "Source version: {0}\n{1}\nManaged files in the selected targets will be synced. Changed content is backed up first; extra files are kept."
+  ],
+  "检查最新 Skills": [
+    "检查最新 Skills",
+    "Check latest Skills"
+  ],
+  "正在更新所选 Skills…": [
+    "正在更新所选 Skills…",
+    "Updating selected Skills…"
+  ],
+  "正在检查官方稳定版 Skills…": [
+    "正在检查官方稳定版 Skills…",
+    "Checking official stable Skills…"
+  ],
+  "每天自动检查 Skills，只提示，不写入": [
+    "每天自动检查 Skills，只提示，不写入",
+    "Check Skills daily; notify without installing"
+  ],
+  "状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。": [
+    "状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。",
+    "Status describes the Smart Search Skill content only. Other compatible Agents may also read the .agents/skills directory used by Codex."
+  ],
+  "独立 CLI 版本低于 Skills 来源版本，请先在设置页更新 CLI。": [
+    "独立 CLI 版本低于 Skills 来源版本，请先在设置页更新 CLI。",
+    "The independent CLI is older than the Skills source. Update the CLI in Settings first."
+  ],
+  "环境或 Skills 操作正在进行，请等待完成后退出。": [
+    "环境或 Skills 操作正在进行，请等待完成后退出。",
+    "An environment or Skills operation is in progress. Wait for it to finish before quitting."
+  ],
+  "请先准备或验证独立 CLI，再更新 Skills。": [
+    "请先准备或验证独立 CLI，再更新 Skills。",
+    "Prepare or verify the independent CLI before updating Skills."
+  ],
+  "请确认并选择有效的 Skills 目标。": [
+    "请确认并选择有效的 Skills 目标。",
+    "Select valid Skills targets and confirm the update."
+  ],
+  "读取失败": [
+    "读取失败",
+    "Could not read"
+  ],
+  "选择 Agent": [
+    "选择 Agent",
+    "Choose Agents"
+  ],
+  "：已同步": [
+    "：已同步",
+    ": synced"
+  ],
+  "把测试指引粘贴到 Agent 中执行；这一步不需要安装软件": [
+    "把测试指引粘贴到 Agent 中执行；这一步不需要安装软件",
+    "Paste the test instructions into your Agent. No software installation is needed for this step."
+  ],
+  "检测完成。可按清单准备共用独立 CLI。": [
+    "检测完成。可按清单准备共用独立 CLI。",
+    "Detection complete. Follow the plan to prepare the shared independent CLI."
+  ],
+  "独立 CLI 已就绪；请在“更新 Skills”页面同步所需 Agent。": [
+    "独立 CLI 已就绪；请在“更新 Skills”页面同步所需 Agent。",
+    "The independent CLI is ready. Sync your Agents on the Update Skills page."
+  ],
+  "独立 CLI 已就绪。可返回上方检查并更新 Skills。": [
+    "独立 CLI 已就绪。可返回上方检查并更新 Skills。",
+    "The independent CLI is ready. Check and update Skills above."
   ]
 }

@@ -49,10 +49,10 @@ final class AppModel: ObservableObject {
     @Published var selectedActivity: ActivityRun?
     @Published private(set) var cliStatus: JSONValue?
     @Published private(set) var skillStatuses: [String: String] = [:]
+    @Published private(set) var skillsState: JSONValue?
+    private var skillSelectionInitialized = false
     @Published private(set) var updateResult: JSONValue?
     @Published private(set) var environmentState: JSONValue?
-    @Published var environmentTargets: Set<String> = ["codex", "claude"]
-    @Published var replaceEnvironmentSkills = false
     @Published var errorMessage: String?
     @Published var noticeMessage: String?
     @Published private(set) var isBusy: Set<String> = []
@@ -105,15 +105,10 @@ final class AppModel: ObservableObject {
     var hasOwnedActiveRuns: Bool { !ownedActiveRunIDs.isEmpty }
     var isUpdatingCLI: Bool { isBusy.contains("cli.update") || updateResult?["cli_update"]?["status"]?.stringValue == "running" }
     var environmentBusy: Bool { isBusy.contains("environment.request") || environmentState?["busy"]?.boolValue == true }
+    var skillsBusy: Bool { isBusy.contains("skills.sync") || skillsState?["busy"]?.boolValue == true }
+    var skillsChecking: Bool { isBusy.contains("skills.check") || isBusy.contains("skills.catalog") || skillsState?["checking"]?.boolValue == true }
     var environmentActions: [String] {
-        var actions = (environmentState?["plan"]?.arrayValue ?? []).map(\.displayString)
-        for target in environmentState?["targets"]?.arrayValue ?? [] {
-            guard let id = target["target"]?.stringValue, environmentTargets.contains(id) else { continue }
-            let label = target["label"]?.displayString ?? id
-            if target["action"]?.stringValue == "install" { actions.append(L("配置 {0} 接入文件", "\(label)")) }
-            if target["action"]?.stringValue == "review" && replaceEnvironmentSkills { actions.append(L("备份并更新 {0} 接入文件", "\(label)")) }
-        }
-        return actions
+        (environmentState?["plan"]?.arrayValue ?? []).map(\.displayString)
     }
     var environmentActionLabel: String {
         guard environmentState?["plan_id"]?.stringValue?.isEmpty == false else { return L("安装缺少的组件") }
@@ -224,11 +219,16 @@ final class AppModel: ObservableObject {
     }
 
     func refreshSkillStatus() async {
-        guard connection == .ready else { return }
-        guard begin("skills.status") else { return }
-        defer { end("skills.status") }
+        await skillsAction("skills.catalog")
+    }
+
+    func skillsAction(_ method: String, params: JSONValue = .object([:])) async {
+        guard connection == .ready, !skillsBusy else { return }
+        guard begin(method) else { return }
+        defer { end(method) }
         do {
-            let result = try await backend.request(method: "skills.status")
+            let result = try await backend.request(method: method, params: params)
+            skillsState = result
             skillStatuses = Dictionary(uniqueKeysWithValues: (result["targets"]?.arrayValue ?? []).compactMap { value in
                 guard let target = SkillTarget(value), let status = target.status else { return nil }
                 return (target.id, status)
@@ -562,11 +562,11 @@ final class AppModel: ObservableObject {
     func prepareEnvironment() async {
         guard !environmentBusy, !environmentActions.isEmpty, environmentState?["can_install"]?.boolValue == true,
               let planID = environmentState?["plan_id"]?.stringValue else { return }
-        let targets = environmentTargets.sorted()
-        let replace = replaceEnvironmentSkills
+        let targets: [String] = []
+        let replace = false
         let plan = environmentActions.joined(separator: "\n")
         let alert = NSAlert()
-        alert.messageText = L("准备独立 CLI 与 AI 接入")
+        alert.messageText = L("准备独立 CLI")
         alert.informativeText = plan + L("\n接入目标：") + (targets.isEmpty ? L("只准备独立 CLI") : targets.joined(separator: "、")) +
             L("\n独立安装目录：") + (environmentState?["tools_dir"]?.displayString ?? "") + "\n" +
             (replace ? L("内容不同的接入文件将先备份再替换。") : L("已有个人修改将保留。")) + L("\n关闭或卸载 App 后，独立 CLI 仍可使用。")
@@ -586,34 +586,19 @@ final class AppModel: ObservableObject {
     }
 
     func installSelectedSkills() async {
-        guard !environmentBusy else { return }
-        guard connection == .ready, !selectedSkillTargets.isEmpty else {
-            errorMessage = L("请至少选择一个目标后再安装或更新。")
-            return
-        }
-        guard begin("skills") else { return }
-        defer { end("skills") }
-        do {
-            let result = try await backend.request(method: "skills.install", params: .object([
-                "targets": .array(selectedSkillTargets.subtracting(["codex", "claude"]).sorted().map(JSONValue.string)),
-            ]))
-            guard result["ok"]?.boolValue == true, let runID = result["run_id"]?.stringValue else {
-                errorMessage = L("后端没有开始 Skills 安装或更新。")
-                return
-            }
-            ownedActiveRunIDs.insert(runID)
-            ownedRunResults.register(
-                runID: runID,
-                kind: .skillsInstall,
-                label: L("Skills 安装或更新（{0} 个目标）", "\(selectedSkillTargets.count)")
-            )
-            trackRun(runID, key: "skills")
-            noticeMessage = L("Skills 安装或更新已开始。")
-            await recoverRun(runID)
-            await refreshActivity()
-        } catch {
-            present(error)
-        }
+        guard !environmentBusy, !isUpdatingCLI, !skillsBusy, !skillsChecking,
+              !selectedSkillTargets.isEmpty, skillsState?["can_sync"]?.boolValue == true else { return }
+        let targets = selectedSkillTargets.sorted()
+        let plan = skillsState?["plan_id"]?.stringValue ?? ""
+        let paths = (skillsState?["targets"]?.arrayValue ?? []).filter { targets.contains($0["target"]?.stringValue ?? "") }
+            .map { ($0["label"]?.displayString ?? "") + "\n" + ($0["path"]?.displayString ?? "") }.joined(separator: "\n\n")
+        let alert = NSAlert()
+        alert.messageText = L("更新所选 Skills")
+        alert.informativeText = L("来源版本：{0}\n{1}\n将同步所选目标的托管文件；不同内容先备份，额外文件保留。", skillsState?["source"]?["version"]?.displayString ?? "", paths)
+        alert.addButton(withTitle: L("备份并更新"))
+        alert.addButton(withTitle: L("取消"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        await skillsAction("skills.sync", params: .object(["targets": .array(targets.map(JSONValue.string)), "confirm": .bool(true), "plan_id": .string(plan)]))
     }
 
     func enableBundledCLI() async {
@@ -837,6 +822,7 @@ final class AppModel: ObservableObject {
         updateResult = snapshot["updates"]
         cliStatus = snapshot["cli"]
         environmentState = snapshot["environment"]
+        skillsState = snapshot["skills"]
         lastStateRefresh = Date()
         if !parsed.activityRuns().isEmpty {
             activityRuns = parsed.activityRuns()
@@ -844,8 +830,9 @@ final class AppModel: ObservableObject {
         if selectedCommandID == nil || !parsed.commands.contains(where: { $0.id == selectedCommandID }) {
             selectCommand(parsed.commands.first?.id)
         }
-        if selectedSkillTargets.isEmpty {
-            selectedSkillTargets = Set(parsed.skillTargets.filter(\.isDefault).map(\.id)).subtracting(["codex", "claude"])
+        if !skillSelectionInitialized {
+            selectedSkillTargets = Set(parsed.skillTargets.filter(\.isDefault).map(\.id))
+            skillSelectionInitialized = true
         }
     }
 
@@ -862,6 +849,12 @@ final class AppModel: ObservableObject {
 
     private func receive(_ event: BackendEvent) {
         switch event.name {
+        case "skills":
+            if skillsState?["checking"]?.boolValue == true, event.data["checking"]?.boolValue == false,
+               event.data["error"]?.stringValue == "", (event.data["targets"]?.arrayValue ?? []).contains(where: { $0["status"]?.stringValue == "stale" }) {
+                noticeMessage = L("发现内容不同的 Smart Search Skill，请到“更新 Skills”页选择目标。")
+            }
+            skillsState = event.data
         case "environment":
             environmentState = event.data
             if let installed = event.data["cli"] { cliStatus = installed }

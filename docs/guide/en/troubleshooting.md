@@ -48,4 +48,4 @@ Set the App language in Settings & about, and the independent CLI language with 
 
 ## AI integration is still pending
 
-Use AI integration to detect, install missing components, and verify local startup. A ready CLI and matching files are separate from actual AI invocation. Reopen the AI when asked, copy the test guide, close Smart Search, and let the AI execute the independent version command. A missing key requires provider configuration; a differing Skill file requires your decision before replacement. See [App setup](app.md).
+Use Update Skills to check the stable source and sync selected Agents. If the CLI is not ready, open Shared independent CLI environment to prepare it; update an older CLI in Settings. Matching files do not prove the Agent loaded the Skill. Reopen the session or use Gemini `/skills reload`, then verify the actual CLI version. Changed content is backed up and the result shows its recovery path. See [App setup](app.md).

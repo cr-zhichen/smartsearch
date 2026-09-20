@@ -48,11 +48,11 @@ bash desktop/scripts/build-macos.sh --architecture arm64 --python python3
 
 ## 环境准备与 App/CLI 解耦
 
-AI 接入页提供“检测环境 → 安装缺少的组件 → 验证可用性”。健康的 Node/npm、支持 venv/pip 的 Python 和明确来源的 CLI 优先复用。缺失时从 Node 官方 LTS 发行版和经校验的 uv/Astral CPython 准备运行环境，再安装锁定的 npm 稳定版 CLI；无需预装 mise，也不代装或登录 Codex/Claude Code。
+“更新 Skills → 共用独立 CLI 环境”提供“检测环境 → 安装缺少的组件 → 验证可用性”。健康的 Node/npm、支持 venv/pip 的 Python 和明确来源的 CLI 优先复用。缺失时从 Node 官方 LTS 发行版和经校验的 uv/Astral CPython 准备运行环境，再安装锁定的 npm 稳定版 CLI；无需预装 mise，也不代装或登录 Codex/Claude Code。
 
 新环境位于 `%LOCALAPPDATA%/SmartSearchTools` 或 `~/.local/share/smart-search-tools`，独立 npm prefix 在其 `cli` 子目录。它们不是 App 文件，关闭、更新或卸载 App 不会移除它们。AI 接入文件包含独立 Node 和 npm CLI 的绝对调用路径。Windows 为新安装补充自己的用户 PATH 项并提示重新打开 AI/终端；macOS 不修改 shell 配置，图形 AI 可以按技能中的完整路径调用。
 
-“接入文件就绪”“CLI 可运行”和“AI 内实际调用”分别呈现；没有搜索 Key 时提示去配置服务商，不要求重装。检查不发收费请求，AI 内的实际调用通过复制测试指引完成。Codex 写入 `.agents/skills` 并报告旧 `.codex/skills` 副本；Claude 支持个人目录和 `CLAUDE_CONFIG_DIR`。内容不同的文件默认保留，勾选替换才备份后更新，备份位于独立环境的 `skill-backups`。
+“更新 Skills”统一列出所有 Agent 目标，区分 Skill 文件状态、独立 CLI 版本和实际 AI 调用。最新源是官方 npm 稳定包，下载通过 SHA512 与归档边界检查，只读取说明文件。默认每天检查并提示；用户选择目标、核对路径后才备份并更新。备份路径在结果中显示，额外文件、未选目标与历史副本保留。Codex 使用 `.agents/skills`，Claude 尊重 `CLAUDE_CONFIG_DIR`，也支持 Cursor、Copilot、Gemini、OpenCode、Cline、Roo Code 等注册目标。更新会刷新独立 CLI 的本机调用说明。离线缓存不能冒充本次最新检查成功；CLI 较旧时先在设置页更新。检查不发收费请求，AI 内调用仍由用户验证。
 
 安装失败保留已成功组件，重新检测后补缺。只有下载可取消；包管理器写入期间保持 App 打开。实现检查必须使用隔离配置、环境和技能目录；Windows x64 的实测不代表 macOS/ARM64 或真实 AI 会话已经验证。
 
