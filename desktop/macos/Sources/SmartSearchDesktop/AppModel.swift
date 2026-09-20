@@ -93,6 +93,7 @@ final class AppModel: ObservableObject {
     }
 
     var hasOwnedActiveRuns: Bool { !ownedActiveRunIDs.isEmpty }
+    var isUpdatingCLI: Bool { isBusy.contains("cli.update") || updateResult?["cli_update"]?["status"]?.stringValue == "running" }
 
     var selectedCommand: CommandCatalogEntry? {
         guard let selectedCommandID else { return nil }
@@ -100,6 +101,7 @@ final class AppModel: ObservableObject {
     }
 
     func connect() async {
+        guard !isUpdatingCLI else { noticeMessage = "CLI 正在更新，请等待原管理器完成。"; return }
         guard !isBusy.contains("connect") else { return }
         clearOperations()
         guard begin("connect") else { return }
@@ -111,7 +113,7 @@ final class AppModel: ObservableObject {
             await backend.setTimeout(seconds: requestTimeoutSeconds)
             try await backend.start(backendURL: backendURL)
             startEventListener()
-            let snapshot = try await backend.initialize()
+            let snapshot = try await backend.initialize(enableUpdateChecks: backendPathOverride.isEmpty)
             applyState(snapshot)
             connection = .ready
             await refreshActivity()
@@ -598,6 +600,51 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func updateAction(_ method: String, params: JSONValue = .object([:])) async {
+        guard connection == .ready, begin(method) else { return }
+        defer { end(method) }
+        do { updateResult = try await backend.request(method: method, params: params) }
+        catch { present(error) }
+    }
+
+    func updateCLI() async {
+        guard !isUpdatingCLI, let version = updateResult?["cli"]?["latest_version"]?.stringValue else { return }
+        let alert = NSAlert()
+        alert.messageText = "更新独立 CLI"
+        alert.informativeText = "来源：\(cliStatus?["manager_label"]?.displayString ?? "未知")\n路径：\(cliStatus?["external_path"]?.displayString ?? "未知")\n\(cliStatus?["external_version"]?.displayString ?? "未知") → \(version)\n只更新 Smart Search。请先结束其他终端中的 CLI 调用，更新期间保持 App 打开。"
+        alert.addButton(withTitle: "更新 CLI")
+        alert.addButton(withTitle: "取消")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        await updateAction("cli.update", params: .object(["confirm": .bool(true), "version": .string(version)]))
+    }
+
+    func openDownloadedUpdate() async {
+        guard configDraft.isEmpty && clearSecretKeys.isEmpty && !hasOwnedActiveRuns && !isUpdatingCLI else {
+            noticeMessage = "请先处理未保存配置，并等待 App 自有任务完成。"; return
+        }
+        guard begin("updates.installer") else { return }
+        defer { end("updates.installer") }
+        do {
+            let ready = try await backend.request(method: "updates.installer")
+            guard let path = ready["path"]?.stringValue, path.hasPrefix("/"), path.hasSuffix(".dmg") else { return }
+            if NSWorkspace.shared.open(URL(fileURLWithPath: path)) {
+                noticeMessage = "已打开校验过的 DMG，尚未安装。请退出 App 后按正常方式安装，再重新打开核对版本；系统代码签名尚未验证。"
+            } else { errorMessage = "无法打开 DMG，请从下载目录手动打开。" }
+        } catch { present(error) }
+    }
+
+    func revealDownloadedUpdate() {
+        guard let path = updateResult?["download"]?["path"]?.stringValue else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+    }
+
+    func copyCLIUpdateCommand() {
+        guard let command = updateResult?["cli"]?["command"]?.stringValue else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(command, forType: .string)
+        noticeMessage = "已复制此安装的单工具更新命令。"
+    }
+
     func copyCurrentResult() {
         guard let currentResult else { return }
         NSPasteboard.general.clearContents()
@@ -706,6 +753,8 @@ final class AppModel: ObservableObject {
             return
         }
         state = parsed
+        updateResult = snapshot["updates"]
+        cliStatus = snapshot["cli"]
         lastStateRefresh = Date()
         if !parsed.activityRuns().isEmpty {
             activityRuns = parsed.activityRuns()
@@ -731,6 +780,9 @@ final class AppModel: ObservableObject {
 
     private func receive(_ event: BackendEvent) {
         switch event.name {
+        case "updates":
+            updateResult = event.data
+            if let installed = event.data["cli_update"]?["cli"] { cliStatus = installed }
         case "activity":
             Task { await reconcileRuns() }
             // Backend push events cover its active profile.  With user-added directories,

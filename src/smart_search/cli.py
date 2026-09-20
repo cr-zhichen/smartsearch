@@ -2687,7 +2687,7 @@ async def _run_async_impl(args: argparse.Namespace) -> int:
         data = await service.search(args.query, **search_kwargs)
         return _print_result("search", data, args.format, args.output)
     if args.command == "route":
-        data = await service.route(args.query, validation=args.validation, mode=args.router_mode)
+        data = await service.route(args.query, validation=args.validation, mode=args.router_mode, allow_remote=args.remote)
         return _print_result("route", data, args.format, args.output)
     if args.command == "route-calibrate":
         data = await service.route_calibrate(models=args.models)
@@ -3230,6 +3230,7 @@ def build_parser() -> argparse.ArgumentParser:
     route_parser.set_defaults(command="route")
     route_parser.add_argument("query")
     route_parser.add_argument("--validation", choices=["fast", "balanced", "strict"], default="")
+    route_parser.add_argument("--remote", action="store_true", help="Explicitly allow remote routing judgments; may incur API charges. No retrieval is executed.")
     route_parser.add_argument(
         "--router-mode",
         choices=["hybrid", "rules", "off", "jev"],

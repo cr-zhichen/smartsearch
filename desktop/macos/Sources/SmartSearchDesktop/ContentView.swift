@@ -1213,20 +1213,7 @@ private struct SettingsAboutView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                GroupBox("版本与更新") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        KeyValueLine(label: "App 协议", value: "v\(BackendClient.protocolVersion)")
-                        KeyValueLine(label: "引擎版本", value: model.state?.version ?? "尚未读取")
-                        Button { Task { await model.checkForUpdates() } } label: { BusyLabel(text: "检查更新", busyText: "检查中…", busy: model.isBusy.contains("update")) }.disabled(model.isBusy.contains("update"))
-                            .disabled(model.connection != .ready)
-                        if let update = model.updateResult {
-                            UpdateResultView(result: update)
-                        }
-                        Text("检查更新仅在此处由你主动触发；安装由你从官方发行产物完成。")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                UpdatesView(model: model)
             }
             .padding(24)
             .frame(maxWidth: 900, alignment: .leading)
@@ -1247,20 +1234,92 @@ private struct KeyValueLine: View {
     }
 }
 
-private struct UpdateResultView: View {
-    let result: JSONValue
+private struct UpdatesView: View {
+    @ObservedObject var model: AppModel
+    private var app: JSONValue? { model.updateResult?["app"] }
+    private var cli: JSONValue? { model.updateResult?["cli"] }
+    private var download: JSONValue? { model.updateResult?["download"] }
+    private var checking: Bool { model.updateResult?["checking"]?.boolValue == true || model.isBusy.contains("update") }
+    private var downloading: Bool { download?["status"]?.stringValue == "downloading" }
+    private var ready: Bool { download?["status"]?.stringValue == "ready" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            if let error = result.stringValue ?? result["error"]?.stringValue, !error.isEmpty {
-                Text("更新检查未完成：\(error)").foregroundStyle(.red)
-            } else {
-                KeyValueLine(label: "当前版本", value: result["current_version"]?.displayString ?? "后端未提供")
-                KeyValueLine(label: "最新版本", value: result["latest_version"]?.displayString ?? "后端未提供")
-                if let urlString = result["url"]?.stringValue, let url = URL(string: urlString) {
-                    Link("打开官方发行页面", destination: url)
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            GroupBox("版本与更新") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle("自动检查，每 24 小时一次，点击才下载", isOn: Binding(
+                        get: { model.updateResult?["auto_check"]?.boolValue ?? true },
+                        set: { value in Task { await model.updateAction("updates.auto", params: .object(["enabled": .bool(value)])) } }))
+                    HStack {
+                        Button { Task { await model.checkForUpdates() } } label: {
+                            BusyLabel(text: "检查更新", busyText: "检查中…", busy: checking)
+                        }.disabled(checking || model.connection != .ready)
+                        Button("刷新已安装版本") { Task { await model.refreshState() } }.disabled(model.isBusy.contains("state"))
+                    }
+                    if let error = model.updateResult?["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.red) }
+                    if let timestamp = app?["checked_at"]?.numberValue {
+                        Text("App 检查时间：\(Date(timeIntervalSince1970: timestamp).formatted())").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Text("App 和内置引擎一起更新；独立 CLI 使用原管理器更新。").font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading)
             }
+            appCard
+            cliCard
+        }
+    }
+
+    private var appCard: some View {
+        GroupBox("App 与内置引擎") {
+            VStack(alignment: .leading, spacing: 10) {
+                KeyValueLine(label: "App", value: app?["current_version"]?.displayString ?? "尚未读取")
+                KeyValueLine(label: "内置引擎", value: model.state?.version ?? "尚未读取")
+                KeyValueLine(label: "可安装稳定版", value: app?["latest_version"]?.displayString ?? "尚未检查")
+                if app?["package_pending"]?.boolValue == true { Text("较新的发行版尚未提供本平台完整安装包。").foregroundStyle(.orange) }
+                if downloading {
+                    let received = download?["received"]?.numberValue ?? 0
+                    let total = max(download?["total"]?.numberValue ?? 1, 1)
+                    ProgressView(value: received, total: total)
+                    Text("已下载 \(Int(received / 1048576)) / \(Int(total / 1048576)) MiB").monospacedDigit()
+                }
+                if ready { Text("已下载并校验，尚未安装。").foregroundStyle(.green) }
+                if let error = download?["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.orange) }
+                HStack {
+                    Button(downloading ? "下载中…" : "下载安装包") { Task { await model.updateAction("updates.download") } }
+                        .disabled(downloading || model.isBusy.contains("updates.download") || app?["available"]?.boolValue != true || !(app?["error"]?.stringValue ?? "").isEmpty)
+                    Button("取消下载") { Task { await model.updateAction("updates.cancel") } }.disabled(!downloading)
+                    Button("打开安装包") { Task { await model.openDownloadedUpdate() } }.disabled(!ready || model.isBusy.contains("updates.installer"))
+                }
+                HStack {
+                    Button("打开下载目录", action: model.revealDownloadedUpdate).disabled(!ready)
+                    Link("查看版本说明", destination: URL(string: "https://github.com/konbakuyomu/smartsearch/releases")!)
+                }
+                Text("安装包校验 SHA256，尚未验证系统代码签名。打开 DMG 后先退出 App，再按正常方式安装并重新打开核对版本。")
+                    .font(.caption).foregroundStyle(.secondary)
+            }.frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private var cliCard: some View {
+        GroupBox("独立 CLI") {
+            VStack(alignment: .leading, spacing: 10) {
+                KeyValueLine(label: "实际版本", value: model.cliStatus?["external_version"]?.displayString ?? "未安装或未知")
+                KeyValueLine(label: "npm 稳定版", value: cli?["latest_version"]?.displayString ?? "尚未检查")
+                KeyValueLine(label: "来源", value: model.cliStatus?["manager_label"]?.displayString ?? "未确认")
+                Text(model.cliStatus?["external_path"]?.displayString ?? "未发现").font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                Text(model.cliStatus?["update_note"]?.displayString ?? "").font(.caption).foregroundStyle(.secondary)
+                HStack {
+                    Button(model.isUpdatingCLI ? "更新中…" : "更新 CLI") { Task { await model.updateCLI() } }
+                        .disabled(model.isUpdatingCLI || model.isBusy.contains("cli.update") || checking || cli?["available"]?.boolValue != true || model.cliStatus?["can_update"]?.boolValue != true || !(cli?["error"]?.stringValue ?? "").isEmpty)
+                    Button("复制更新命令", action: model.copyCLIUpdateCommand).disabled(cli?["command"] == nil)
+                }
+                if model.isUpdatingCLI { Text("请保持 App 打开，等待原管理器完成。").foregroundStyle(.orange) }
+                if model.updateResult?["cli_update"]?["status"]?.stringValue == "finished" { Text("已更新并验证实际版本。").foregroundStyle(.green) }
+                if let error = model.updateResult?["cli_update"]?["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.red) }
+                DisclosureGroup("更新日志与命令") {
+                    Text((cli?["command"]?.stringValue ?? "") + "\n" + (model.updateResult?["cli_update"]?["log"]?.stringValue ?? ""))
+                        .font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

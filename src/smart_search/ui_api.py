@@ -191,7 +191,7 @@ async def run_query(payload: dict[str, Any]) -> dict[str, Any]:
         return _parameter_error("query is too long")
 
     if command == "route":
-        return await service.route(query)
+        return await service.route(query, allow_remote=False)
 
     timeout = payload.get("timeout_seconds")
     try:

@@ -523,6 +523,7 @@ STATUS_LABELS: dict[str, dict[str, str]] = {
     "rate_limited": {"zh": "被限流", "en": "Rate limited"},
     "network_error": {"zh": "网络错误", "en": "Network error"},
     "parse_error": {"zh": "解析失败", "en": "Parse failed"},
+    "quality_error": {"zh": "网页内容不可用", "en": "Unusable page content"},
     "provider_error": {"zh": "服务商报错", "en": "Provider error"},
     "parameter_error": {"zh": "参数有误", "en": "Bad parameter"},
     "runtime_error": {"zh": "运行出错", "en": "Runtime error"},

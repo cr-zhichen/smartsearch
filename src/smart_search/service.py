@@ -1820,19 +1820,13 @@ async def research(
         }
 
     if str(config._get_config_value("SMART_SEARCH_INTENT_ROUTER", "")).strip().lower() == "jev":
-        result = await search(question, validation="strict" if budget == "deep" else "balanced", fallback=fallback_mode)
-        result.update(
-            question=question, mode="jev_research_execution", route_policy_version="jev-v1",
-            citations=result.get("sources", []),
-            gap_check={
-                "status": result.get("evidence_assessment", {}).get("status", "failed"),
-                "gaps": [{"reason": reason} for reason in result.get("evidence_assessment", {}).get("gaps", [])],
-            },
+        level = _deep_budget(budget or "deep")
+        plan = build_deep_research_plan(question, budget=level, evidence_dir=evidence_dir)
+        timeout = min(config.search_timeout, {"quick": 45, "standard": 120, "deep": config.search_timeout}[level])
+        return await jev_search.search(
+            question, validation="strict" if level == "deep" else "balanced", fallback=fallback_mode,
+            providers="auto", timeout_seconds=timeout, research_plan=plan,
         )
-        if evidence_dir:
-            result["evidence_dir"] = evidence_dir
-            _write_research_artifact(evidence_dir, "report.json", result)
-        return result
 
     minimum = validate_minimum_profile()
     if not minimum.get("ok"):

@@ -18,35 +18,35 @@ _.python.venv = { path = ".venv", create = true }
 [tasks.install]
 description = "Create the venv and install the package with dev dependencies"
 run = [
-  "{{vars.python}} -m ensurepip --upgrade",
-  '{{vars.python}} -m pip install --disable-pip-version-check -e ".[dev]"',
+  '"{{vars.python}}" -m ensurepip --upgrade',
+  '"{{vars.python}}" -m pip install --disable-pip-version-check -e ".[dev]"',
 ]
 
 [tasks.test]
 description = "Install dev dependencies and run the pytest suite"
 run = [
-  "{{vars.python}} -m ensurepip --upgrade",
-  '{{vars.python}} -m pip install --disable-pip-version-check -e ".[dev]"',
-  "{{vars.python}} -m pytest",
+  '"{{vars.python}}" -m ensurepip --upgrade',
+  '"{{vars.python}}" -m pip install --disable-pip-version-check -e ".[dev]"',
+  '"{{vars.python}}" -m pytest',
 ]
 
 [tasks.cli]
 description = "Run the CLI from this checkout"
 raw_args = true
-run = "{{vars.python}} -m smart_search.cli"
+run = '"{{vars.python}}" -m smart_search.cli'
 
 [tasks.python]
 description = "Run a Python development script in the project environment"
 raw_args = true
-run = "{{vars.python}}"
+run = '"{{vars.python}}"'
 
 [tasks.regression]
 description = "Run the source regression suite from this checkout"
-run = "{{vars.python}} -m smart_search.cli regression"
+run = '"{{vars.python}}" -m smart_search.cli regression'
 
 [tasks.smoke]
 description = "Run the mock smoke suite"
-run = "{{vars.python}} -m smart_search.cli smoke --mock --format json"
+run = '"{{vars.python}}" -m smart_search.cli smoke --mock --format json'
 
 [tasks.parity]
 description = "Verify the public and packaged skill trees match"
@@ -54,4 +54,4 @@ run = "npm run check:skill-parity"
 
 [tasks.check]
 description = "Check Python syntax and patch whitespace"
-run = ["{{vars.python}} -m compileall -q src tests", "git diff --check"]
+run = ['"{{vars.python}}" -m compileall -q src tests', "git diff --check"]

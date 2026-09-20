@@ -126,8 +126,10 @@ actor BackendClient {
         }
     }
 
-    func initialize(configDirectory: String? = nil) async throws -> JSONValue {
-        var params: [String: JSONValue] = ["protocol_version": .number(Double(Self.protocolVersion))]
+    func initialize(configDirectory: String? = nil, enableUpdateChecks: Bool = true) async throws -> JSONValue {
+        var params: [String: JSONValue] = ["protocol_version": .number(Double(Self.protocolVersion)),
+            "app_version": .string(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "development"),
+            "enable_update_checks": .bool(enableUpdateChecks)]
         if let configDirectory, !configDirectory.isEmpty {
             params["config_dir"] = .string(configDirectory)
         }

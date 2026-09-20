@@ -23,7 +23,7 @@ _FIELD_LABELS = {"query": "问题或关键词", "queries": "问题列表（每�
                  "budget": "研究深度", "timeout": "超时（秒）", "model": "模型", "output": "输出文件（可选）",
                  "evidence_dir": "研究证据目录", "ref": "分支或版本", "count": "结果数量", "num_results": "结果数量",
                  "router_mode": "路由方式", "validation": "验证程度", "fallback": "回退策略", "providers": "服务商筛选",
-                 "extra_sources": "额外来源数量", "stream": "启用流式请求", "no_stream": "禁用流式请求"}
+                 "extra_sources": "额外来源数量", "stream": "启用流式请求", "no_stream": "禁用流式请求", "remote": "允许远程路由判断"}
 
 
 # argparse help strings are written for `--help` and are English. Reflecting them
@@ -32,7 +32,7 @@ _FIELD_LABELS = {"query": "问题或关键词", "queries": "问题列表（每�
 # not listed falls back to the original help, which keeps new commands working.
 _DESCRIPTIONS = {
     "search": "问一个问题，让主搜索模型联网回答，并带回可点开的来源。",
-    "route": "只看这个问题会用到哪几类能力，不发任何网络请求，也不花钱。",
+    "route": "默认只预览本地可用能力；勾选远程判断会调用路由服务，但不执行搜索。",
     "route-calibrate": "评估向量路由模型，给出推荐的阈值和间距。",
     "fetch": "把一个网页地址读成干净正文。",
     "map": "列出一个站点的结构。",
@@ -81,6 +81,7 @@ _FIELD_HELP = {
     "count": "返回多少条结果。",
     "num_results": "返回多少条结果。",
     "router_mode": "本次改用哪种路由方式，仅影响这一次调用。",
+    "remote": "明确允许远程路由判断，可能计费；默认关闭，且不执行检索。",
     "validation": "结果核验的严格程度，越严越慢。",
     "fallback": "一家失败后要不要自动换下一家。",
     "providers": "限定只用哪些服务商，留空由路由决定。",
