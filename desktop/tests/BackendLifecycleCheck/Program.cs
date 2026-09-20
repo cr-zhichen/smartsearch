@@ -1,5 +1,6 @@
 using SmartSearch.Desktop;
 
+Localization.Preference = "zh";
 if (ActivityPresentation.ProviderModel("firecrawl", "") != "服务商：firecrawl" ||
     ActivityPresentation.ProviderModel("openai-compatible", "grok-test") != "服务商：openai-compatible · 模型：grok-test" ||
     ActivityPresentation.ProviderModel("", "") != "")

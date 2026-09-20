@@ -6,5 +6,7 @@
   <ItemGroup>
     <Compile Include="../../windows/BackendClient.cs" Link="BackendClient.cs" />
     <Compile Include="../../windows/DesktopModels.cs" Link="DesktopModels.cs" />
+    <Compile Include="../../windows/Localization.cs" Link="Localization.cs" />
+    <EmbeddedResource Include="../../../src/smart_search/assets/i18n/messages.json" LogicalName="SmartSearch.Localizations.json" />
   </ItemGroup>
 </Project>
