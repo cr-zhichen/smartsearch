@@ -238,7 +238,7 @@ class Updates:
             self.changed()
 
     def download(self):
-        if self.download_task and not self.download_task.done():
+        if self.state["download"]["status"] == "cancelling" or self.download_task and not self.download_task.done():
             return self.state
         app = self.state["app"]
         if not app.get("available") or not app.get("asset") or app.get("error"):
@@ -247,6 +247,21 @@ class Updates:
         self.state["download"] = {"status": "downloading", "asset": asset, "received": 0, "total": asset["size"], "error": ""}
         self.changed()
         self.download_task = asyncio.create_task(self._download(asset))
+        return self.state
+
+    async def cancel_download(self):
+        task = self.download_task
+        status = self.state["download"]
+        if task and not task.done() and status["status"] == "downloading":
+            status["status"] = "cancelling"
+            self.changed()
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+            # A task cancelled before its first step never enters _download's cleanup.
+            if status["status"] == "cancelling":
+                status.update(status="cancelled", error="下载已取消，可重新下载。")
+                self.changed()
         return self.state
 
     async def _download(self, asset):

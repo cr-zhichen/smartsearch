@@ -468,10 +468,7 @@ class Backend:
             if method == "updates.download":
                 return self.updates.download()
             if method == "updates.cancel":
-                task = self.updates.download_task
-                if task and not task.done():
-                    task.cancel()
-                return self.updates.state
+                return await self.updates.cancel_download()
             if method == "updates.installer":
                 if any(run["status"] in {"running", "cancelling"} for run in self.runs.values()):
                     raise ValueError("请先等待或取消 App 自有任务，再启动安装。")

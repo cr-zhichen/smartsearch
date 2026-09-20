@@ -579,7 +579,7 @@ public sealed partial class MainWindow : Window
              Secondary("App 和内置引擎一起更新；独立 CLI 使用原管理器单独更新。")])));
         panel.Children.Add(Card(Section("App 与内置引擎", [_appUpdateSummary, _downloadSummary, _downloadProgress,
              ActionRow(ActionButton("下载安装包", () => UpdateRequestAsync("updates.download"), primary: true, operationKey: "updates-download", busyText: "下载中…"),
-                       ActionButton("取消下载", () => UpdateRequestAsync("updates.cancel"), operationKey: "updates-cancel"),
+                       ActionButton("取消下载", () => UpdateRequestAsync("updates.cancel"), operationKey: "updates-cancel", busyText: "正在取消…"),
                        ActionButton("退出并打开安装器", InstallUpdateAsync, operationKey: "updates-install")),
              ActionRow(ActionButton("打开下载目录", OpenUpdateDirectoryAsync, operationKey: "updates-folder"),
                        ActionButton("查看版本说明", async () => { await Launcher.LaunchUriAsync(new Uri("https://github.com/konbakuyomu/smartsearch/releases")); })),
@@ -1044,10 +1044,11 @@ public sealed partial class MainWindow : Window
         _downloadSummary!.Text = downloadStatus switch
         {
             "downloading" => $"正在下载：{Number(download, "received") / 1048576:F1} / {Number(download, "total") / 1048576:F1} MiB",
+            "cancelling" => "正在取消下载…",
             "ready" => $"已下载并校验：{Text(Property(download, "asset"), "version")}；尚未安装。",
             "failed" or "cancelled" => Text(download, "error"), _ => "点击后下载，不会自动安装。"
         };
-        _downloadProgress!.Visibility = downloadStatus == "downloading" ? Visibility.Visible : Visibility.Collapsed;
+        _downloadProgress!.Visibility = downloadStatus is "downloading" or "cancelling" ? Visibility.Visible : Visibility.Collapsed;
         _downloadProgress.Value = Number(download, "total") > 0 ? 100 * Number(download, "received") / Number(download, "total") : 0;
         _cliUpdateLog!.Text = Text(cli, "command") + "\n" + Text(cliUpdate, "log") + "\n" + Text(cliUpdate, "error");
         if (Text(cliUpdate, "status") == "running") _cliUpdateSummary.Text += "\n正在更新，请保持 App 打开。";
@@ -1545,14 +1546,15 @@ public sealed partial class MainWindow : Window
     private void UpdateActionButton(Button button, ActionBinding binding)
     {
         var key = binding.Key();
-        var downloading = Text(Property(_updates, "download"), "status") == "downloading";
+        var downloadStatus = Text(Property(_updates, "download"), "status");
+        var downloading = downloadStatus is "downloading" or "cancelling";
         var updatingCli = Text(Property(_updates, "cli_update"), "status") == "running";
         var busy = _operations.IsBusy(key) || key == "updates-check" && Bool(_updates, "checking") ||
-            key == "updates-download" && downloading || key == "updates-cli" && updatingCli;
+            key == "updates-download" && downloading || key == "updates-cancel" && downloadStatus == "cancelling" || key == "updates-cli" && updatingCli;
         var allowed = key switch
         {
             "updates-download" => Bool(Property(_updates, "app"), "available") && Text(Property(_updates, "app"), "error").Length == 0,
-            "updates-cancel" => downloading,
+            "updates-cancel" => downloadStatus == "downloading",
             "updates-install" or "updates-folder" => Text(Property(_updates, "download"), "status") == "ready",
             "updates-cli" => Bool(Property(_state, "cli"), "can_update") && Bool(Property(_updates, "cli"), "available") && !Bool(_updates, "checking") && Text(Property(_updates, "cli"), "error").Length == 0,
             "updates-copy" => Text(Property(_updates, "cli"), "command").Length > 0,
@@ -1783,30 +1785,36 @@ public sealed partial class MainWindow : Window
         _ => capability
     };
 
-    private static string ProviderCheckLabel(string status) => status.ToLowerInvariant() switch
+    private string ProviderCheckLabel(string status)
     {
-        "ok" or "passed" or "success" => "通过",
-        "failed" or "error" => "未通过",
-        "cancelled" => "已取消",
-        "timeout" => "超时",
-        "not_configured" => "未配置",
-        "config_error" or "parameter_error" => "配置需调整",
-        "auth_error" => "凭据不可用",
-        "rate_limit" or "rate_limited" => "请求受限",
-        "network_error" => "网络异常",
-        "warning" => "需要确认",
-        "runtime_error" or "interrupted" => "已中断",
-        "running" => "测试中",
-        "closed" => "已结束（不推断成功）",
-        _ => "状态未知"
-    };
+        var label = Text(Property(Property(Property(_state, "metadata"), "status_labels"), status.ToLowerInvariant()), "zh");
+        if (!string.IsNullOrWhiteSpace(label)) return label;
+        return status.ToLowerInvariant() switch
+        {
+            "ok" or "passed" or "success" => "通过",
+            "failed" or "error" => "未通过",
+            "cancelled" => "已取消",
+            "timeout" => "超时",
+            "not_configured" => "未配置",
+            "config_error" or "parameter_error" => "配置需调整",
+            "auth_error" => "凭据不可用",
+            "rate_limit" or "rate_limited" => "请求受限",
+            "network_error" => "网络异常",
+            "warning" => "需要确认",
+            "runtime_error" or "interrupted" => "已中断",
+            "running" => "测试中",
+            "closed" => "已结束（不推断成功）",
+            _ => "状态未知"
+        };
+    }
 
     private static string StatusTone(string status) => status.ToLowerInvariant() switch
     {
         "ok" or "passed" or "success" or "finished" or "up_to_date" => "Success",
         "running" or "cancelling" => "Active",
-        "timeout" or "warning" or "stale" or "rate_limit" or "rate_limited" => "Warning",
-        "error" or "failed" or "auth_error" or "network_error" or "runtime_error" or "interrupted" or "config_error" or "parameter_error" => "Error",
+        "timeout" or "warning" or "stale" or "rate_limit" or "rate_limited" or "configured" or "not_configured" => "Warning",
+        "error" or "failed" or "interrupted" => "Error",
+        _ when status.EndsWith("_error", StringComparison.OrdinalIgnoreCase) => "Error",
         _ => "Neutral"
     };
 

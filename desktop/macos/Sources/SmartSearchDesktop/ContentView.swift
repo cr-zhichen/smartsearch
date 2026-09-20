@@ -1240,7 +1240,8 @@ private struct UpdatesView: View {
     private var cli: JSONValue? { model.updateResult?["cli"] }
     private var download: JSONValue? { model.updateResult?["download"] }
     private var checking: Bool { model.updateResult?["checking"]?.boolValue == true || model.isBusy.contains("update") }
-    private var downloading: Bool { download?["status"]?.stringValue == "downloading" }
+    private var cancelling: Bool { download?["status"]?.stringValue == "cancelling" || model.isBusy.contains("updates.cancel") }
+    private var downloading: Bool { download?["status"]?.stringValue == "downloading" || cancelling }
     private var ready: Bool { download?["status"]?.stringValue == "ready" }
 
     var body: some View {
@@ -1282,11 +1283,12 @@ private struct UpdatesView: View {
                     Text("已下载 \(Int(received / 1048576)) / \(Int(total / 1048576)) MiB").monospacedDigit()
                 }
                 if ready { Text("已下载并校验，尚未安装。").foregroundStyle(.green) }
+                if cancelling { Text("正在取消下载…").foregroundStyle(.secondary) }
                 if let error = download?["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.orange) }
                 HStack {
                     Button(downloading ? "下载中…" : "下载安装包") { Task { await model.updateAction("updates.download") } }
                         .disabled(downloading || model.isBusy.contains("updates.download") || app?["available"]?.boolValue != true || !(app?["error"]?.stringValue ?? "").isEmpty)
-                    Button("取消下载") { Task { await model.updateAction("updates.cancel") } }.disabled(!downloading)
+                    Button(cancelling ? "正在取消…" : "取消下载") { Task { await model.updateAction("updates.cancel") } }.disabled(!downloading || cancelling)
                     Button("打开安装包") { Task { await model.openDownloadedUpdate() } }.disabled(!ready || model.isBusy.contains("updates.installer"))
                 }
                 HStack {

@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from smart_search import desktop_updates as updates
+from smart_search.desktop_backend import Backend
 
 
 def release(version="0.2.0", arch="x64", digest=True):
@@ -120,8 +121,13 @@ async def test_stream_download_retry_cancel_size_hash_and_installer_recheck(tmp_
         manager.download()
         assert manager.download_task is first
         await asyncio.sleep(.08)
-        first.cancel()
-        await first
+        cancellation = asyncio.create_task(manager.cancel_download())
+        await asyncio.sleep(0)
+        assert manager.state["download"]["status"] == "cancelling"
+        await manager.cancel_download()
+        manager.download()
+        assert manager.download_task is first and first.cancelling() == 1
+        await cancellation
         assert manager.state["download"]["status"] == "cancelled"
         assert not list(tmp_path.glob("*.part"))
         source.update(slow=False, wrong=True)
@@ -146,6 +152,23 @@ async def test_stream_download_retry_cancel_size_hash_and_installer_recheck(tmp_
         server.shutdown()
         server.server_close()
         thread.join(2)
+
+
+@pytest.mark.asyncio
+async def test_cancel_before_download_starts_is_terminal_and_retryable(tmp_path):
+    events = []
+    manager = updates.Updates(lambda _, state: events.append(state["download"]["status"]), directory=tmp_path)
+    manager.state["app"] = {"available": True, "asset": updates.asset_for(release(), "windows", "x64")}
+    backend = Backend(lambda _: None)
+    backend.initialized, backend.directory, backend.updates = True, str(tmp_path), manager
+    await backend.handle("updates.download", {})
+    result = await backend.handle("updates.cancel", {})
+    assert result["download"]["status"] == "cancelled"
+    assert events == ["downloading", "cancelling", "cancelled"]
+    assert manager.download_task.done() and not list(tmp_path.iterdir())
+    manager.download()
+    assert manager.state["download"]["status"] == "downloading"
+    await manager.cancel_download()
 
 
 @pytest.mark.asyncio
