@@ -35,12 +35,12 @@ These tasks need information from the web and a way to trace it back to its sour
 
 1. **Download and open Smart Search.** Choose the package for your system from [Releases](https://github.com/konbakuyomu/smartsearch/releases/latest). The App includes its own runtime.
 2. **Open Providers.** Add services for the three required jobs: answering searches, finding documentation, and reading pages. The page shows what is still missing and where to obtain each key. Check or test the settings, then save them.
-3. **Open AI integration.** Select Codex or Claude Code, detect the environment, and review the listed setup actions. The App can prepare missing components for its independent CLI and install the selected integration files. It detects your AI software; install and sign in to that software yourself.
+3. **Open Update Skills.** Prepare the command-line tool under Shared independent CLI environment, then check the latest stable Skills, select your Agents, and confirm backup and sync. Codex, Claude Code, Cursor and 14 other targets are supported. Install and sign in to the Agent applications yourself.
 4. **Copy the AI test instructions.** Paste them into a new AI conversation. First check that the command runs; then try a search.
 
 Provider tests and searches may use your providers' paid quota. Opening the App or checking the local environment does not run a paid search.
 
-Version 0.1.21 adds environment preparation and full App/CLI language switching. Desktop packages are currently unsigned; macOS and Windows ARM64 device validation is still pending.
+Version 0.1.22 adds a dedicated Skills download and update page. Daily checks only notify; selected Agent files change after you click to update. The App, CLI and Skills are maintained separately. Desktop packages are currently unsigned; macOS and Windows ARM64 device validation is still pending.
 
 [App setup, supported platforms, and troubleshooting →](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/app.md)
 

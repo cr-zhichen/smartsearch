@@ -35,12 +35,12 @@ Smart Search 把搜索和网页读取服务接到 Codex、Claude Code 等 AI 工
 
 1. **下载并打开 Smart Search。** 在[发行页](https://github.com/konbakuyomu/smartsearch/releases/latest)选择适合系统的安装包。App 自带运行环境。
 2. **打开“服务商”。** 按页面提示配齐主搜索、文档检索和网页读取三类能力。页面会列出缺项和获取 Key 的入口；检查或测试配置后保存。
-3. **打开“AI 接入”。** 勾选 Codex 或 Claude Code，检测环境，核对本次准备清单。App 可以补齐独立命令行工具缺少的组件，并写入所选 AI 的接入文件；AI 软件本身需要你安装并登录。
+3. **打开“更新 Skills”。** 先在“共用独立 CLI 环境”准备命令行工具，再检查最新正式版 Skills，选择 Agent 并确认备份更新。支持 Codex、Claude Code、Cursor 等 17 个目标；Agent 软件由你安装并登录。
 4. **点击“复制 AI 测试指引”。** 粘贴到 AI 的新对话里，先确认命令能运行，再试一次搜索。
 
 服务商测试和搜索可能消耗相应服务的付费额度。打开 App 或检查本机环境不会发起付费搜索。
 
-v0.1.21 新增了环境准备与完整的 App/CLI 语言切换。桌面安装包目前未签名，macOS 与 Windows ARM64 实机验证仍待完成。
+v0.1.22 新增独立的 Skills 下载与更新页面。每天自动检查只提示，点击后才更新所选 Agent；App、CLI 和 Skills 分别维护。桌面安装包目前未签名，macOS 与 Windows ARM64 实机验证仍待完成。
 
 [查看 App 配置步骤、支持平台和排障说明 →](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/zh-CN/app.md)
 
