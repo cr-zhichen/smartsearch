@@ -245,8 +245,8 @@ ssh -L 8765:127.0.0.1:8765 用户@主机      # 然后在本地打开打印出�
 | --- | --- | --- | --- |
 | `main_search` | `search` | xAI Responses、OpenAI-compatible Chat Completions 或 Responses | 综合回答、快速搜索、初步总结 |
 | `docs_search` | `context7-library`、`context7-docs`、`exa-search` | Context7、Exa | 官方文档、SDK、API、框架/库文档 |
-| `web_search` | `zhipu-search`、`zhipu-mcp-search`、`search` 内部意图补强 | 智谱 Web Search API、智谱 Coding Plan MCP、Tavily、Firecrawl | 中文、国内、时效、域名过滤、补充来源 |
-| `web_fetch` | `fetch`、`zhipu-mcp-reader` | Tavily、Jina Reader、智谱 Coding Plan MCP Reader、Firecrawl | 已知 URL 正文抓取、证据提取 |
+| `web_search` | `zhipu-search`、`zhipu-mcp-search`、`search` 内部意图补强 | 智谱 Web Search API、智谱 Coding Plan MCP、Tavily、Firecrawl、TinyFish | 中文、国内、时效、域名过滤、补充来源 |
+| `web_fetch` | `fetch`、`zhipu-mcp-reader` | Tavily、Jina Reader、智谱 Coding Plan MCP Reader、Firecrawl、TinyFish | 已知 URL 正文抓取、证据提取 |
 | `vertical_search` | `anysearch-domains`、`anysearch-search`、`anysearch-extract`、`anysearch-batch`、`sciverse-catalog`、`sciverse-search`、`sciverse-semantic`、`sciverse-read`、`sciverse-relations` | AnySearch 和 Sciverse（实验） | 显式结构化垂直域；Sciverse 覆盖学术文献检索、语义搜索、正文片段和引用关系 |
 | `site_map` | `map` | Tavily | 文档站、产品站、目录型站点结构 |
 | `deep_planner` | `deep` / `dr` | 本地 planner | 离线生成 Deep Research 计划，不默认联网 |
@@ -258,8 +258,10 @@ ssh -L 8765:127.0.0.1:8765 用户@主机      # 然后在本地打开打印出�
 | --- | --- |
 | `main_search` | xAI Responses -> OpenAI-compatible |
 | `docs_search` | Context7 只在库主体命中候选 title/id 时使用；低置信度或空 Context7 命中后由 Exa 同能力兜底，并处理官方域名、论文、产品页、可信站点发现 |
-| `web_search` | 智谱 Web Search API -> 智谱 Coding Plan MCP `web_search_prime` -> Tavily -> Firecrawl |
-| `web_fetch` | Tavily -> 带 `JINA_API_KEY` 的 Jina Reader -> 智谱 Coding Plan MCP `webReader` -> Firecrawl |
+| `web_search` | 智谱 Web Search API -> 智谱 Coding Plan MCP `web_search_prime` -> Tavily -> Firecrawl -> TinyFish |
+| `web_fetch` | Tavily -> 带 `JINA_API_KEY` 的 Jina Reader -> 智谱 Coding Plan MCP `webReader` -> Firecrawl -> TinyFish |
+
+TinyFish 是可选的 `web_search` + `web_fetch` provider，两段能力共用同一个 `TINYFISH_API_KEY`。它不满足 `main_search` 和 `docs_search`，并且排在所有既有 provider 之后，因此不会改变当前配置的行为和顺序。
 
 AnySearch 和 Sciverse 当前都只作为实验 `vertical_search` 暴露，不进入 `web_search` 兜底链，也不是 `standard` 最低配置要求。Sciverse 也不是 `docs_search`，不会加入默认 `search` / `research` 路由；需要学术字段、语义论文命中、正文片段或引用/参考文献关系时，请显式运行 `sciverse-*` 命令。
 
@@ -373,6 +375,8 @@ smart-search deep "https://example.com/source" --format json
 | Tavily | 额外来源、URL fetch、站点 map | `TAVILY_API_URL`、`TAVILY_API_KEY`、`TAVILY_ENABLED` | [Tavily docs](https://docs.tavily.com/) | [Tavily app](https://app.tavily.com/home) |
 | Jina Reader | 已知 URL 正文抓取；满足 standard 最低配置必须有 key | `JINA_API_KEY`、`JINA_READER_API_URL`、`JINA_RESPOND_WITH`、`JINA_TIMEOUT_SECONDS` | [Jina Reader](https://jina.ai/reader/) | [Jina AI](https://jina.ai/) |
 | Firecrawl | fetch 兜底、补充网页来源 | `FIRECRAWL_API_URL`、`FIRECRAWL_API_KEY` | [Firecrawl docs](https://docs.firecrawl.dev/) | [Firecrawl API keys](https://www.firecrawl.dev/app/api-keys) |
+| TinyFish | 搜索与抓取兜底 | `TINYFISH_API_KEY`、`TINYFISH_SEARCH_API_URL`、`TINYFISH_FETCH_API_URL`、`TINYFISH_TIMEOUT_SECONDS` | [TinyFish 文档](https://docs.tinyfish.ai/) | [TinyFish API keys](https://agent.tinyfish.ai/api-keys) |
+| TypeSafe / Jev | 可选语义路由和证据判断 | `TYPESAFE_API_KEY`、`TYPESAFE_API_URL`、`TYPESAFE_MODEL` | [TypeSafe API](https://docs.typesafe.ai/api) | 参见 TypeSafe 文档 |
 | AnySearch | 实验垂直搜索验收入口，不是默认兜底 | `ANYSEARCH_API_URL`、`ANYSEARCH_API_KEY`、`ANYSEARCH_TIMEOUT_SECONDS` | [AnySearch 文档](https://www.anysearch.com/docs) | [AnySearch API keys](https://www.anysearch.com/console/api-keys) |
 | Sciverse | 显式实验学术检索、语义论文检索、正文片段和引用/参考文献关系，不是默认兜底 | `SCIVERSE_API_TOKEN`、`SCIVERSE_API_URL`、`SCIVERSE_TIMEOUT_SECONDS` | [Sciverse Agent Tools](https://github.com/opendatalab/Sciverse-Agent-Tools) | Sciverse 控制台 / token 提供方 |
 
@@ -380,7 +384,7 @@ smart-search deep "https://example.com/source" --format json
 
 | 配置项 | 用途 |
 | --- | --- |
-| `SMART_SEARCH_INTENT_ROUTER` | `hybrid`、`rules` 或 `off`，默认 `hybrid` |
+| `SMART_SEARCH_INTENT_ROUTER` | `hybrid`、`rules`、`off` 或 `jev`，默认 `hybrid` |
 | `INTENT_EMBEDDING_API_URL` | 可选 OpenAI-compatible embeddings endpoint，用于语义能力路由；推荐 setup preset 使用 `https://api.siliconflow.cn/v1/embeddings` |
 | `INTENT_EMBEDDING_API_KEY` | 可选 embeddings key；`doctor` 和 config 输出会脱敏 |
 | `INTENT_EMBEDDING_MODEL` | embeddings 模型名；推荐 setup preset 使用 `Qwen/Qwen3-Embedding-8B` |
@@ -393,6 +397,8 @@ smart-search deep "https://example.com/source" --format json
 | `SMART_SEARCH_TIMEOUT_SECONDS` | `search` 的总单调时限，默认 `300`；单次 `search --timeout` 可覆盖 |
 | `SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS` | 可选 provider 连续失败后被跳过的时长，默认 `900`；设为 `0` 关闭冷却 |
 | `SMART_SEARCH_PROVIDER_FAILURE_THRESHOLD` | 可选 provider 进入冷却前允许的连续软失败次数，默认 `2` |
+
+`jev` 为 `search` 和 `research` 提供可选流程：Jev 从已配置渠道中直接多选，并行检索后判断累计证据是否需要补搜，没有搜索前复核。可选二分过滤会剔除明确无关的证据；最终汇总支持 `true`、`false`、`auto`，自动模式由 Jev 根据最终保留的证据判断，默认直接返回证据。配置、限制和诊断信息见 [Jev 路由与过滤](docs/jev-routing.md)。
 
 默认 `hybrid` 是 fail-open：embeddings 或 classifier 没配置、超时或失败时，会在 `degraded_reason` 里说明，然后自动退回本地规则。语义路由只有在 top1 相似度达到 `INTENT_EMBEDDING_THRESHOLD`，并且 top1 与第二名差值达到 `INTENT_EMBEDDING_MARGIN` 时，才会直接添加 capability；否则只记录 ambiguous 信号。classifier 可以补充 capability，但未知 capability 和 provider 名会被忽略；provider 仍然只能由 capability-first 注册表选择。
 
@@ -467,7 +473,7 @@ smart-search setup --non-interactive `
 
 - `main_search`：xAI Responses 或 OpenAI-compatible 二选一；
 - `docs_search`：Exa 或 Context7 二选一；
-- `web_fetch`：Tavily、带 `JINA_API_KEY` 的 Jina、智谱 Coding Plan MCP Reader、Firecrawl 四选一。
+- `web_fetch`：Tavily、带 `JINA_API_KEY` 的 Jina、智谱 Coding Plan MCP Reader、Firecrawl、TinyFish 五选一。
 
 缺少任一最低能力时，`doctor` 和 `search` 会 fail closed 并返回缺失 capability。`SMART_SEARCH_MINIMUM_PROFILE=off` 只建议本地实验使用。
 
@@ -530,7 +536,7 @@ smart-search sciverse-relations "unique-id-from-search" --relation CITATIONS --p
 | `SCIVERSE_API_TOKEN` | 显式 Sciverse 学术命令需要的 token |
 | `SCIVERSE_API_URL` | Sciverse API base URL，默认 `https://api.sciverse.space` |
 | `SCIVERSE_TIMEOUT_SECONDS` | Sciverse 请求超时，默认 `30` |
-| `SMART_SEARCH_INTENT_ROUTER` | 意图路由模式：`hybrid`、`rules`、`off`，默认 `hybrid` |
+| `SMART_SEARCH_INTENT_ROUTER` | 意图路由模式：`hybrid`、`rules`、`off`、`jev`，默认 `hybrid` |
 | `INTENT_EMBEDDING_API_URL` | 可选 embeddings endpoint，用于语义路由 |
 | `INTENT_EMBEDDING_API_KEY` | 可选 embeddings key |
 | `INTENT_EMBEDDING_MODEL` | embeddings 模型名 |
@@ -730,6 +736,20 @@ smart-search deep "深度搜索一下最近的比特币行情" --format json | C
 ```
 
 ## 开发验证
+
+仓库用 `mise.toml` 声明开发工具链。安装 [mise](https://mise.jdx.dev) 后，`mise install` 会装好固定版本的 Python 和 Node，同一份文件也把常用命令暴露为 task：
+
+```bash
+mise run install      # 创建 .venv，以可编辑模式安装包和 dev 依赖
+mise run test         # 安装 dev 依赖并运行 pytest
+mise run cli -- --v   # 从当前检出运行 CLI
+mise run regression
+mise run smoke
+mise run parity
+mise run check
+```
+
+Python 任务共用当前检出的可编辑 `.venv`，包括 regression 和 smoke。额外开发脚本可通过 `mise run python path/to/script.py` 在同一环境执行。固定的 Python 3.13 满足项目版本约束；CI 独立覆盖 Python 3.10/3.12。mise 是可选的，下面的 `npm` 脚本仍受支持，CI 继续使用 `actions/setup-python` 与 `actions/setup-node`。
 
 ```powershell
 .\.venv\Scripts\python.exe -m compileall -q src tests

@@ -19,6 +19,7 @@ APPROVED_PROVIDER_ERROR_TYPES: Final[frozenset[str]] = frozenset(
         "rate_limited",
         "network_error",
         "parse_error",
+        "quality_error",
         "provider_error",
         "runtime_error",
     }

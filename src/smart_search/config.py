@@ -8,6 +8,7 @@ from contextvars import ContextVar
 from pathlib import Path
 
 from .state_files import file_lock
+from .jev import JEV_DEFAULTS, JevSettings, validate_jev_value
 
 _snapshot = ContextVar("smart_search_config_snapshot", default=None)
 
@@ -36,7 +37,7 @@ class Config:
     _ALLOWED_VALIDATION_LEVELS = {"fast", "balanced", "strict"}
     _ALLOWED_FALLBACK_MODES = {"auto", "off"}
     _ALLOWED_MINIMUM_PROFILES = {"standard", "off"}
-    _ALLOWED_INTENT_ROUTER_MODES = {"hybrid", "rules", "off"}
+    _ALLOWED_INTENT_ROUTER_MODES = {"hybrid", "rules", "off", "jev"}
     _CONFIG_KEYS = {
         "XAI_API_URL",
         "XAI_API_KEY",
@@ -91,6 +92,10 @@ class Config:
         "TAVILY_TIMEOUT_SECONDS",
         "FIRECRAWL_API_KEY",
         "FIRECRAWL_API_URL",
+        "TINYFISH_API_KEY",
+        "TINYFISH_SEARCH_API_URL",
+        "TINYFISH_FETCH_API_URL",
+        "TINYFISH_TIMEOUT_SECONDS",
         "ANYSEARCH_API_KEY",
         "ANYSEARCH_API_URL",
         "ANYSEARCH_TIMEOUT_SECONDS",
@@ -107,6 +112,7 @@ class Config:
         "SMART_SEARCH_LOG_TO_FILE",
         "SSL_VERIFY",
     }
+    _CONFIG_KEYS.update(JEV_DEFAULTS)
     _LEGACY_CONFIG_KEYS: dict[str, str] = {}
     # Writing any of these invalidates the resolved-model cache.
     _MODEL_CACHE_KEYS = frozenset({
@@ -659,7 +665,10 @@ class Config:
         Without this, ``config set SMART_SEARCH_VALIDATION_LEVEL bogus`` succeeds and
         only blows up on the next search, far from the mistake.
         """
-        if key == "SMART_SEARCH_TIMEOUT_SECONDS":
+        if key in JEV_DEFAULTS:
+            validate_jev_value(key, value)
+            return
+        if key in {"SMART_SEARCH_TIMEOUT_SECONDS", "TINYFISH_TIMEOUT_SECONDS"}:
             self._parse_positive_float_value(key, value)
             return
         if key == "SMART_SEARCH_PROVIDER_COOLDOWN_SECONDS":
@@ -796,6 +805,9 @@ class Config:
             self._ALLOWED_INTENT_ROUTER_MODES,
         )
 
+    def jev_settings(self) -> JevSettings:
+        return JevSettings.from_config(self)
+
     @property
     def intent_embedding_api_url(self) -> str:
         return self._get_config_value("INTENT_EMBEDDING_API_URL", "") or ""
@@ -908,6 +920,28 @@ class Config:
     @property
     def firecrawl_api_key(self) -> str | None:
         return self._get_config_value("FIRECRAWL_API_KEY")
+
+    @property
+    def tinyfish_api_key(self) -> str | None:
+        return self._get_config_value("TINYFISH_API_KEY")
+
+    @property
+    def tinyfish_search_api_url(self) -> str:
+        return (
+            self._get_config_value("TINYFISH_SEARCH_API_URL", "https://api.search.tinyfish.ai")
+            or "https://api.search.tinyfish.ai"
+        )
+
+    @property
+    def tinyfish_fetch_api_url(self) -> str:
+        return (
+            self._get_config_value("TINYFISH_FETCH_API_URL", "https://api.fetch.tinyfish.ai")
+            or "https://api.fetch.tinyfish.ai"
+        )
+
+    @property
+    def tinyfish_timeout(self) -> float:
+        return self._parse_positive_float_value("TINYFISH_TIMEOUT_SECONDS", self._get_config_value("TINYFISH_TIMEOUT_SECONDS", "150") or "150")
 
     @property
     def anysearch_api_url(self) -> str:
@@ -1070,6 +1104,14 @@ class Config:
 
     def get_config_info(self) -> dict:
         config_parameter_errors: list[str] = []
+        jev_info = {}
+        for key, default in JEV_DEFAULTS.items():
+            value = self._get_config_value(key, default)
+            try:
+                value = validate_jev_value(key, value)
+            except ValueError as exc:
+                config_parameter_errors.append(str(exc))
+            jev_info[key] = self._mask_if_secret(key, str(value)) if "KEY" in key else value
         explicit_main_configured = bool(
             self.xai_api_key
             or (self.openai_compatible_api_url and self.openai_compatible_api_key)
@@ -1099,6 +1141,8 @@ class Config:
             self._DEFAULT_INTENT_ROUTER_MODE,
             self._ALLOWED_INTENT_ROUTER_MODES,
         )
+        if intent_router_mode == "jev":
+            config_status = "ok: Jev routing configured" if self._get_config_value("TYPESAFE_API_KEY") else "config_error: TYPESAFE_API_KEY is not configured"
         openai_compatible_api_mode, openai_compatible_api_mode_error = self._enum_info(
             "OPENAI_COMPATIBLE_API_MODE",
             self._DEFAULT_OPENAI_COMPATIBLE_API_MODE,
@@ -1153,6 +1197,7 @@ class Config:
             config_status = f"config_error: {'; '.join(config_parameter_errors)}"
 
         return {
+            **jev_info,
             "XAI_API_URL": self.xai_api_url,
             "XAI_API_KEY": self._mask_api_key(self.xai_api_key) if self.xai_api_key else "未配置",
             "XAI_MODEL": self.xai_model,
@@ -1193,6 +1238,10 @@ class Config:
             "TAVILY_TIMEOUT_SECONDS": self.tavily_timeout,
             "FIRECRAWL_API_URL": self.firecrawl_api_url,
             "FIRECRAWL_API_KEY": self._mask_api_key(self.firecrawl_api_key) if self.firecrawl_api_key else "未配置",
+            "TINYFISH_SEARCH_API_URL": self.tinyfish_search_api_url,
+            "TINYFISH_FETCH_API_URL": self.tinyfish_fetch_api_url,
+            "TINYFISH_API_KEY": self._mask_api_key(self.tinyfish_api_key) if self.tinyfish_api_key else "未配置",
+            "TINYFISH_TIMEOUT_SECONDS": self.tinyfish_timeout,
             "ANYSEARCH_API_URL": self.anysearch_api_url,
             "ANYSEARCH_API_KEY": self._mask_api_key(self.anysearch_api_key) if self.anysearch_api_key else "未配置",
             "ANYSEARCH_TIMEOUT_SECONDS": self.anysearch_timeout,

@@ -1,4 +1,4 @@
-"""Presentation metadata for the 68 config keys.
+"""Presentation metadata for every supported config key.
 
 The config layer stores a flat set of key names with no grouping, labels, types or
 descriptions, and the only human-readable label table lives inside the interactive
@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .config import Config
+from .jev import JEV_DEFAULTS
 
 
 TIERS = ("essential", "enhancement", "advanced")
@@ -313,14 +314,31 @@ CONFIG_FIELDS: tuple[ConfigField, ...] = (
     # ---- providers: Firecrawl ---------------------------------------------
     _f(key="FIRECRAWL_API_KEY", section="providers", tier="enhancement", kind="secret",
        label_zh="Firecrawl API Key", label_en="Firecrawl API key",
-       help_zh="抓取兜底链的最后一环。这个服务商没有便宜的校验接口，所以只能看出 key 填没填。",
-       help_en="Last resort in the fetch chain. No cheap verification endpoint, so only presence can be checked.",
+       help_zh="可选的搜索与抓取渠道。没有便宜的校验接口，测试只确认 Key 已填写。",
+       help_en="Optional search and fetch provider. Without a cheap probe, testing only checks whether a key is present.",
        provider="firecrawl", capabilities=("web_fetch", "web_search"),
        key_url="https://www.firecrawl.dev/app/api-keys",
        docs_url="https://docs.firecrawl.dev/"),
     _f(key="FIRECRAWL_API_URL", section="providers", tier="advanced", kind="url",
        label_zh="Firecrawl 地址", label_en="Firecrawl API URL", default="https://api.firecrawl.dev/v2",
        provider="firecrawl", capabilities=("web_fetch", "web_search")),
+
+    # ---- providers: TinyFish ----------------------------------------------
+    _f(key="TINYFISH_API_KEY", section="providers", tier="enhancement", kind="secret",
+       label_zh="TinyFish API Key", label_en="TinyFish API key",
+       help_zh="一个 Key 支持搜索和网页抓取。测试会各发起一次真实请求。",
+       help_en="One key enables search and page fetching. Testing makes one real request for each capability.",
+       provider="tinyfish", capabilities=("web_search", "web_fetch"),
+       key_url="https://agent.tinyfish.ai/api-keys", docs_url="https://docs.tinyfish.ai/"),
+    _f(key="TINYFISH_SEARCH_API_URL", section="providers", tier="advanced", kind="url",
+       label_zh="TinyFish 搜索地址", label_en="TinyFish search URL",
+       default="https://api.search.tinyfish.ai", provider="tinyfish", capabilities=("web_search",)),
+    _f(key="TINYFISH_FETCH_API_URL", section="providers", tier="advanced", kind="url",
+       label_zh="TinyFish 抓取地址", label_en="TinyFish fetch URL",
+       default="https://api.fetch.tinyfish.ai", provider="tinyfish", capabilities=("web_fetch",)),
+    _f(key="TINYFISH_TIMEOUT_SECONDS", section="providers", tier="advanced", kind="float",
+       label_zh="TinyFish 超时（秒）", label_en="TinyFish timeout (seconds)",
+       default="150", provider="tinyfish", capabilities=("web_search", "web_fetch")),
 
     # ---- providers: AnySearch ---------------------------------------------
     _f(key="ANYSEARCH_API_KEY", section="providers", tier="enhancement", kind="secret",
@@ -353,10 +371,40 @@ CONFIG_FIELDS: tuple[ConfigField, ...] = (
     # ---- routing -----------------------------------------------------------
     _f(key="SMART_SEARCH_INTENT_ROUTER", section="routing", tier="advanced", kind="enum",
        label_zh="路由模式", label_en="Intent router mode",
-       help_zh="hybrid 会在规则之外再问一次模型；rules 只用规则；off 全关。",
-       help_en="hybrid asks a model on top of the rules, rules uses rules only, off disables it.",
+       help_zh="jev 按语义选渠道并判断证据，需单独 Key；hybrid 结合规则和模型；rules 只用规则；off 关闭路由。",
+       help_en="jev selects channels and evaluates evidence with its own key; hybrid combines rules and models; rules uses rules only; off disables routing.",
        default=Config._DEFAULT_INTENT_ROUTER_MODE,
        choices=tuple(sorted(Config._ALLOWED_INTENT_ROUTER_MODES))),
+    _f(key="TYPESAFE_API_KEY", section="routing", tier="enhancement", kind="secret",
+       label_zh="JEV / TypeSafe API Key", label_en="JEV / TypeSafe API key",
+       help_zh="可选语义路由的独立凭据；填写不会自动切换路由模式。",
+       help_en="Separate credentials for optional semantic routing; adding a key does not switch modes.",
+       docs_url="https://docs.typesafe.ai/api"),
+    _f(key="TYPESAFE_API_URL", section="routing", tier="advanced", kind="url",
+       label_zh="TypeSafe 地址", label_en="TypeSafe API URL", default=JEV_DEFAULTS["TYPESAFE_API_URL"]),
+    _f(key="TYPESAFE_MODEL", section="routing", tier="advanced", kind="text",
+       label_zh="JEV 模型", label_en="JEV model", default=JEV_DEFAULTS["TYPESAFE_MODEL"]),
+    _f(key="SMART_SEARCH_JEV_TIMEOUT_SECONDS", section="routing", tier="advanced", kind="float",
+       label_zh="JEV 单次判断超时（秒）", label_en="JEV judgment timeout (seconds)", default=JEV_DEFAULTS["SMART_SEARCH_JEV_TIMEOUT_SECONDS"]),
+    _f(key="SMART_SEARCH_JEV_MAX_ROUNDS", section="routing", tier="advanced", kind="int",
+       label_zh="JEV 最多检索轮数", label_en="JEV maximum retrieval rounds", default=JEV_DEFAULTS["SMART_SEARCH_JEV_MAX_ROUNDS"]),
+    _f(key="SMART_SEARCH_JEV_MAX_CHANNELS", section="routing", tier="advanced", kind="int",
+       label_zh="JEV 每轮最多渠道数", label_en="JEV channels per round", default=JEV_DEFAULTS["SMART_SEARCH_JEV_MAX_CHANNELS"]),
+    _f(key="SMART_SEARCH_JEV_RESULTS_PER_CHANNEL", section="routing", tier="advanced", kind="int",
+       label_zh="JEV 每个渠道结果数", label_en="JEV results per channel", default=JEV_DEFAULTS["SMART_SEARCH_JEV_RESULTS_PER_CHANNEL"]),
+    _f(key="SMART_SEARCH_JEV_ROUTE_THRESHOLD", section="routing", tier="advanced", kind="float",
+       label_zh="JEV 渠道适用概率阈值", label_en="JEV channel suitability threshold", default=JEV_DEFAULTS["SMART_SEARCH_JEV_ROUTE_THRESHOLD"]),
+    _f(key="SMART_SEARCH_JEV_SUFFICIENCY_THRESHOLD", section="routing", tier="advanced", kind="float",
+       label_zh="JEV 证据充分概率阈值", label_en="JEV evidence sufficiency threshold", default=JEV_DEFAULTS["SMART_SEARCH_JEV_SUFFICIENCY_THRESHOLD"]),
+    _f(key="SMART_SEARCH_JEV_FILTER_RESULTS", section="routing", tier="advanced", kind="bool",
+       label_zh="JEV 过滤无关证据", label_en="Filter irrelevant evidence", default=JEV_DEFAULTS["SMART_SEARCH_JEV_FILTER_RESULTS"],
+       help_zh="会增加判断请求；无法保证总费用减少。", help_en="Adds judgment calls; overall cost savings are not guaranteed."),
+    _f(key="SMART_SEARCH_JEV_FILTER_THRESHOLD", section="routing", tier="advanced", kind="float",
+       label_zh="JEV 过滤阈值", label_en="JEV filtering threshold", default=JEV_DEFAULTS["SMART_SEARCH_JEV_FILTER_THRESHOLD"]),
+    _f(key="SMART_SEARCH_JEV_SYNTHESIZE", section="routing", tier="advanced", kind="enum",
+       label_zh="JEV 结果汇总", label_en="JEV evidence synthesis", default=JEV_DEFAULTS["SMART_SEARCH_JEV_SYNTHESIZE"],
+       choices=("false", "auto", "true"), help_zh="false 返回证据；auto 按需汇总；true 使用已配置主模型汇总。",
+       help_en="false returns evidence; auto decides whether to summarize; true uses the configured main model."),
     _f(key="INTENT_EMBEDDING_API_URL", section="routing", tier="advanced", kind="url",
        label_zh="向量接口地址", label_en="Intent embedding API URL"),
     _f(key="INTENT_EMBEDDING_API_KEY", section="routing", tier="advanced", kind="secret",
