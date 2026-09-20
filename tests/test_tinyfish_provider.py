@@ -239,4 +239,3 @@ async def test_fetch_redacts_credentials_in_http_and_page_errors(monkeypatch, st
     raw = await TinyFishFetchProvider("https://api.fetch.tinyfish.ai", "fake-secret").fetch("https://example.com")
     assert not json.loads(raw)["ok"]
     assert "fake-secret" not in raw
-
