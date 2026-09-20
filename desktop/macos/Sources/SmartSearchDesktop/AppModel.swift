@@ -611,7 +611,7 @@ final class AppModel: ObservableObject {
         guard !isUpdatingCLI, let version = updateResult?["cli"]?["latest_version"]?.stringValue else { return }
         let alert = NSAlert()
         alert.messageText = "更新独立 CLI"
-        alert.informativeText = "来源：\(cliStatus?["manager_label"]?.displayString ?? "未知")\n路径：\(cliStatus?["external_path"]?.displayString ?? "未知")\n\(cliStatus?["external_version"]?.displayString ?? "未知") → \(version)\n只更新 Smart Search。请先结束其他终端中的 CLI 调用，更新期间保持 App 打开。"
+        alert.informativeText = "来源：\(cliStatus?["manager_label"]?.displayString ?? "未知")\n生效路径：\(cliStatus?["resolved_path"]?.displayString ?? cliStatus?["external_path"]?.displayString ?? "未知")\n\(cliStatus?["external_version"]?.displayString ?? "未知") → \(version)\n只更新 Smart Search。请先结束其他终端中的 CLI 调用，更新期间保持 App 打开。"
         alert.addButton(withTitle: "更新 CLI")
         alert.addButton(withTitle: "取消")
         guard alert.runModal() == .alertFirstButtonReturn else { return }

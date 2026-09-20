@@ -363,7 +363,9 @@ async def filter_evidence(client: JevClient, query: str, evidence: list[dict]) -
     for item in evidence:
         item_units = []
         for index, content in enumerate(_content_chunks(item["content"])):
-            item_units.append({**item, "content": content, "chunk_id": f"{item['id']}:{index}"})
+            metadata = {key: str(item.get(key, ""))[:limit] for key, limit in
+                        (("id", 80), ("title", 200), ("url", 500), ("provider", 80), ("kind", 32))}
+            item_units.append({**metadata, "content": content, "chunk_id": f"{item['id']}:{index}"})
         units.extend(item_units)
         units_by_result[item["id"]] = item_units
     info: dict[str, Any] = {
@@ -377,21 +379,21 @@ async def filter_evidence(client: JevClient, query: str, evidence: list[dict]) -
     try:
         while frontier:
             batch: list[list[dict]] = []
-            size = 0
             # Bound the complete state, not just each individual group.
             while frontier and len(batch) < 16:
                 group = frontier.popleft()
-                group_size = len(json.dumps(group, ensure_ascii=False))
-                if group_size > 20000 and len(group) > 1:
+                state_size = len(json.dumps({"question": query, "groups": [*batch, group]}, ensure_ascii=False))
+                if state_size > 20000 and len(group) > 1:
                     mid = len(group) // 2
                     frontier.appendleft(group[mid:])
                     frontier.appendleft(group[:mid])
                     continue
-                if batch and size + group_size > 20000:
-                    frontier.appendleft(group)
-                    break
+                if state_size > 20000:
+                    if batch:
+                        frontier.appendleft(group)
+                        break
+                    raise ProviderCallError("quality_error", "Filter state exceeds the 20,000-character budget; retained original evidence")
                 batch.append(group)
-                size += group_size
             questions = {
                 f"group_{i}": noul(
                     f"Does groups[{i}] contain ANY passage that could help answer ANY part of question? "

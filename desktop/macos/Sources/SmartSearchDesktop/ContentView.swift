@@ -1305,7 +1305,8 @@ private struct UpdatesView: View {
                 KeyValueLine(label: "实际版本", value: model.cliStatus?["external_version"]?.displayString ?? "未安装或未知")
                 KeyValueLine(label: "npm 稳定版", value: cli?["latest_version"]?.displayString ?? "尚未检查")
                 KeyValueLine(label: "来源", value: model.cliStatus?["manager_label"]?.displayString ?? "未确认")
-                Text(model.cliStatus?["external_path"]?.displayString ?? "未发现").font(.system(.caption, design: .monospaced)).textSelection(.enabled)
+                KeyValueLine(label: "生效路径", value: model.cliStatus?["resolved_path"]?.displayString ?? model.cliStatus?["external_path"]?.displayString ?? "未发现")
+                Text("入口：" + (model.cliStatus?["external_path"]?.displayString ?? "未发现")).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 Text(model.cliStatus?["update_note"]?.displayString ?? "").font(.caption).foregroundStyle(.secondary)
                 HStack {
                     Button(model.isUpdatingCLI ? "更新中…" : "更新 CLI") { Task { await model.updateCLI() } }

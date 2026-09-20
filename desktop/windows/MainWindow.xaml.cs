@@ -1039,7 +1039,7 @@ public sealed partial class MainWindow : Window
             $"可安装稳定版：{Text(app, "latest_version", "未就绪")} · {appStatus}" +
             (Bool(app, "package_pending") ? "\n较新的发行版尚未提供本平台完整安装包。" : "");
         _cliUpdateSummary!.Text = $"实际版本：{Text(installed, "external_version", "未安装或未知")} · npm 稳定版：{Text(cli, "latest_version", "尚未检查")}\n" +
-            $"来源：{Text(installed, "manager_label", "未确认")}\n路径：{Text(installed, "external_path", "未发现")}\n{Text(installed, "update_note")}";
+            $"来源：{Text(installed, "manager_label", "未确认")}\n生效路径：{Text(installed, "resolved_path", Text(installed, "external_path", "未发现"))}\n入口：{Text(installed, "external_path", "未发现")}\n{Text(installed, "update_note")}";
         var downloadStatus = Text(download, "status");
         _downloadSummary!.Text = downloadStatus switch
         {
@@ -1067,7 +1067,7 @@ public sealed partial class MainWindow : Window
     {
         var version = Text(Property(_updates, "cli"), "latest_version");
         var installed = Property(_state, "cli");
-        if (!await ConfirmAsync("更新独立 CLI", $"来源：{Text(installed, "manager_label")}\n路径：{Text(installed, "external_path")}\n{Text(installed, "external_version")} → {version}\n\n只更新 Smart Search。请先结束其他终端中的 CLI 调用；更新期间请保持 App 打开。", "更新 CLI")) return;
+        if (!await ConfirmAsync("更新独立 CLI", $"来源：{Text(installed, "manager_label")}\n生效路径：{Text(installed, "resolved_path", Text(installed, "external_path"))}\n{Text(installed, "external_version")} → {version}\n\n只更新 Smart Search。请先结束其他终端中的 CLI 调用；更新期间请保持 App 打开。", "更新 CLI")) return;
         await UpdateRequestAsync("cli.update", new { confirm = true, version });
     }
 
@@ -1086,10 +1086,22 @@ public sealed partial class MainWindow : Window
         // Release the installer presence handle only after our backend is stopped.
         _shuttingDown = true;
         _activityTimer.Stop();
-        await _backend.DisposeAsync();
+        await _backend.StopAsync();
         App.ReleaseInstallerMutex();
-        try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true }); }
-        catch { _shuttingDown = false; ShowNotice("安装器未启动", "请从下载目录手动启动安装器，或重新打开 App。", InfoBarSeverity.Error); return; }
+        try
+        {
+            using var installer = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+            if (installer is null) throw new IOException("Installer did not start.");
+        }
+        catch
+        {
+            App.RestoreInstallerMutex();
+            _shuttingDown = false;
+            await ConnectAsync();
+            ShowNotice("安装器未启动", "已恢复 App 连接。请稍后重试，或从下载目录手动打开安装器。", InfoBarSeverity.Error);
+            return;
+        }
+        await _backend.DisposeAsync();
         _tray.Dispose();
         _allowClose = true;
         Close();

@@ -7,7 +7,7 @@ namespace SmartSearch.Desktop;
 public static class Program
 {
     private const string InstanceKey = "SmartSearch.Desktop";
-    private const string MutexName = @"Local\SmartSearch.Desktop";
+    internal const string MutexName = @"Local\SmartSearch.Desktop";
 
     [STAThread]
     public static void Main(string[] args)

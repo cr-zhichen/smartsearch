@@ -452,6 +452,8 @@ async def search(
         evidence, filter_info = await filter_evidence(client, query, evidence)
         if filter_info["status"] != "ok":
             warnings.append("Filtering retained the original evidence: " + filter_info.get("reason", "unknown"))
+            if filter_info.get("error"):
+                judge_available, degraded = False, True
         elif evidence != before_filter:
             try:
                 assessment = await assess_evidence(client, query, [item for item in evidence if item["read"]] if require_read else evidence, validation)
@@ -480,7 +482,9 @@ async def search(
     useful_evidence = bool(answer_evidence and assessment["useful"])
     if settings.synthesis_mode != "false" and not useful_evidence:
         synthesis["reason"] = "no_confirmed_useful_evidence"
-    if settings.synthesis_mode == "auto" and useful_evidence:
+    if settings.synthesis_mode == "auto" and not judge_available:
+        synthesis["reason"] = "judgment_unavailable"
+    if settings.synthesis_mode == "auto" and useful_evidence and judge_available:
         phase_start = time.monotonic()
         try:
             if executor.synthesis_config(providers) is None:

@@ -323,6 +323,46 @@ async def test_filter_fails_open_without_losing_original_evidence(monkeypatch, c
 
 
 @pytest.mark.asyncio
+async def test_filter_bounds_whole_state_with_long_metadata_and_retains_oversized_question(monkeypatch, configured):
+    original = [{**evidence("Relevant evidence", 1), "title": "T" * 25000, "url": "https://example.org/" + "u" * 25000}]
+    states = []
+    async def request(self, state, questions, timeout):
+        states.append(state)
+        assert len(json.dumps(state, ensure_ascii=False)) <= 20000
+        return answer_payload(questions, {key: .99 for key in questions})
+    monkeypatch.setattr(JevClient, "_request", request)
+    retained, info = await filter_evidence(JevClient(configured, time.monotonic() + 5), "question", original)
+    assert states and retained == original and info["status"] == "ok"
+    states.clear()
+    retained, info = await filter_evidence(JevClient(configured, time.monotonic() + 5), "q" * 21000, original)
+    assert not states and retained == original and info["status"] == "retained"
+
+
+@pytest.mark.asyncio
+async def test_filter_outage_returns_evidence_without_another_auto_judgment(monkeypatch, configured):
+    monkeypatch.setenv("SMART_SEARCH_JEV_FILTER_RESULTS", "true")
+    monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIZE", "auto")
+    calls = []
+    async def request(self, state, questions, timeout):
+        phase = "selection" if "available_channels" in state else "filter" if "groups" in state else "assessment"
+        calls.append(phase)
+        assert "synthesize" not in questions
+        if phase == "filter":
+            raise ProviderCallError("rate_limit", "Synthetic TypeSafe limit")
+        return answer_payload(questions, {key: .99 for key in questions})
+    async def exa(*args, **kwargs):
+        return {"ok": True, "results": [hit("Useful original evidence")]}
+    monkeypatch.setattr(JevClient, "_request", request)
+    monkeypatch.setattr(service, "exa_search", exa)
+    monkeypatch.setattr("smart_search.jev_search.ChannelExecutor.synthesis_config", lambda *args: {"model": "test"})
+    result = await service.search("question")
+    assert calls == ["selection", "assessment", "filter"]
+    assert result["ok"] and result["degraded"]
+    assert result["synthesis"]["reason"] == "judgment_unavailable"
+    assert "Useful original evidence" in result["content"]
+
+
+@pytest.mark.asyncio
 async def test_long_document_filter_sees_tail_content_and_removes_unrelated_paragraphs(monkeypatch, configured):
     text = ("Unrelated advertisement. " * 65 + "\n\n") * 8 + "Required cancellation caveat: CancelledError must be re-raised."
     original = [evidence(text, 1)]
