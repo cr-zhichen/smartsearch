@@ -1,5 +1,6 @@
 """Local, bounded, metadata-only activity shared by the CLI and desktop clients."""
 from __future__ import annotations
+from .i18n import source_message
 
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -38,7 +39,7 @@ class ActivityStore:
             db.execute("PRAGMA foreign_keys=ON")
             version = db.execute("PRAGMA user_version").fetchone()[0]
             if version > SCHEMA_VERSION:
-                raise ValueError("Activity database was created by a newer version.")
+                raise ValueError(source_message('Activity database was created by a newer version.'))
             if not version:
                 db.executescript("""
                     CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -148,7 +149,7 @@ class ActivityStore:
         with self.connection() as db:
             row = db.execute("SELECT * FROM runs WHERE run_id=?", (run_id,)).fetchone()
             if row is None:
-                return {"ok": False, "error": "活动记录不存在。"}
+                return {"ok": False, "error": source_message('活动记录不存在。')}
             events = [dict(item) for item in db.execute("SELECT sequence,timestamp,phase,provider,model,status,error_type FROM events WHERE run_id=? ORDER BY sequence", (run_id,))]
             return {"ok": True, "run": self._public_run(row), "events": events,
                     "events_truncated": bool(events and events[0]["sequence"] > 0)}

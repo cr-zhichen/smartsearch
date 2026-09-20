@@ -1,6 +1,7 @@
 """Typed Jev judgments. Execution and the allowed action set stay in code."""
 
 from __future__ import annotations
+from .i18n import source_message
 
 import asyncio
 import json
@@ -43,10 +44,10 @@ def validate_jev_value(key: str, value: Any) -> Any:
             return "false"
         if normalized == "auto":
             return "auto"
-        raise ValueError(f"Invalid {key}: expected true, false, or auto.")
+        raise ValueError(source_message('Invalid {0}: expected true, false, or auto.', key))
     if key == "SMART_SEARCH_JEV_FILTER_RESULTS":
         if text.lower() not in {"true", "false", "1", "0", "yes", "no", "on", "off"}:
-            raise ValueError(f"Invalid {key}: expected a boolean.")
+            raise ValueError(source_message('Invalid {0}: expected a boolean.', key))
         return text.lower() in {"true", "1", "yes", "on"}
     bounds = {
         "SMART_SEARCH_JEV_MAX_ROUNDS": (1, 10),
@@ -62,18 +63,18 @@ def validate_jev_value(key: str, value: Any) -> Any:
         try:
             number = int(text) if integer else float(text)
         except ValueError:
-            raise ValueError(f"Invalid {key}: expected a {'whole number' if integer else 'number'}.") from None
+            raise ValueError(source_message('Invalid {0}: expected a {1}.', key, 'whole number' if integer else 'number')) from None
         low, high = bounds[key]
         if not math.isfinite(number) or not low <= number <= high:
-            raise ValueError(f"Invalid {key}: expected a finite number between {low} and {high}.")
+            raise ValueError(source_message('Invalid {0}: expected a finite number between {1} and {2}.', key, low, high))
         return number
     if key == "TYPESAFE_API_URL":
         parsed = urlsplit(text)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
-            raise ValueError("Invalid TYPESAFE_API_URL: expected an HTTP(S) base URL without credentials or query parameters.")
+            raise ValueError(source_message('Invalid TYPESAFE_API_URL: expected an HTTP(S) base URL without credentials or query parameters.'))
         return text.rstrip("/")
     if key == "TYPESAFE_MODEL" and not text:
-        raise ValueError("Invalid TYPESAFE_MODEL: expected a model name.")
+        raise ValueError(source_message('Invalid TYPESAFE_MODEL: expected a model name.'))
     return text
 
 
@@ -119,18 +120,18 @@ class JevClient:
 
     async def evaluate(self, state: dict, questions: dict, phase: str) -> dict[str, float]:
         if not self.settings.api_key:
-            raise ProviderCallError("auth_error", "TYPESAFE_API_KEY is not configured.")
+            raise ProviderCallError("auth_error", source_message('TYPESAFE_API_KEY is not configured.'))
         started = time.monotonic()
         timeout = min(self.settings.timeout, self.deadline - started)
         record: dict[str, Any] = {"phase": phase, "questions": len(questions), "status": "error"}
         self.calls.append(record)
         try:
             if timeout <= 0:
-                raise asyncio.TimeoutError("Jev search deadline exhausted")
+                raise asyncio.TimeoutError(source_message('Jev search deadline exhausted'))
             data = await asyncio.wait_for(self._request(state, questions, timeout), timeout)
             answers = data.get("answers") if isinstance(data, dict) else None
             if not isinstance(answers, dict):
-                raise ProviderCallError("parse_error", "Jev returned no answers object.")
+                raise ProviderCallError("parse_error", source_message('Jev returned no answers object.'))
             parsed: dict[str, float] = {}
             for key in questions:
                 answer = answers.get(key)
@@ -140,7 +141,7 @@ class JevClient:
                     and math.isfinite(value) and 0 <= value <= 1
                 )
                 if not isinstance(answer, dict) or answer.get("type") != "noul" or not valid_probability:
-                    raise ProviderCallError("parse_error", f"Jev returned an invalid probability for {key}.")
+                    raise ProviderCallError("parse_error", source_message('Jev returned an invalid probability for {0}.', key))
                 parsed[key] = float(value)
             # Only consume the question IDs we sent, never arbitrary returned actions.
             usage = data.get("usage") or {}
@@ -392,7 +393,7 @@ async def filter_evidence(client: JevClient, query: str, evidence: list[dict]) -
                     if batch:
                         frontier.appendleft(group)
                         break
-                    raise ProviderCallError("quality_error", "Filter state exceeds the 20,000-character budget; retained original evidence")
+                    raise ProviderCallError("quality_error", source_message('Filter state exceeds the 20,000-character budget; retained original evidence'))
                 batch.append(group)
             questions = {
                 f"group_{i}": noul(

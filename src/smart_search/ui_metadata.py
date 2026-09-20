@@ -475,6 +475,10 @@ CONFIG_FIELDS: tuple[ConfigField, ...] = (
        label_zh="重试最长等待（秒）", label_en="Retry max wait (seconds)", default="10"),
 
     # ---- diagnostics -------------------------------------------------------
+    _f(key="SMART_SEARCH_LANGUAGE", section="diagnostics", tier="advanced", kind="enum",
+       label_zh="CLI 语言", label_en="CLI language", choices=("auto", "zh", "en"), default="auto",
+       help_zh="独立 CLI 的语言偏好；App 界面语言在设置中单独选择。",
+       help_en="Language for the independent CLI. Choose the App language separately in its settings."),
     _f(key="SMART_SEARCH_DEBUG", section="diagnostics", tier="advanced", kind="bool",
        label_zh="调试输出", label_en="Debug output", default="false"),
     _f(key="SMART_SEARCH_LOG_LEVEL", section="diagnostics", tier="advanced", kind="text",

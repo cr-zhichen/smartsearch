@@ -132,11 +132,13 @@ if (-not (Test-Path -LiteralPath $projectSource -PathType Leaf)) {
 }
 $stagedProjectDirectory = Join-Path $runDirectory "windows-source"
 Copy-WindowsProjectSource $projectSourceDirectory $stagedProjectDirectory
+$localizationPath = Join-Path $stagedProjectDirectory "messages.json"
+Copy-Item -LiteralPath (Join-Path $repositoryRoot "src/smart_search/assets/i18n/messages.json") -Destination $localizationPath
 $project = Join-Path $stagedProjectDirectory "SmartSearch.Desktop.csproj"
 $publishDirectory = Join-Path $runDirectory "publish"
 $platform = if ($Architecture -eq "arm64") { "ARM64" } else { "x64" }
 $version = Get-ProjectVersion $repositoryRoot
-& $dotnet publish $project --configuration $Configuration --runtime "win-$Architecture" --self-contained true --output $publishDirectory "-p:Platform=$platform" "-p:Version=$version"
+& $dotnet publish $project --configuration $Configuration --runtime "win-$Architecture" --self-contained true --output $publishDirectory "-p:Platform=$platform" "-p:Version=$version" "-p:LocalizationPath=$localizationPath"
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed. Its fresh evidence directory is $runDirectory."
 }

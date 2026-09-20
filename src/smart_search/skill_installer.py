@@ -1,4 +1,5 @@
 from __future__ import annotations
+from .i18n import tr
 
 import os
 from dataclasses import dataclass
@@ -25,7 +26,7 @@ class SkillTarget:
 
 
 SKILL_TARGETS: tuple[SkillTarget, ...] = (
-    SkillTarget("codex", "Codex", ".codex/skills", True),
+    SkillTarget("codex", "Codex", ".agents/skills", True),
     SkillTarget("claude", "Claude Code", ".claude/skills", True),
     SkillTarget("cursor", "Cursor", ".cursor/skills", True),
     SkillTarget("opencode", "OpenCode", ".config/opencode/skills"),
@@ -45,6 +46,7 @@ SKILL_TARGETS: tuple[SkillTarget, ...] = (
 SKILL_TARGET_BY_ID = {target.target_id: target for target in SKILL_TARGETS}
 DEFAULT_SKILL_TARGET_IDS = [target.target_id for target in SKILL_TARGETS if target.default]
 LEGACY_SKILL_ROOTS_BY_TARGET: dict[str, tuple[str, ...]] = {
+    "codex": (".codex/skills",),
     "opencode": (".opencode/skills",),
 }
 
@@ -80,9 +82,9 @@ def parse_skill_targets(raw: str) -> list[str]:
     for token in tokens:
         if not token:
             continue
-        if token in {"skip", "none", "no", "n", "跳过", "无", "否"}:
+        if token in {"skip", "none", "no", "n", tr('跳过'), tr('无'), tr('否')}:
             return []
-        if token in {"all", "全部"}:
+        if token in {"all", tr('全部')}:
             return [target.target_id for target in SKILL_TARGETS]
         target_id = _TARGET_ALIASES.get(token, token)
         if target_id not in SKILL_TARGET_BY_ID:
@@ -93,7 +95,7 @@ def parse_skill_targets(raw: str) -> list[str]:
 
     if invalid:
         valid = ", ".join(target.target_id for target in SKILL_TARGETS)
-        raise SkillInstallError(f"Unknown skill target(s): {', '.join(invalid)}. Valid targets: {valid}")
+        raise SkillInstallError(tr('Unknown skill target(s): {0}. Valid targets: {1}', ', '.join(invalid), valid))
     return selected
 
 
@@ -155,7 +157,7 @@ def _iter_filesystem_files(root: Path) -> list[tuple[str, bytes]]:
 def _load_skill_files(source_root: Path | None = None) -> list[tuple[str, bytes]]:
     if source_root is not None:
         if not source_root.is_dir():
-            raise SkillInstallError(f"Skill source directory not found: {source_root}")
+            raise SkillInstallError(tr('Skill source directory not found: {0}', source_root))
         return _iter_filesystem_files(source_root)
 
     resource_root = _resource_skill_root()
@@ -170,7 +172,7 @@ def _load_skill_files(source_root: Path | None = None) -> list[tuple[str, bytes]
         if files:
             return files
 
-    raise SkillInstallError("Bundled smart-search-cli skill files were not found.")
+    raise SkillInstallError(tr('Bundled smart-search-cli skill files were not found.'))
 
 
 def _skill_digest(files: list[tuple[str, bytes]]) -> str:

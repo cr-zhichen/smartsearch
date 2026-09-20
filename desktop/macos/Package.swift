@@ -8,7 +8,7 @@ let package = Package(
         .executable(name: "SmartSearchDesktop", targets: ["SmartSearchDesktop"]),
     ],
     targets: [
-        .executableTarget(name: "SmartSearchDesktop"),
+        .executableTarget(name: "SmartSearchDesktop", resources: [.copy("Localization.json")]),
         .testTarget(name: "SmartSearchDesktopTests", dependencies: ["SmartSearchDesktop"]),
     ]
 )

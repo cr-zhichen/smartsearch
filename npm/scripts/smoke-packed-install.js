@@ -53,7 +53,8 @@ function assertPackContents(files) {
     "npm/",
     "skills/smart-search-cli/",
     "src/smart_search/assets/skills/smart-search-cli/",
-    "src/smart_search/assets/ui/"
+    "src/smart_search/assets/ui/",
+    "src/smart_search/assets/i18n/"
   ];
   const unexpected = files
     .map((file) => file.path)
@@ -73,7 +74,9 @@ function assertPackContents(files) {
     "src/smart_search/cli.py",
     // Only .py files match the src glob, so the UI page needs its own files entry.
     // Without this assertion a missing entry is invisible until a user hits a 500.
-    "src/smart_search/assets/ui/index.html"
+    "src/smart_search/assets/ui/index.html",
+    "src/smart_search/assets/i18n/messages.json",
+    "npm/i18n.js"
   ]) {
     assert.ok(files.some((file) => file.path === requiredPath), `tarball is missing ${requiredPath}`);
   }
@@ -107,6 +110,7 @@ const isolatedEnv = {
   HOME: homeDir,
   USERPROFILE: homeDir,
   SMART_SEARCH_CONFIG_DIR: path.join(tempRoot, "config"),
+  SMART_SEARCH_LANGUAGE: "en",
   INIT_CWD: callerCwd
 };
 const version = run(process.execPath, [wrapperPath, "--version"], {
@@ -115,6 +119,17 @@ const version = run(process.execPath, [wrapperPath, "--version"], {
   capture: true
 });
 assert.match(version, new RegExp(`smart-search ${packageJson.version.replaceAll(".", "\\.")}`));
+for (const [language, heading] of [["zh", "用法"], ["en", "usage"]]) {
+  const help = run(process.execPath, [wrapperPath, "config", "list", "--help", "--lang", language], {
+    cwd: callerCwd, env: isolatedEnv, capture: true
+  });
+  assert.ok(help.includes(heading), `installed package is missing ${language} help`);
+  const route = JSON.parse(run(process.execPath, [wrapperPath, "route", "用户 query", "--router-mode", "rules", "--lang", language], {
+    cwd: callerCwd, env: isolatedEnv, capture: true
+  }));
+  assert.equal(route.query, "用户 query");
+  assert.equal(route.executed_search, false);
+}
 run(process.execPath, [wrapperPath, "regression"], { cwd: callerCwd, env: isolatedEnv });
 const smokeOutput = run(process.execPath, [wrapperPath, "smoke", "--mock", "--format", "json"], {
   cwd: callerCwd,

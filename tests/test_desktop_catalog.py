@@ -9,6 +9,14 @@ import re
 
 import pytest
 
+from smart_search.i18n import use_language
+
+
+@pytest.fixture(autouse=True)
+def chinese_presentation():
+    with use_language("zh"):
+        yield
+
 from smart_search import service
 from smart_search.desktop_catalog import (
     _DESCRIPTIONS,

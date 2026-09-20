@@ -15,26 +15,26 @@ struct SmartSearchDesktopApp: App {
                 })
         }
         .commands {
-            CommandMenu("导航") {
-                Button("概览") { model.selectedDestination = .overview }.keyboardShortcut("1", modifiers: .command)
-                Button("服务商") { model.selectedDestination = .providers }.keyboardShortcut("2", modifiers: .command)
-                Button("搜索与研究") { model.selectedDestination = .search }.keyboardShortcut("3", modifiers: .command)
-                Button("活动") { model.selectedDestination = .activity }.keyboardShortcut("4", modifiers: .command)
-                Button("AI 接入") { model.selectedDestination = .integration }.keyboardShortcut("5", modifiers: .command)
-                Button("设置与关于") { model.selectedDestination = .settings }.keyboardShortcut("6", modifiers: .command)
+            CommandMenu(L("导航")) {
+                Button(L("概览")) { model.selectedDestination = .overview }.keyboardShortcut("1", modifiers: .command)
+                Button(L("服务商")) { model.selectedDestination = .providers }.keyboardShortcut("2", modifiers: .command)
+                Button(L("搜索与研究")) { model.selectedDestination = .search }.keyboardShortcut("3", modifiers: .command)
+                Button(L("活动")) { model.selectedDestination = .activity }.keyboardShortcut("4", modifiers: .command)
+                Button(L("AI 接入")) { model.selectedDestination = .integration }.keyboardShortcut("5", modifiers: .command)
+                Button(L("设置与关于")) { model.selectedDestination = .settings }.keyboardShortcut("6", modifiers: .command)
             }
             CommandGroup(after: .appInfo) {
-                Button("刷新状态") { Task { await model.refreshState() } }.keyboardShortcut("r", modifiers: .command)
+                Button(L("刷新状态")) { Task { await model.refreshState() } }.keyboardShortcut("r", modifiers: .command)
             }
         }
 
         MenuBarExtra {
-            Button("显示 Smart Search") { applicationDelegate.showMainWindow() }
+            Button(L("显示 Smart Search")) { applicationDelegate.showMainWindow() }
             if model.hasOwnedActiveRuns {
-                Text("有 App 任务正在后台运行")
+                Text(L("有 App 任务正在后台运行"))
             }
             Divider()
-            Button("退出") { NSApp.terminate(nil) }
+            Button(L("退出")) { NSApp.terminate(nil) }
         } label: {
             Image(nsImage: NSApp.applicationIconImage)
                 .resizable().scaledToFit().frame(width: 18, height: 18)
@@ -61,8 +61,8 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        if let model, model.isUpdatingCLI {
-            model.noticeMessage = "CLI 正在更新，请等待原管理器完成后退出。"
+        if let model, model.isUpdatingCLI || model.environmentBusy {
+            model.noticeMessage = L("环境操作或 CLI 更新正在进行，请等待完成后退出。下载可在 AI 接入页取消。")
             showMainWindow()
             return .terminateCancel
         }
@@ -93,8 +93,8 @@ private final class MainWindowDelegate: NSObject, NSWindowDelegate {
     weak var model: AppModel?
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        if let model, model.isUpdatingCLI {
-            model.noticeMessage = "CLI 正在更新，请等待完成；可以最小化窗口。"
+        if let model, model.isUpdatingCLI || model.environmentBusy {
+            model.noticeMessage = L("环境操作或 CLI 更新正在进行，请等待完成；可以最小化窗口。")
             return false
         }
         guard let model, model.hasOwnedActiveRuns else { return true }

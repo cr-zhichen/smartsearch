@@ -1,3 +1,4 @@
+using static SmartSearch.Desktop.Localization;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text;
@@ -42,7 +43,7 @@ internal sealed class BackendClient : IAsyncDisposable
         await StopAsync(sendShutdown: false);
         BackendPath = ResolveBackendPath();
         if (!File.Exists(BackendPath))
-            throw new BackendDisconnectedException($"未找到随 App 提供的后端：{BackendPath}");
+            throw new BackendDisconnectedException(L("未找到随 App 提供的后端：{0}", BackendPath));
 
         var startInfo = new ProcessStartInfo
         {
@@ -64,7 +65,7 @@ internal sealed class BackendClient : IAsyncDisposable
         var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
         process.Exited += (_, _) => OnProcessExited(process);
         if (!process.Start())
-            throw new BackendDisconnectedException("无法启动 Smart Search 后端。");
+            throw new BackendDisconnectedException(L("无法启动 Smart Search 后端。"));
 
         _process = process;
         _writer = process.StandardInput;
@@ -75,6 +76,7 @@ internal sealed class BackendClient : IAsyncDisposable
         var result = await CallAsync("initialize", new
         {
             protocol_version = 1,
+            lang = Localization.Language,
             config_dir = configDirectory,
             app_version = _configuredPath is null ? System.Reflection.Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) : "development",
             enable_update_checks = _configuredPath is null
@@ -82,11 +84,11 @@ internal sealed class BackendClient : IAsyncDisposable
 
         var protocol = GetInt(result, "protocol_version");
         if (protocol != 1)
-            throw new BackendDisconnectedException($"后端协议版本不兼容：{protocol?.ToString() ?? "未知"}。需要版本 1。");
+            throw new BackendDisconnectedException(L("后端协议版本不兼容：{0}。需要版本 1。", protocol?.ToString() ?? L("未知")));
 
         _generation = GetString(result, "generation");
         if (string.IsNullOrWhiteSpace(_generation))
-            throw new BackendDisconnectedException("后端未返回 generation，已拒绝继续通信。");
+            throw new BackendDisconnectedException(L("后端未返回 generation，已拒绝继续通信。"));
         return result;
     }
 
@@ -95,15 +97,15 @@ internal sealed class BackendClient : IAsyncDisposable
         var process = _process;
         var writer = _writer;
         if (process is null || writer is null || process.HasExited)
-            throw new BackendDisconnectedException("后端未连接。");
+            throw new BackendDisconnectedException(L("后端未连接。"));
 
         var id = Interlocked.Increment(ref _nextId);
         if (id <= 0)
-            throw new BackendDisconnectedException("请求编号已耗尽，请重新启动应用。");
+            throw new BackendDisconnectedException(L("请求编号已耗尽，请重新启动应用。"));
 
         var response = new TaskCompletionSource<JsonElement>(TaskCreationOptions.RunContinuationsAsynchronously);
         if (!_pending.TryAdd(id, response))
-            throw new BackendDisconnectedException("请求编号冲突。");
+            throw new BackendDisconnectedException(L("请求编号冲突。"));
 
         try
         {
@@ -226,7 +228,7 @@ internal sealed class BackendClient : IAsyncDisposable
             if (root.TryGetProperty("result", out var result))
                 waiting.TrySetResult(result.Clone());
             else
-                waiting.TrySetException(new BackendDisconnectedException("后端响应缺少 result。"));
+                waiting.TrySetException(new BackendDisconnectedException(L("后端响应缺少 result。")));
             return;
         }
 
@@ -245,8 +247,8 @@ internal sealed class BackendClient : IAsyncDisposable
         if (!ReferenceEquals(_process, process))
             return;
         foreach (var pending in _pending.Values)
-            pending.TrySetException(new BackendDisconnectedException("Smart Search 后端已退出。"));
-        Disconnected?.Invoke(this, "后端已退出；当前快照不再代表实时状态。");
+            pending.TrySetException(new BackendDisconnectedException(L("Smart Search 后端已退出。")));
+        Disconnected?.Invoke(this, L("后端已退出；当前快照不再代表实时状态。"));
     }
 
     private void ReleaseProcess(Process process)

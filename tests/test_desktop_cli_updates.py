@@ -6,6 +6,14 @@ import sys
 
 import pytest
 
+from smart_search.i18n import use_language
+
+
+@pytest.fixture(autouse=True)
+def chinese_presentation():
+    with use_language("zh"):
+        yield
+
 from smart_search import desktop_cli
 from smart_search.desktop_backend import Backend, manager_environment
 from smart_search.desktop_updates import Updates

@@ -1,3 +1,4 @@
+from .i18n import source_message
 import asyncio
 import hashlib
 import json
@@ -74,11 +75,10 @@ from .utils import search_prompt
 _AVAILABLE_MODELS_CACHE: dict[tuple[str, str], list[str]] = {}
 _AVAILABLE_MODELS_LOCK = asyncio.Lock()
 SOURCE_PROVENANCE_WARNING = (
-    "extra_sources are retrieved in parallel and are not automatically used to verify generated content; "
-    "use fetch on key URLs for claim-level evidence."
+    source_message('extra_sources are retrieved in parallel and are not automatically used to verify generated content; use fetch on key URLs for claim-level evidence.')
 )
 MINIMUM_PROFILE_ERROR = (
-    "最低配置不满足：必须至少配置 main_search、docs_search、web_fetch 三类能力各一个 provider。"
+    source_message('最低配置不满足：必须至少配置 main_search、docs_search、web_fetch 三类能力各一个 provider。')
 )
 OPENAI_COMPATIBLE_DIAGNOSE_COMMAND = "smart-search diagnose openai-compatible --format markdown"
 DOCS_INTENT_KEYWORDS = ROUTER_DOCS_INTENT_KEYWORDS
@@ -343,7 +343,7 @@ class SearchBudget:
 
     def __init__(self, total_seconds: float, started_at: float | None = None):
         if not math.isfinite(total_seconds) or total_seconds <= 0:
-            raise ValueError("Search timeout must be a positive finite number.")
+            raise ValueError(source_message('Search timeout must be a positive finite number.'))
         self.total_seconds = float(total_seconds)
         self.started_at = time.monotonic() if started_at is None else float(started_at)
         self.deadline = self.started_at + self.total_seconds
@@ -434,9 +434,9 @@ def _resolve_search_timeout(timeout_seconds: float | None) -> float:
     try:
         value = float(timeout_seconds)
     except (TypeError, ValueError):
-        raise ValueError(f"Invalid --timeout: {timeout_seconds}. Expected a positive finite number.")
+        raise ValueError(source_message('Invalid --timeout: {0}. Expected a positive finite number.', timeout_seconds))
     if not math.isfinite(value) or value <= 0:
-        raise ValueError(f"Invalid --timeout: {timeout_seconds}. Expected a positive finite number.")
+        raise ValueError(source_message('Invalid --timeout: {0}. Expected a positive finite number.', timeout_seconds))
     return value
 
 
@@ -633,7 +633,7 @@ def _tavily_is_enabled() -> bool:
 
 
 def _tavily_disabled_message() -> str:
-    return "Tavily is disabled by TAVILY_ENABLED=false. No Tavily network request was made."
+    return source_message('Tavily is disabled by TAVILY_ENABLED=false. No Tavily network request was made.')
 
 
 PROVIDER_CREDENTIAL_SOURCES: dict[str, Any] = {
@@ -652,8 +652,7 @@ PROVIDER_CREDENTIAL_SOURCES: dict[str, Any] = {
     "sciverse": lambda: (config.sciverse_api_token, config.sciverse_api_url),
 }
 PROVIDER_COOLDOWN_HINT = (
-    "Run `smart-search providers status` for detail. Fixing the credential or "
-    "`smart-search providers reset PROVIDER` retries it immediately."
+    source_message('Run `smart-search providers status` for detail. Fixing the credential or `smart-search providers reset PROVIDER` retries it immediately.')
 )
 
 
@@ -775,7 +774,7 @@ def reset_provider_health(providers: list[str] | None = None) -> dict[str, Any]:
             return {
                 "ok": False,
                 "error_type": "parameter_error",
-                "error": "Unknown provider: " + ", ".join(unknown) + ". Known providers: " + ", ".join(known),
+                "error": source_message('Unknown provider: {0}. Known providers: {1}', ", ".join(unknown), ", ".join(known)),
                 "known_providers": known,
                 "cleared": [],
             }
@@ -907,25 +906,25 @@ def _openai_fallback_model_inventory(
     if not configured:
         return {
             "status": "not_configured",
-            "message": "未配置 OpenAI-compatible 兜底模型",
+            "message": source_message('未配置 OpenAI-compatible 兜底模型'),
             "fallback_models": [],
             "available_models": available,
             "unknown_fallback_models": [],
             "known_fallback_models": [],
             "timeout_policy": OPENAI_COMPATIBLE_TIMEOUT_POLICY,
-            "timeout_policy_message": "主模型使用剩余共享 main-search 预算；只有硬失败后才接力兜底模型",
+            "timeout_policy_message": source_message('主模型使用剩余共享 main-search 预算；只有硬失败后才接力兜底模型'),
             "primary_model": primary_model,
         }
     if not available:
         return {
             "status": "skipped",
-            "message": "无法对照 /models 清单，已跳过兜底模型检查",
+            "message": source_message('无法对照 /models 清单，已跳过兜底模型检查'),
             "fallback_models": configured,
             "available_models": [],
             "unknown_fallback_models": [],
             "known_fallback_models": configured,
             "timeout_policy": OPENAI_COMPATIBLE_TIMEOUT_POLICY,
-            "timeout_policy_message": "主模型使用剩余共享 main-search 预算；只有硬失败后才接力兜底模型",
+            "timeout_policy_message": source_message('主模型使用剩余共享 main-search 预算；只有硬失败后才接力兜底模型'),
             "primary_model": primary_model,
         }
 
@@ -933,10 +932,10 @@ def _openai_fallback_model_inventory(
     known = [model for model in configured if model in available]
     if unknown:
         status = "warning"
-        message = "这些兜底模型不在上游 /models 列表中: " + ", ".join(unknown)
+        message = source_message('这些兜底模型不在上游 /models 列表中: {0}', ", ".join(unknown))
     else:
         status = "ok"
-        message = "已配置的兜底模型都在上游 /models 列表中"
+        message = source_message('已配置的兜底模型都在上游 /models 列表中')
     return {
         "status": status,
         "message": message,
@@ -945,7 +944,7 @@ def _openai_fallback_model_inventory(
         "unknown_fallback_models": unknown,
         "known_fallback_models": known,
         "timeout_policy": OPENAI_COMPATIBLE_TIMEOUT_POLICY,
-        "timeout_policy_message": "主模型使用剩余共享 main-search 预算；只有硬失败后才接力兜底模型",
+        "timeout_policy_message": source_message('主模型使用剩余共享 main-search 预算；只有硬失败后才接力兜底模型'),
         "primary_model": primary_model,
     }
 
@@ -1168,7 +1167,7 @@ def intent_router_status() -> dict[str, Any]:
                 "max_rounds": settings.max_rounds, "max_channels": settings.max_channels,
                 "filter_results": settings.filter_results, "synthesize": settings.synthesis_mode,
                 "degrades_to_rules": False,
-                "error": "" if settings.api_key else "TYPESAFE_API_KEY is not configured",
+                "error": "" if settings.api_key else source_message('TYPESAFE_API_KEY is not configured'),
             }
         except ValueError as exc:
             return {"mode": "jev", "ok": False, "error": str(exc)}
@@ -1328,7 +1327,7 @@ def _research_capability_routes(
         ordered = [provider for provider in ["tavily", "firecrawl", "zhipu", "zhipu-mcp", "tinyfish"] if provider in web_search]
     routes["capabilities"]["web_search"] = {
         "providers": _apply_research_overrides("web_search", ordered),
-        "reason": "current/locale evidence" if signals["current_or_locale_intent"] else "broad source discovery",
+        "reason": source_message('current/locale evidence') if signals["current_or_locale_intent"] else source_message('broad source discovery'),
     }
 
     docs = _configured_for_capability("docs_search", capability_status)
@@ -1337,19 +1336,19 @@ def _research_capability_routes(
         docs_order = [provider for provider in ["exa", "context7"] if provider in docs]
     routes["capabilities"]["docs_search"] = {
         "providers": _apply_research_overrides("docs_search", docs_order),
-        "reason": "docs/API evidence" if signals["docs_api_intent"] else "official low-noise discovery",
+        "reason": source_message('docs/API evidence') if signals["docs_api_intent"] else source_message('official low-noise discovery'),
     }
 
     fetch_order = _research_fetch_order(question, capability_status=capability_status)
     routes["capabilities"]["web_fetch"] = {
         "providers": fetch_order,
-        "reason": "JS-heavy fetch" if signals["js_heavy_intent"] else ("known URL/PDF extraction" if signals["known_url"] or signals["pdf_or_arxiv_intent"] else "evidence extraction"),
+        "reason": source_message('JS-heavy fetch') if signals["js_heavy_intent"] else (source_message('known URL/PDF extraction') if signals["known_url"] or signals["pdf_or_arxiv_intent"] else source_message('evidence extraction')),
     }
 
     vertical = _configured_for_capability("vertical_search", capability_status)
     routes["capabilities"]["vertical_search"] = {
         "providers": _apply_research_overrides("vertical_search", vertical) if signals["vertical_intent"] else [],
-        "reason": "vertical intent matched" if signals["vertical_intent"] else "vertical intent absent",
+        "reason": source_message('vertical intent matched') if signals["vertical_intent"] else source_message('vertical intent absent'),
         "experimental": True,
     }
 
@@ -1812,7 +1811,7 @@ async def research(
         return {
             "ok": False,
             "error_type": "parameter_error",
-            "error": f"Invalid fallback mode: {fallback_mode}",
+            "error": source_message('Invalid fallback mode: {0}', fallback_mode),
             "question": question,
             "mode": "deep_research_execution",
             "route_policy_version": RESEARCH_ROUTE_POLICY_VERSION,
@@ -1843,7 +1842,7 @@ async def research(
             "evidence_items": [],
             "gap_check": {
                 "status": "failed",
-                "gaps": [{"subquestion_id": "", "reason": "minimum profile is missing required capabilities"}],
+                "gaps": [{"subquestion_id": "", "reason": source_message('minimum profile is missing required capabilities')}],
             },
             "provider_attempts": [],
             "fallback_used": False,
@@ -1899,14 +1898,14 @@ async def research(
                 evidence_items.append(item)
                 _write_research_artifact(evidence_root, f"{index:02d}-fetch-{fetch_result['provider']}.md", fetch_result["content"])
             else:
-                gaps.append({"subquestion_id": "sq1", "reason": f"failed to fetch known URL: {url}", "url": url})
+                gaps.append({"subquestion_id": "sq1", "reason": source_message('failed to fetch known URL: {0}', url), "url": url})
 
     signals = routes["signals"]
     if signals["docs_api_intent"]:
         docs_providers = routes["capabilities"]["docs_search"]["providers"]
         selected_docs_providers = docs_providers[:1] if fallback_mode == "off" else docs_providers
         if not selected_docs_providers:
-            gaps.append({"subquestion_id": "sq2", "reason": "no configured docs_search provider for docs/API evidence"})
+            gaps.append({"subquestion_id": "sq2", "reason": source_message('no configured docs_search provider for docs/API evidence')})
         for provider in selected_docs_providers:
             step_start = time.time()
             if provider == "context7":
@@ -1982,7 +1981,7 @@ async def research(
             discovery_sources.extend(web_sources)
             stage_results.append({"stage": "web_discovery", "ok": bool(web_sources), "result_count": len(web_sources), "provider_attempts": attempts})
         else:
-            gaps.append({"subquestion_id": "", "reason": "no configured web_search provider for discovery"})
+            gaps.append({"subquestion_id": "", "reason": source_message('no configured web_search provider for discovery')})
 
     exa_in_selected_docs_route = "exa" in routes["capabilities"]["docs_search"]["providers"]
     if (
@@ -2037,12 +2036,12 @@ async def research(
             evidence_items.append(item)
             _write_research_artifact(evidence_root, f"fetch-{index:02d}-{fetch_result['provider']}.md", content)
         elif fallback_mode == "off":
-            gaps.append({"subquestion_id": "", "reason": f"fetch failed with fallback off: {url}", "url": url})
+            gaps.append({"subquestion_id": "", "reason": source_message('fetch failed with fallback off: {0}', url), "url": url})
 
     if not evidence_items:
-        gaps.append({"subquestion_id": "", "reason": "no fetched/read evidence items were produced"})
+        gaps.append({"subquestion_id": "", "reason": source_message('no fetched/read evidence items were produced')})
     elif no_new_evidence and not urls and candidates:
-        gaps.append({"subquestion_id": "", "reason": "discovery produced candidates but no new fetch evidence converged"})
+        gaps.append({"subquestion_id": "", "reason": source_message('discovery produced candidates but no new fetch evidence converged')})
 
     covered = bool(evidence_items)
     gap_status = "closed" if covered and not gaps else ("degraded" if evidence_items else "failed")
@@ -2051,7 +2050,7 @@ async def research(
     result = {
         "ok": bool(evidence_items),
         "error_type": "" if evidence_items else "evidence_error",
-        "error": "" if evidence_items else "research could not obtain fetched evidence",
+        "error": "" if evidence_items else source_message('research could not obtain fetched evidence'),
         "mode": "deep_research_execution",
         "query_mode": "research",
         "question": question,
@@ -2157,7 +2156,7 @@ def _minimum_profile_result(profile: str, capability_status: dict[str, Any]) -> 
     return {
         "ok": not missing,
         "error_type": "config_error" if missing else "",
-        "error": f"{MINIMUM_PROFILE_ERROR} 缺失能力: {', '.join(missing)}" if missing else "",
+        "error": source_message('{0} 缺失能力: {1}', MINIMUM_PROFILE_ERROR, ', '.join(missing)) if missing else "",
         "profile": profile,
         "required": required,
         "missing": missing,
@@ -2178,7 +2177,7 @@ def validate_minimum_profile() -> dict[str, Any]:
             return {
                 "ok": not missing, "profile": "jev", "required": ["jev", "retrieval"], "missing": missing,
                 "error_type": "config_error" if missing else "",
-                "error": "Jev mode requires TYPESAFE_API_KEY and an enabled retrieval channel" if missing else "",
+                "error": source_message('Jev mode requires TYPESAFE_API_KEY and an enabled retrieval channel') if missing else "",
                 "capability_status": get_capability_status(),
             }
         profile = config.minimum_profile
@@ -2620,7 +2619,7 @@ async def _run_vertical_search_fallback(
 
 def _provider_response_object(data: Any, provider: str) -> dict[str, Any]:
     if not isinstance(data, dict):
-        raise ProviderCallError("parse_error", f"{provider} response is not a JSON object")
+        raise ProviderCallError("parse_error", source_message('{0} response is not a JSON object', provider))
     return data
 
 
@@ -2656,15 +2655,15 @@ async def call_tavily_extract(url: str) -> str | None:
         raise tool_error
     results = data.get("results")
     if not isinstance(results, list):
-        raise ProviderCallError("parse_error", "Tavily extract response is missing results")
+        raise ProviderCallError("parse_error", source_message('Tavily extract response is missing results'))
     if not results:
         return None
     first = results[0]
     if not isinstance(first, dict):
-        raise ProviderCallError("parse_error", "Tavily extract result is not an object")
+        raise ProviderCallError("parse_error", source_message('Tavily extract result is not an object'))
     content = first.get("raw_content", "")
     if not isinstance(content, str):
-        raise ProviderCallError("parse_error", "Tavily extract content is not text")
+        raise ProviderCallError("parse_error", source_message('Tavily extract content is not text'))
     return content if content.strip() else None
 
 
@@ -2693,11 +2692,11 @@ async def call_tavily_search(query: str, max_results: int = 6) -> list[dict] | N
         raise tool_error
     results = data.get("results")
     if not isinstance(results, list):
-        raise ProviderCallError("parse_error", "Tavily search response is missing results")
+        raise ProviderCallError("parse_error", source_message('Tavily search response is missing results'))
     if not results:
         return None
     if not all(isinstance(item, dict) for item in results):
-        raise ProviderCallError("parse_error", "Tavily search result is not an object")
+        raise ProviderCallError("parse_error", source_message('Tavily search result is not an object'))
     return [
         {
             "title": item.get("title", ""),
@@ -2728,14 +2727,14 @@ async def call_firecrawl_search(query: str, limit: int = 14) -> list[dict] | Non
         raise tool_error
     payload = data.get("data")
     if not isinstance(payload, dict):
-        raise ProviderCallError("parse_error", "Firecrawl search response is missing data")
+        raise ProviderCallError("parse_error", source_message('Firecrawl search response is missing data'))
     results = payload.get("web")
     if not isinstance(results, list):
-        raise ProviderCallError("parse_error", "Firecrawl search response is missing web results")
+        raise ProviderCallError("parse_error", source_message('Firecrawl search response is missing web results'))
     if not results:
         return None
     if not all(isinstance(item, dict) for item in results):
-        raise ProviderCallError("parse_error", "Firecrawl search result is not an object")
+        raise ProviderCallError("parse_error", source_message('Firecrawl search result is not an object'))
     return [
         {
             "title": item.get("title", ""),
@@ -2771,10 +2770,10 @@ async def call_firecrawl_scrape(url: str, ctx=None) -> str | None:
             raise tool_error
         payload = data.get("data")
         if not isinstance(payload, dict):
-            raise ProviderCallError("parse_error", "Firecrawl scrape response is missing data")
+            raise ProviderCallError("parse_error", source_message('Firecrawl scrape response is missing data'))
         markdown = payload.get("markdown", "")
         if not isinstance(markdown, str):
-            raise ProviderCallError("parse_error", "Firecrawl scrape content is not text")
+            raise ProviderCallError("parse_error", source_message('Firecrawl scrape content is not text'))
         if markdown.strip():
             return markdown
         await log_info(ctx, f"Firecrawl: markdown empty, retry {attempt + 1}/{config.retry_max_attempts}", config.debug_enabled)
@@ -2806,7 +2805,7 @@ async def call_tinyfish_search(query: str, max_results: int = 6) -> list[dict] |
         )
     results = data.get("results")
     if not isinstance(results, list):
-        raise ProviderCallError("parse_error", "TinyFish search payload is missing results")
+        raise ProviderCallError("parse_error", source_message('TinyFish search payload is missing results'))
     return [item for item in results if isinstance(item, dict)]
 
 
@@ -2819,8 +2818,7 @@ async def call_tinyfish_fetch(url: str) -> dict[str, Any]:
             "url": url,
             "error_type": "config_error",
             "error": (
-                "TINYFISH_API_KEY 未配置。请运行 `smart-search setup`，"
-                "或使用 `smart-search config set TINYFISH_API_KEY <key>`。"
+                source_message('TINYFISH_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set TINYFISH_API_KEY <key>`。')
             ),
         }
     raw = await TinyFishFetchProvider(
@@ -2861,7 +2859,7 @@ async def call_tavily_map(
         return {
             "ok": False,
             "error_type": "config_error",
-            "error": "TAVILY_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set TAVILY_API_KEY <key>`。",
+            "error": source_message('TAVILY_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set TAVILY_API_KEY <key>`。'),
         }
 
     endpoint = f"{config.tavily_api_url.rstrip('/')}/map"
@@ -2879,7 +2877,7 @@ async def call_tavily_map(
             raise tool_error
         results = data.get("results")
         if not isinstance(results, list):
-            raise ProviderCallError("parse_error", "Tavily map response is missing results")
+            raise ProviderCallError("parse_error", source_message('Tavily map response is missing results'))
         return {
             "ok": True,
             "base_url": data.get("base_url", ""),
@@ -2911,9 +2909,9 @@ async def search(
         validation_level = (validation or config.validation_level).strip().lower()
         fallback_mode = (fallback or config.fallback_mode).strip().lower()
         if validation_level not in config._ALLOWED_VALIDATION_LEVELS:
-            raise ValueError(f"Invalid validation level: {validation_level}")
+            raise ValueError(source_message('Invalid validation level: {0}', validation_level))
         if fallback_mode not in config._ALLOWED_FALLBACK_MODES:
-            raise ValueError(f"Invalid fallback mode: {fallback_mode}")
+            raise ValueError(source_message('Invalid fallback mode: {0}', fallback_mode))
         router_mode = config.intent_router_mode
     except ValueError as e:
         return _empty_search_result(
@@ -3376,7 +3374,7 @@ async def search(
     return {
         "ok": ok,
         "error_type": "" if ok else ("evidence_error" if validation_level == "strict" else "network_error"),
-        "error": "" if ok else ("strict 模式证据不足" if validation_level == "strict" else "搜索失败或无结果"),
+        "error": "" if ok else (source_message('strict 模式证据不足') if validation_level == "strict" else source_message('搜索失败或无结果')),
         "session_id": session_id,
         "query": query,
         "platform": platform,
@@ -3416,7 +3414,7 @@ async def route(
     try:
         validation_level = (validation or config.validation_level).strip().lower()
         if validation_level not in config._ALLOWED_VALIDATION_LEVELS:
-            raise ValueError(f"Invalid validation level: {validation_level}")
+            raise ValueError(source_message('Invalid validation level: {0}', validation_level))
         if (mode or config.intent_router_mode).strip().lower() == "jev":
             return await jev_search.plan(query, validation_level, allow_remote=allow_remote)
         route_result = await IntentRouter(config).route(
@@ -4050,7 +4048,7 @@ async def exa_search(
         return {
             "ok": False,
             "error_type": "config_error",
-            "error": "EXA_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set EXA_API_KEY <key>`。",
+            "error": source_message('EXA_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set EXA_API_KEY <key>`。'),
         }
 
     provider = ExaSearchProvider(config.exa_base_url, api_key, config.exa_timeout)
@@ -4322,7 +4320,7 @@ async def exa_find_similar(url: str, num_results: int = 5) -> dict[str, Any]:
         return {
             "ok": False,
             "error_type": "config_error",
-            "error": "EXA_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set EXA_API_KEY <key>`。",
+            "error": source_message('EXA_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set EXA_API_KEY <key>`。'),
         }
 
     provider = ExaSearchProvider(config.exa_base_url, api_key, config.exa_timeout)
@@ -4350,7 +4348,7 @@ async def zhipu_search(
         return {
             "ok": False,
             "error_type": "config_error",
-            "error": "ZHIPU_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set ZHIPU_API_KEY <key>`。",
+            "error": source_message('ZHIPU_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set ZHIPU_API_KEY <key>`。'),
         }
     provider = ZhipuWebSearchProvider(
         config.zhipu_api_url,
@@ -4382,7 +4380,7 @@ async def context7_library(name: str, query: str = "") -> dict[str, Any]:
         return {
             "ok": False,
             "error_type": "config_error",
-            "error": "CONTEXT7_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set CONTEXT7_API_KEY <key>`。",
+            "error": source_message('CONTEXT7_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set CONTEXT7_API_KEY <key>`。'),
         }
     provider = Context7Provider(config.context7_base_url, api_key, config.context7_timeout)
     activity.progress("provider_request", "context7")
@@ -4402,7 +4400,7 @@ async def context7_docs(library_id: str, query: str) -> dict[str, Any]:
         return {
             "ok": False,
             "error_type": "config_error",
-            "error": "CONTEXT7_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set CONTEXT7_API_KEY <key>`。",
+            "error": source_message('CONTEXT7_API_KEY 未配置。请运行 `smart-search setup`，或使用 `smart-search config set CONTEXT7_API_KEY <key>`。'),
         }
     provider = Context7Provider(config.context7_base_url, api_key, config.context7_timeout)
     activity.progress("provider_request", "context7")
@@ -4440,7 +4438,7 @@ async def _test_openai_compatible_primary(
         if response.status_code != 200:
             return {
                 "status": "warning",
-                "message": f"HTTP {response.status_code}: {sanitize_provider_error_message(response.text, limit=100)}",
+                "message": source_message('HTTP {0}: {1}', response.status_code, sanitize_provider_error_message(response.text, limit=100)),
                 "response_time_ms": response_time,
                 "http_status": response.status_code,
                 "content_type": content_type,
@@ -4450,7 +4448,7 @@ async def _test_openai_compatible_primary(
             }
         return {
             "status": "ok",
-            "message": f"{api_mode} endpoint available (HTTP {response.status_code})",
+            "message": source_message('{0} endpoint available (HTTP {1})', api_mode, response.status_code),
             "response_time_ms": response_time,
             "http_status": response.status_code,
             "content_type": content_type,
@@ -4496,37 +4494,37 @@ def _openai_compatible_diagnosis(quick: dict[str, Any], no_stream: dict[str, Any
     if no_stream_ok and stream_ok:
         return (
             True,
-            "OpenAI-compatible 主链路正常。",
-            "真实 search 形态的 stream=false 和 stream=true 都能返回。若用户仍卡住，更可能是调用方、PATH、超时设置或上游偶发波动。",
+            source_message('OpenAI-compatible 主链路正常。'),
+            source_message('真实 search 形态的 stream=false 和 stream=true 都能返回。若用户仍卡住，更可能是调用方、PATH、超时设置或上游偶发波动。'),
         )
     if stream_ok and not no_stream_ok:
         return (
             False,
-            "非流式请求不稳定，流式请求可用。",
-            "建议设置 `OPENAI_COMPATIBLE_STREAM=true`，或临时使用 `smart-search search ... --stream`。",
+            source_message('非流式请求不稳定，流式请求可用。'),
+            source_message('建议设置 `OPENAI_COMPATIBLE_STREAM=true`，或临时使用 `smart-search search ... --stream`。'),
         )
     if no_stream_ok and not stream_ok:
         return (
             False,
-            "流式请求不稳定，非流式请求可用。",
-            "建议设置 `OPENAI_COMPATIBLE_STREAM=false`，或临时使用 `smart-search search ... --no-stream`。",
+            source_message('流式请求不稳定，非流式请求可用。'),
+            source_message('建议设置 `OPENAI_COMPATIBLE_STREAM=false`，或临时使用 `smart-search search ... --no-stream`。'),
         )
     if quick_ok and search_timeout:
         return (
             False,
-            "小请求能通，但真实 search 形态超时。",
-            "这通常是上游模型或中转站在处理 smart-search 的完整 prompt 时卡住；建议换模型/中转，或把本诊断报告贴给维护者。",
+            source_message('小请求能通，但真实 search 形态超时。'),
+            source_message('这通常是上游模型或中转站在处理 smart-search 的完整 prompt 时卡住；建议换模型/中转，或把本诊断报告贴给维护者。'),
         )
     if quick_ok:
         return (
             False,
-            "小请求能通，但真实 search 形态失败。",
-            "这更像上游模型/中转站对 smart-search 请求形态不兼容；建议换模型/中转，或把本诊断报告贴给维护者。",
+            source_message('小请求能通，但真实 search 形态失败。'),
+            source_message('这更像上游模型/中转站对 smart-search 请求形态不兼容；建议换模型/中转，或把本诊断报告贴给维护者。'),
         )
     return (
         False,
-        "OpenAI-compatible 基础请求不可用。",
-        "请先检查 API URL、API key、模型名和网络；修好后再运行本诊断命令。",
+        source_message('OpenAI-compatible 基础请求不可用。'),
+        source_message('请先检查 API URL、API key、模型名和网络；修好后再运行本诊断命令。'),
     )
 
 
@@ -4658,8 +4656,8 @@ async def diagnose_openai_compatible(timeout_seconds: float = 30.0) -> dict[str,
             "next_command": OPENAI_COMPATIBLE_DIAGNOSE_COMMAND,
             "error_type": "parameter_error",
             "error": str(e),
-            "summary": "OpenAI-compatible API mode is invalid.",
-            "recommendation": "Set OPENAI_COMPATIBLE_API_MODE to chat-completions or responses.",
+            "summary": source_message('OpenAI-compatible API mode is invalid.'),
+            "recommendation": source_message('Set OPENAI_COMPATIBLE_API_MODE to chat-completions or responses.'),
             "elapsed_ms": _elapsed_ms(start),
         }
     endpoint = openai_compatible_endpoint(api_url or "", api_mode)
@@ -4687,9 +4685,9 @@ async def diagnose_openai_compatible(timeout_seconds: float = 30.0) -> dict[str,
         result.update(
             {
                 "error_type": "config_error",
-                "error": "缺少 OpenAI-compatible 配置: " + ", ".join(missing),
-                "summary": "OpenAI-compatible 配置不完整。",
-                "recommendation": "请先运行 `smart-search setup`，或用 `smart-search config set` 填好缺失项。",
+                "error": source_message('缺少 OpenAI-compatible 配置: {0}', ", ".join(missing)),
+                "summary": source_message('OpenAI-compatible 配置不完整。'),
+                "recommendation": source_message('请先运行 `smart-search setup`，或用 `smart-search config set` 填好缺失项。'),
                 "missing": missing,
                 "elapsed_ms": _elapsed_ms(start),
             }
@@ -4703,11 +4701,11 @@ async def diagnose_openai_compatible(timeout_seconds: float = 30.0) -> dict[str,
             else await _test_openai_compatible_primary(api_url, api_key, model, api_mode=api_mode)
         )
     except httpx.TimeoutException as e:
-        quick = {"status": "timeout", "message": f"轻量 {api_mode} 请求超时: {sanitize_provider_error_message(e)}"}
+        quick = {"status": "timeout", "message": source_message('轻量 {0} 请求超时: {1}', api_mode, sanitize_provider_error_message(e))}
     except httpx.RequestError as e:
-        quick = {"status": "error", "message": f"轻量 {api_mode} 网络错误: {sanitize_provider_error_message(e)}"}
+        quick = {"status": "error", "message": source_message('轻量 {0} 网络错误: {1}', api_mode, sanitize_provider_error_message(e))}
     except Exception as e:
-        quick = {"status": "error", "message": f"轻量 {api_mode} 运行错误: {sanitize_provider_error_message(e)}"}
+        quick = {"status": "error", "message": source_message('轻量 {0} 运行错误: {1}', api_mode, sanitize_provider_error_message(e))}
     quick_check = {
         "name": f"轻量 {api_mode} 请求",
         "status": quick.get("status", "error"),
@@ -4755,7 +4753,7 @@ async def diagnose_openai_compatible(timeout_seconds: float = 30.0) -> dict[str,
 
     ok, summary, recommendation = _openai_compatible_diagnosis(quick_check, no_stream, stream)
     if inventory.get("status") == "warning":
-        recommendation = f"{recommendation} 另外，{inventory['message']}。兜底只在主模型硬失败后接力，不会再把主模型砍成 30 秒。"
+        recommendation = source_message('{0} 另外，{1}。兜底只在主模型硬失败后接力，不会再把主模型砍成 30 秒。', recommendation, inventory['message'])
     result.update(
         {
             "ok": ok,
@@ -4792,11 +4790,11 @@ async def _test_primary_connection(
             if response.status_code != 200:
                 models_test = {
                     "status": "warning",
-                    "message": f"HTTP {response.status_code}: {sanitize_provider_error_message(response.text, limit=100)}",
+                    "message": source_message('HTTP {0}: {1}', response.status_code, sanitize_provider_error_message(response.text, limit=100)),
                     "response_time_ms": response_time,
                 }
             else:
-                models_test = {"status": "ok", "message": f"成功获取模型列表 (HTTP {response.status_code})", "response_time_ms": response_time}
+                models_test = {"status": "ok", "message": source_message('成功获取模型列表 (HTTP {0})', response.status_code), "response_time_ms": response_time}
                 try:
                     models_data = response.json()
                     model_names = [m["id"] for m in models_data.get("data", []) if isinstance(m, dict) and "id" in m]
@@ -4808,7 +4806,7 @@ async def _test_primary_connection(
     except httpx.HTTPError as e:
         models_test = {
             "status": "warning",
-            "message": f"模型列表接口请求失败: {sanitize_provider_error_message(e)}",
+            "message": source_message('模型列表接口请求失败: {0}', sanitize_provider_error_message(e)),
             "response_time_ms": _elapsed_ms(start),
         }
 
@@ -4816,7 +4814,7 @@ async def _test_primary_connection(
         models_state = "可用" if models_test.get("status") == "ok" else "不可用"
         result = {
             "status": "warning",
-            "message": f"{completion_label}不可用: {completion_test.get('message', '')}；模型列表接口{models_state}: {models_test['message']}",
+            "message": source_message('{0}不可用: {1}；模型列表接口{2}: {3}', completion_label, completion_test.get('message', ''), models_state, models_test['message']),
             "response_time_ms": completion_test.get("response_time_ms", models_test.get("response_time_ms")),
             "models_endpoint_test": models_test,
             "completion_test": completion_test,
@@ -4828,7 +4826,7 @@ async def _test_primary_connection(
     if models_test.get("status") != "ok":
         result = {
             "status": "ok",
-            "message": f"{completion_test['message']}；模型列表接口不可用: {models_test['message']}",
+            "message": source_message('{0}；模型列表接口不可用: {1}', completion_test['message'], models_test['message']),
             "response_time_ms": completion_test.get("response_time_ms"),
             "models_endpoint_test": models_test,
             "completion_test": completion_test,
@@ -4868,10 +4866,10 @@ async def _test_primary_responses(api_url: str, api_key: str, model: str) -> dic
         if response.status_code != 200:
             return {
                 "status": "warning",
-                "message": f"HTTP {response.status_code}: {sanitize_provider_error_message(response.text, limit=100)}",
+                "message": source_message('HTTP {0}: {1}', response.status_code, sanitize_provider_error_message(response.text, limit=100)),
                 "response_time_ms": response_time,
             }
-        return {"status": "ok", "message": f"xAI Responses API 可用 (HTTP {response.status_code})", "response_time_ms": response_time}
+        return {"status": "ok", "message": source_message('xAI Responses API 可用 (HTTP {0})', response.status_code), "response_time_ms": response_time}
 
 
 async def _test_main_provider_connection(provider_config: dict[str, Any]) -> dict[str, Any]:
@@ -4892,23 +4890,23 @@ async def _safe_test_main_provider_connection(provider_config: dict[str, Any]) -
     try:
         return await _test_main_provider_connection(provider_config)
     except httpx.TimeoutException:
-        return {"status": "timeout", "message": f"{provider_config['provider']} 请求超时，请检查网络连接或 API URL"}
+        return {"status": "timeout", "message": source_message('{0} 请求超时，请检查网络连接或 API URL', provider_config['provider'])}
     except httpx.RequestError as e:
         return {
             "status": "error",
-            "message": f"{provider_config['provider']} 网络错误: {sanitize_provider_error_message(e)}",
+            "message": source_message('{0} 网络错误: {1}', provider_config['provider'], sanitize_provider_error_message(e)),
         }
     except Exception as e:
         return {
             "status": "error",
-            "message": f"{provider_config['provider']} 未知错误: {sanitize_provider_error_message(e)}",
+            "message": source_message('{0} 未知错误: {1}', provider_config['provider'], sanitize_provider_error_message(e)),
         }
 
 
 async def _test_exa_connection() -> dict[str, Any]:
     exa_key = config.exa_api_key
     if not exa_key:
-        return {"status": "not_configured", "message": "EXA_API_KEY 未设置，Exa 搜索功能不可用"}
+        return {"status": "not_configured", "message": source_message('EXA_API_KEY 未设置，Exa 搜索功能不可用')}
     start = time.time()
     async with httpx.AsyncClient(timeout=10.0) as client:
         resp = await client.post(
@@ -4918,10 +4916,10 @@ async def _test_exa_connection() -> dict[str, Any]:
         )
         response_time = _elapsed_ms(start)
         if resp.status_code == 200:
-            return {"status": "ok", "message": "Exa API 可用 (HTTP 200)", "response_time_ms": response_time}
+            return {"status": "ok", "message": source_message('Exa API 可用 (HTTP 200)'), "response_time_ms": response_time}
         return {
             "status": "warning",
-            "message": f"HTTP {resp.status_code}: {sanitize_provider_error_message(resp.text, limit=100)}",
+            "message": source_message('HTTP {0}: {1}', resp.status_code, sanitize_provider_error_message(resp.text, limit=100)),
             "response_time_ms": response_time,
         }
 
@@ -4931,7 +4929,7 @@ async def _test_tavily_connection() -> dict[str, Any]:
         return {"status": "disabled", "message": _tavily_disabled_message()}
     tavily_key = config.tavily_api_key
     if not tavily_key:
-        return {"status": "not_configured", "message": "TAVILY_API_KEY 未设置，Tavily 功能不可用"}
+        return {"status": "not_configured", "message": source_message('TAVILY_API_KEY 未设置，Tavily 功能不可用')}
     start = time.time()
     timeout = httpx.Timeout(connect=6.0, read=config.tavily_timeout, write=10.0, pool=None)
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True, verify=config.ssl_verify_enabled) as client:
@@ -4942,84 +4940,84 @@ async def _test_tavily_connection() -> dict[str, Any]:
         )
         response_time = _elapsed_ms(start)
         if resp.status_code == 200:
-            return {"status": "ok", "message": "Tavily API 可用 (HTTP 200)", "response_time_ms": response_time}
+            return {"status": "ok", "message": source_message('Tavily API 可用 (HTTP 200)'), "response_time_ms": response_time}
         return {
             "status": "warning",
-            "message": f"HTTP {resp.status_code}: {sanitize_provider_error_message(resp.text, limit=100)}",
+            "message": source_message('HTTP {0}: {1}', resp.status_code, sanitize_provider_error_message(resp.text, limit=100)),
             "response_time_ms": response_time,
         }
 
 
 async def _test_jina_connection() -> dict[str, Any]:
     if config.jina_respond_with and not config.jina_api_key:
-        return {"status": "config_error", "message": "JINA_RESPOND_WITH requires JINA_API_KEY"}
+        return {"status": "config_error", "message": source_message('JINA_RESPOND_WITH requires JINA_API_KEY')}
     if not config.jina_api_key:
-        return {"status": "not_configured", "message": "JINA_API_KEY 未设置，Jina 不满足 standard web_fetch；匿名 Reader 只能作为显式实验使用"}
+        return {"status": "not_configured", "message": source_message('JINA_API_KEY 未设置，Jina 不满足 standard web_fetch；匿名 Reader 只能作为显式实验使用')}
     start = time.time()
     data = await jina_fetch("https://example.com")
     response_time = _elapsed_ms(start)
     if data.get("ok"):
-        return {"status": "ok", "message": "Jina Reader 可用", "response_time_ms": response_time}
+        return {"status": "ok", "message": source_message('Jina Reader 可用'), "response_time_ms": response_time}
     error_type = data.get("error_type", "")
     status = error_type if error_type in {"auth_error", "config_error", "parameter_error", "rate_limited", "timeout"} else "warning"
-    return {"status": status, "message": data.get("error", "Jina Reader 不可用"), "response_time_ms": response_time}
+    return {"status": status, "message": data.get("error", source_message('Jina Reader 不可用')), "response_time_ms": response_time}
 
 
 async def _test_zhipu_connection() -> dict[str, Any]:
     if not config.zhipu_api_key:
-        return {"status": "not_configured", "message": "ZHIPU_API_KEY 未设置，智谱搜索功能不可用"}
+        return {"status": "not_configured", "message": source_message('ZHIPU_API_KEY 未设置，智谱搜索功能不可用')}
     result = await zhipu_search("test", count=1)
     if result.get("ok"):
-        return {"status": "ok", "message": "智谱 Web Search 可用", "response_time_ms": result.get("elapsed_ms", 0)}
-    return {"status": "warning", "message": result.get("error", "智谱 Web Search 不可用"), "response_time_ms": result.get("elapsed_ms", 0)}
+        return {"status": "ok", "message": source_message('智谱 Web Search 可用'), "response_time_ms": result.get("elapsed_ms", 0)}
+    return {"status": "warning", "message": result.get("error", source_message('智谱 Web Search 不可用')), "response_time_ms": result.get("elapsed_ms", 0)}
 
 
 async def _test_zhipu_mcp_connection() -> dict[str, Any]:
     if not config.zhipu_mcp_api_key:
-        return {"status": "not_configured", "message": "ZHIPU_MCP_API_KEY 未设置，智谱 Coding Plan MCP 功能不可用"}
+        return {"status": "not_configured", "message": source_message('ZHIPU_MCP_API_KEY 未设置，智谱 Coding Plan MCP 功能不可用')}
     result = await zhipu_mcp_search("test", count=1)
     if result.get("ok"):
-        return {"status": "ok", "message": "智谱 Coding Plan MCP 可用", "response_time_ms": result.get("elapsed_ms", 0)}
+        return {"status": "ok", "message": source_message('智谱 Coding Plan MCP 可用'), "response_time_ms": result.get("elapsed_ms", 0)}
     error_type = result.get("error_type", "")
     status = error_type if error_type in {"auth_error", "config_error", "provider_error", "rate_limited", "timeout"} else "warning"
-    return {"status": status, "message": result.get("error", "智谱 Coding Plan MCP 不可用"), "response_time_ms": result.get("elapsed_ms", 0)}
+    return {"status": status, "message": result.get("error", source_message('智谱 Coding Plan MCP 不可用')), "response_time_ms": result.get("elapsed_ms", 0)}
 
 
 async def _test_context7_connection() -> dict[str, Any]:
     if not config.context7_api_key:
-        return {"status": "not_configured", "message": "CONTEXT7_API_KEY 未设置，Context7 功能不可用"}
+        return {"status": "not_configured", "message": source_message('CONTEXT7_API_KEY 未设置，Context7 功能不可用')}
     result = await context7_library("react", "hooks")
     if result.get("ok"):
-        return {"status": "ok", "message": "Context7 API 可用", "response_time_ms": result.get("elapsed_ms", 0)}
-    return {"status": "warning", "message": result.get("error", "Context7 API 不可用"), "response_time_ms": result.get("elapsed_ms", 0)}
+        return {"status": "ok", "message": source_message('Context7 API 可用'), "response_time_ms": result.get("elapsed_ms", 0)}
+    return {"status": "warning", "message": result.get("error", source_message('Context7 API 不可用')), "response_time_ms": result.get("elapsed_ms", 0)}
 
 
 async def _test_anysearch_connection() -> dict[str, Any]:
     """Probe AnySearch with a domain listing, which costs no search quota."""
     if not config.anysearch_api_key:
-        return {"status": "not_configured", "message": "ANYSEARCH_API_KEY 未设置，AnySearch 垂直搜索不可用"}
+        return {"status": "not_configured", "message": source_message('ANYSEARCH_API_KEY 未设置，AnySearch 垂直搜索不可用')}
     start = time.time()
     result = await anysearch_domains()
     response_time = result.get("elapsed_ms") or _elapsed_ms(start)
     if result.get("ok"):
-        return {"status": "ok", "message": "AnySearch API 可用", "response_time_ms": response_time}
+        return {"status": "ok", "message": source_message('AnySearch API 可用'), "response_time_ms": response_time}
     error_type = str(result.get("error_type") or "")
     status = error_type if error_type in APPROVED_PROVIDER_ERROR_TYPES else "warning"
-    return {"status": status, "message": result.get("error", "AnySearch API 不可用"), "response_time_ms": response_time}
+    return {"status": status, "message": result.get("error", source_message('AnySearch API 不可用')), "response_time_ms": response_time}
 
 
 async def _test_sciverse_connection() -> dict[str, Any]:
     """Probe Sciverse with a catalog listing, which costs no search quota."""
     if not config.sciverse_api_token:
-        return {"status": "not_configured", "message": "SCIVERSE_API_TOKEN 未设置，Sciverse 学术检索不可用"}
+        return {"status": "not_configured", "message": source_message('SCIVERSE_API_TOKEN 未设置，Sciverse 学术检索不可用')}
     start = time.time()
     result = await sciverse_catalog()
     response_time = result.get("elapsed_ms") or _elapsed_ms(start)
     if result.get("ok"):
-        return {"status": "ok", "message": "Sciverse API 可用", "response_time_ms": response_time}
+        return {"status": "ok", "message": source_message('Sciverse API 可用'), "response_time_ms": response_time}
     error_type = str(result.get("error_type") or "")
     status = error_type if error_type in APPROVED_PROVIDER_ERROR_TYPES else "warning"
-    return {"status": status, "message": result.get("error", "Sciverse API 不可用"), "response_time_ms": response_time}
+    return {"status": status, "message": result.get("error", source_message('Sciverse API 不可用')), "response_time_ms": response_time}
 
 
 async def _test_firecrawl_presence() -> dict[str, Any]:
@@ -5029,13 +5027,13 @@ async def _test_firecrawl_presence() -> dict[str, Any]:
     instead of a green tick they have not earned.
     """
     if not config.firecrawl_api_key:
-        return {"status": "not_configured", "message": "FIRECRAWL_API_KEY 未设置，Firecrawl 功能不可用"}
-    return {"status": "configured", "message": "FIRECRAWL_API_KEY 已配置（未发起真实请求验证）"}
+        return {"status": "not_configured", "message": source_message('FIRECRAWL_API_KEY 未设置，Firecrawl 功能不可用')}
+    return {"status": "configured", "message": source_message('FIRECRAWL_API_KEY 已配置（未发起真实请求验证）')}
 
 
 async def _test_tinyfish_connection() -> dict[str, Any]:
     if not config.tinyfish_api_key:
-        return {"status": "not_configured", "message": "TINYFISH_API_KEY 未设置，TinyFish 功能不可用"}
+        return {"status": "not_configured", "message": source_message('TINYFISH_API_KEY 未设置，TinyFish 功能不可用')}
     start = time.time()
     raw_results = await asyncio.gather(
         TinyFishSearchProvider(config.tinyfish_search_api_url, config.tinyfish_api_key, config.tinyfish_timeout)
@@ -5050,9 +5048,9 @@ async def _test_tinyfish_connection() -> dict[str, Any]:
         if not data.get("ok"):
             error_type = str(data.get("error_type") or "")
             status = error_type if error_type in APPROVED_PROVIDER_ERROR_TYPES else "warning"
-            return {"status": status, "message": f"TinyFish {label}：{data.get('error', '请求未成功')}",
+            return {"status": status, "message": source_message('TinyFish {0}：{1}', label, data.get('error', '请求未成功')),
                     "response_time_ms": _elapsed_ms(start)}
-    return {"status": "ok", "message": "TinyFish 搜索与抓取 API 均可用", "response_time_ms": _elapsed_ms(start)}
+    return {"status": "ok", "message": source_message('TinyFish 搜索与抓取 API 均可用'), "response_time_ms": _elapsed_ms(start)}
 
 
 DOCTOR_PROBE_PROVIDERS = {
@@ -5144,7 +5142,7 @@ async def test_provider_connection(
             normalized = {str(key).strip().upper(): str(value) for key, value in overrides.items()}
             for key, value in normalized.items():
                 if key not in config._CONFIG_KEYS:
-                    raise ValueError(f"Unsupported config key: {key}")
+                    raise ValueError(source_message('Unsupported config key: {0}', key))
                 config._validate_config_value(key, value)
             with config.snapshot(normalized):
                 return await test_provider_connection(provider, record_health=False, timeout_seconds=timeout_seconds)
@@ -5155,7 +5153,7 @@ async def test_provider_connection(
     kind = PROBE_KIND.get(provider)
     if kind is None:
         known = ", ".join(sorted(PROBE_KIND))
-        message = f"Unknown provider: {provider}. Known providers: {known}"
+        message = source_message('Unknown provider: {0}. Known providers: {1}', provider, known)
         return {
             "ok": False,
             "provider": provider,
@@ -5185,18 +5183,18 @@ async def test_provider_connection(
             if overrides:
                 provider_config = _main_search_override_config(provider, overrides)
                 if provider_config is None:
-                    return {"status": "config_error", "message": f"{provider} 覆盖参数不完整"}
+                    return {"status": "config_error", "message": source_message('{0} 覆盖参数不完整', provider)}
             else:
                 configs = _main_search_provider_configs(providers=provider)
                 if not configs:
-                    return {"status": "not_configured", "message": f"{provider} 未配置"}
+                    return {"status": "not_configured", "message": source_message('{0} 未配置', provider)}
                 provider_config = configs[0]
             probe_model = str(provider_config.get("model", ""))
             activity.progress("provider.test", provider, probe_model)
             return await _safe_test_main_provider_connection(provider_config)
         probe = _LIVE_PROBES.get(recorded_as)
         if probe is None:
-            return {"status": "not_configured", "message": f"{provider} 无可用探针"}
+            return {"status": "not_configured", "message": source_message('{0} 无可用探针', provider)}
         return await probe()
 
     start = time.time()
@@ -5205,13 +5203,13 @@ async def test_provider_connection(
     except asyncio.TimeoutError:
         test = {
             "status": "timeout",
-            "message": f"{provider} 探测超过 {ceiling:g}s 上限",
+            "message": source_message('{0} 探测超过 {1:g}s 上限', provider, ceiling),
             "response_time_ms": _elapsed_ms(start),
         }
     except Exception as e:
         test = {
             "status": "error",
-            "message": f"{provider} 探测失败: {sanitize_provider_error_message(e)}",
+            "message": source_message('{0} 探测失败: {1}', provider, sanitize_provider_error_message(e)),
             "response_time_ms": _elapsed_ms(start),
         }
 
@@ -5296,26 +5294,26 @@ async def doctor() -> dict[str, Any]:
         info["primary_connection_test"] = {"status": "config_error", "message": sanitize_provider_error_message(e)}
     except Exception as e:
         info["main_search_connection_tests"] = {}
-        info["primary_connection_test"] = {"status": "error", "message": f"未知错误: {sanitize_provider_error_message(e)}"}
+        info["primary_connection_test"] = {"status": "error", "message": source_message('未知错误: {0}', sanitize_provider_error_message(e))}
 
     try:
         info["exa_connection_test"] = await _test_exa_connection()
     except httpx.TimeoutException:
-        info["exa_connection_test"] = {"status": "timeout", "message": "Exa API 请求超时"}
+        info["exa_connection_test"] = {"status": "timeout", "message": source_message('Exa API 请求超时')}
     except Exception as e:
         info["exa_connection_test"] = {"status": "error", "message": sanitize_provider_error_message(e)}
 
     try:
         info["tavily_connection_test"] = await _test_tavily_connection()
     except httpx.TimeoutException:
-        info["tavily_connection_test"] = {"status": "timeout", "message": "Tavily API 请求超时"}
+        info["tavily_connection_test"] = {"status": "timeout", "message": source_message('Tavily API 请求超时')}
     except Exception as e:
         info["tavily_connection_test"] = {"status": "error", "message": sanitize_provider_error_message(e)}
 
     try:
         info["jina_connection_test"] = await _test_jina_connection()
     except httpx.TimeoutException:
-        info["jina_connection_test"] = {"status": "timeout", "message": "Jina Reader 请求超时"}
+        info["jina_connection_test"] = {"status": "timeout", "message": source_message('Jina Reader 请求超时')}
     except Exception as e:
         info["jina_connection_test"] = {"status": "error", "message": sanitize_provider_error_message(e)}
 
@@ -5324,28 +5322,28 @@ async def doctor() -> dict[str, Any]:
     try:
         info["zhipu_connection_test"] = await _test_zhipu_connection()
     except httpx.TimeoutException:
-        info["zhipu_connection_test"] = {"status": "timeout", "message": "智谱 API 请求超时"}
+        info["zhipu_connection_test"] = {"status": "timeout", "message": source_message('智谱 API 请求超时')}
     except Exception as e:
         info["zhipu_connection_test"] = {"status": "error", "message": sanitize_provider_error_message(e)}
 
     try:
         info["zhipu_mcp_connection_test"] = await _test_zhipu_mcp_connection()
     except httpx.TimeoutException:
-        info["zhipu_mcp_connection_test"] = {"status": "timeout", "message": "智谱 Coding Plan MCP 请求超时"}
+        info["zhipu_mcp_connection_test"] = {"status": "timeout", "message": source_message('智谱 Coding Plan MCP 请求超时')}
     except Exception as e:
         info["zhipu_mcp_connection_test"] = {"status": "error", "message": sanitize_provider_error_message(e)}
 
     try:
         info["context7_connection_test"] = await _test_context7_connection()
     except httpx.TimeoutException:
-        info["context7_connection_test"] = {"status": "timeout", "message": "Context7 API 请求超时"}
+        info["context7_connection_test"] = {"status": "timeout", "message": source_message('Context7 API 请求超时')}
     except Exception as e:
         info["context7_connection_test"] = {"status": "error", "message": sanitize_provider_error_message(e)}
 
     try:
         info["tinyfish_connection_test"] = await _test_tinyfish_connection()
     except httpx.TimeoutException:
-        info["tinyfish_connection_test"] = {"status": "timeout", "message": "TinyFish API 请求超时"}
+        info["tinyfish_connection_test"] = {"status": "timeout", "message": source_message('TinyFish API 请求超时')}
     except Exception as e:
         info["tinyfish_connection_test"] = {"status": "error", "message": sanitize_provider_error_message(e)}
 
@@ -5383,7 +5381,7 @@ async def doctor() -> dict[str, Any]:
             info["jev_connection_test"] = {"status": "ok", "model": settings.model, "usage": client.usage()}
             main_search_ok = main_search_ok if settings.synthesis_mode == "true" else True
             if not main_provider_configs and settings.synthesis_mode != "true":
-                info["primary_connection_test"] = {"status": "not_required", "message": "Jev evidence mode does not require a main model"}
+                info["primary_connection_test"] = {"status": "not_required", "message": source_message('Jev evidence mode does not require a main model')}
         except (ValueError, ProviderCallError) as exc:
             error_type, error = classify_provider_exception(exc)
             info["jev_connection_test"] = {"status": "error", "error_type": error_type, "message": error}
@@ -5439,8 +5437,7 @@ def set_model(model: str) -> dict[str, Any]:
         "ok": False,
         "error_type": "parameter_error",
         "error": (
-            "The legacy default model command was removed. Use `smart-search config set XAI_MODEL <model>` "
-            "or `smart-search config set OPENAI_COMPATIBLE_MODEL <model>`."
+            source_message('The legacy default model command was removed. Use `smart-search config set XAI_MODEL <model>` or `smart-search config set OPENAI_COMPATIBLE_MODEL <model>`.')
         ),
         "config_file": str(config.config_file),
     }
@@ -5531,7 +5528,7 @@ async def smoke(mode: str = "mock") -> dict[str, Any]:
     start = time.time()
     mode = (mode or "mock").strip().lower()
     if mode not in {"mock", "live"}:
-        return {"ok": False, "error_type": "parameter_error", "error": "mode must be mock or live"}
+        return {"ok": False, "error_type": "parameter_error", "error": source_message('mode must be mock or live')}
     if mode == "live":
         return await _smoke_live(start)
     return await _smoke_mock(start)

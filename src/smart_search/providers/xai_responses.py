@@ -1,3 +1,4 @@
+from ..i18n import source_message
 import asyncio
 import json
 import logging
@@ -50,7 +51,7 @@ class XAIResponsesSearchProvider(BaseSearchProvider):
             return httpx.Timeout(connect=6.0, read=config.search_timeout_or_default, write=10.0, pool=None)
         remaining = self._search_deadline_monotonic - time.monotonic()
         if remaining <= 0:
-            raise asyncio.TimeoutError("main_search deadline exhausted")
+            raise asyncio.TimeoutError(source_message('main_search deadline exhausted'))
         bounded = max(0.001, remaining)
         return httpx.Timeout(
             connect=min(6.0, bounded),

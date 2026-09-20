@@ -214,8 +214,8 @@ def test_release_version_metadata_and_tarball_support_are_synchronized():
 
 
 def test_release_docs_explain_beta_lane_and_npm_immutability():
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    readme_zh = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    readme = (ROOT / "docs/guide/en/development.md").read_text(encoding="utf-8")
+    readme_zh = (ROOT / "docs/guide/zh-CN/development.md").read_text(encoding="utf-8")
     public_contract = read_reference_tree(ROOT / "skills" / "smart-search-cli")
     packaged_contract = read_reference_tree(
         ROOT / "src" / "smart_search" / "assets" / "skills" / "smart-search-cli"

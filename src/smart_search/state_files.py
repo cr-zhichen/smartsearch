@@ -1,4 +1,5 @@
 """Cross-process transactions for the existing JSON state files."""
+from .i18n import source_message
 from contextlib import contextmanager
 import os
 from pathlib import Path
@@ -16,7 +17,7 @@ def file_lock(path: Path, timeout: float = 5.0):
     with _guard:
         lock = _locks.setdefault(name, threading.RLock())
     if not lock.acquire(timeout=timeout):
-        raise TimeoutError("State file is busy; retry the operation.")
+        raise TimeoutError(source_message('State file is busy; retry the operation.'))
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(path.with_name(path.name + ".lock"), os.O_RDWR | os.O_CREAT, 0o600)
@@ -36,7 +37,7 @@ def file_lock(path: Path, timeout: float = 5.0):
                     break
                 except OSError:
                     if time.monotonic() >= deadline:
-                        raise TimeoutError("State file is busy; retry the operation.") from None
+                        raise TimeoutError(source_message('State file is busy; retry the operation.')) from None
                     time.sleep(0.02)
             try:
                 yield

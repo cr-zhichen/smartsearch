@@ -146,8 +146,8 @@ def _readme_urls() -> set[str]:
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent
-    text = (root / "README.md").read_text(encoding="utf-8")
-    text += (root / "README.zh-CN.md").read_text(encoding="utf-8")
+    text = (root / "docs/guide/en/configuration.md").read_text(encoding="utf-8")
+    text += (root / "docs/guide/zh-CN/configuration.md").read_text(encoding="utf-8")
     return set(re.findall(r"https://[^\s)\]|`\"']+", text))
 
 
@@ -164,7 +164,7 @@ def test_every_link_is_documented_in_the_readme():
             if not url:
                 continue
             assert url in documented, (
-                f"{item.key}.{label} = {url} is not in README.md or README.zh-CN.md. "
+                f"{item.key}.{label} = {url} is not in the bilingual configuration guide. "
                 "Add it to the provider table there first, or remove it here."
             )
 

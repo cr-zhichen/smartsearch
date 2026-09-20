@@ -9,6 +9,14 @@ import sys
 import httpx
 import pytest
 
+from smart_search.i18n import use_language
+
+
+@pytest.fixture(autouse=True)
+def chinese_presentation():
+    with use_language("zh"):
+        yield
+
 from smart_search import activity, service, ui_api
 from smart_search.config import config
 
@@ -61,7 +69,7 @@ def test_preview_matches_environment_and_disabled_provider(monkeypatch):
     assert preview["missing"] == ["web_fetch"]
     config.set_config_value("TAVILY_ENABLED", "false")
     assert preview["capability_status"] == service.get_capability_status()
-    with pytest.raises(ValueError, match="Invalid XAI_TOOLS"):
+    with use_language("en"), pytest.raises(ValueError, match="Invalid XAI_TOOLS"):
         config.set_config_value("XAI_TOOLS", "web_search,bogus")
 
 

@@ -43,3 +43,23 @@ bash desktop/scripts/build-macos.sh --architecture arm64 --python python3
 下载显示实际字节进度，可取消重试，写临时文件并验证大小和 SHA256 后才可打开。Windows 会先要求处理草稿和 App 自有任务，再退出并打开当前用户安装器；macOS 打开 DMG，由用户正常安装。下载完成和安装器启动都不等于安装完成，重新启动后核对实际版本。SHA256 不等同系统代码签名。
 
 独立 CLI 只在确认属于普通全局 npm 或全局 mise npm 时可更新。点击前展示当前来源、路径和确切目标版本；执行仅针对 Smart Search，保留原管理器，并读回实际版本。复杂 mise 工具选项、项目范围、版本约束、未知或冲突来源保留手动说明，不改 PATH。管理器运行期间保持 App 打开，不强制取消外部任务。CLI 状态刷新会重新读取路径和版本，不执行可能自动修复运行环境的公开 wrapper。
+
+## 环境准备与 App/CLI 解耦
+
+AI 接入页提供“检测环境 → 安装缺少的组件 → 验证可用性”。健康的 Node/npm、支持 venv/pip 的 Python 和明确来源的 CLI 优先复用。缺失时从 Node 官方 LTS 发行版和经校验的 uv/Astral CPython 准备运行环境，再安装锁定的 npm 稳定版 CLI；无需预装 mise，也不代装或登录 Codex/Claude Code。
+
+新环境位于 `%LOCALAPPDATA%/SmartSearchTools` 或 `~/.local/share/smart-search-tools`，独立 npm prefix 在其 `cli` 子目录。它们不是 App 文件，关闭、更新或卸载 App 不会移除它们。AI 接入文件包含独立 Node 和 npm CLI 的绝对调用路径。Windows 为新安装补充自己的用户 PATH 项并提示重新打开 AI/终端；macOS 不修改 shell 配置，图形 AI 可以按技能中的完整路径调用。
+
+“接入文件就绪”“CLI 可运行”和“AI 内实际调用”分别呈现；没有搜索 Key 时提示去配置服务商，不要求重装。检查不发收费请求，AI 内的实际调用通过复制测试指引完成。Codex 写入 `.agents/skills` 并报告旧 `.codex/skills` 副本；Claude 支持个人目录和 `CLAUDE_CONFIG_DIR`。内容不同的文件默认保留，勾选替换才备份后更新，备份位于独立环境的 `skill-backups`。
+
+安装失败保留已成功组件，重新检测后补缺。只有下载可取消；包管理器写入期间保持 App 打开。实现检查必须使用隔离配置、环境和技能目录；Windows x64 的实测不代表 macOS/ARM64 或真实 AI 会话已经验证。
+
+## 双语界面与手册
+
+App 在设置页选择自动、简体中文或 English，偏好独立于 CLI 保存。
+App 将当前语言传给私有后端；切换保留草稿与任务，环境写入或 CLI 更新期间暂不可切换。
+CLI 通过 `SMART_SEARCH_LANGUAGE` 和单次 `--lang` 选择语言，命令名、机器字段及来源原文不翻译。
+共享语言资源位于 `src/smart_search/assets/i18n/messages.json`，Windows 直接嵌入，macOS 资源副本须保持字节一致。
+
+用户入口见[双语手册](../docs/guide/README.md)，命令和配置参考通过
+`python scripts/generate_references.py` 从当前实现更新。这些新增能力仍属于开发候选，未因此发布或覆盖正式安装。
