@@ -62,4 +62,4 @@ CLI 通过 `SMART_SEARCH_LANGUAGE` 和单次 `--lang` 选择语言，命令名�
 共享语言资源位于 `src/smart_search/assets/i18n/messages.json`，Windows 直接嵌入，macOS 资源副本须保持字节一致。
 
 用户入口见[双语手册](../docs/guide/README.md)，命令和配置参考通过
-`python scripts/generate_references.py` 从当前实现更新。这些新增能力仍属于开发候选，未因此发布或覆盖正式安装。
+`python scripts/generate_references.py` 从当前实现更新。环境准备与完整语言切换从 v0.1.21 起提供；本地构建脚本不会覆盖已安装的 App。

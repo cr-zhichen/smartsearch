@@ -40,7 +40,7 @@ These tasks need information from the web and a way to trace it back to its sour
 
 Provider tests and searches may use your providers' paid quota. Opening the App or checking the local environment does not run a paid search.
 
-The current development branch adds environment preparation and full language switching. These features are not yet in the published v0.1.20 stable package. See the release notes for the build you download. Desktop packages are currently unsigned; macOS and Windows ARM64 device validation is still pending.
+Version 0.1.21 adds environment preparation and full App/CLI language switching. Desktop packages are currently unsigned; macOS and Windows ARM64 device validation is still pending.
 
 [App setup, supported platforms, and troubleshooting →](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/app.md)
 

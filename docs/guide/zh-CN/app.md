@@ -6,7 +6,7 @@
 
 在[发行页](https://github.com/konbakuyomu/smartsearch/releases/latest)下载适合系统与架构的安装包。Windows 安装到当前用户目录。App 自带运行环境，使用 App 不需要先安装 Python、Node.js 或独立 CLI。
 
-本手册对应当前源码。环境准备和完整 App/CLI 语言切换属于开发版功能，稳定版 v0.1.20 尚不包含，下载时请核对发行说明。桌面包未签名；macOS、Windows ARM64、干净机器安装和完整 DPI 矩阵尚未全部完成实机验收。
+环境准备和完整 App/CLI 语言切换从 v0.1.21 起提供。桌面包未签名；macOS、Windows ARM64、干净机器安装和完整 DPI 矩阵尚未全部完成实机验收。
 
 从开始菜单或“应用程序”打开 **Smart Search**。已有配置会被复用；“概览”会提示主搜索、文档检索或网页读取能力是否缺失。
 

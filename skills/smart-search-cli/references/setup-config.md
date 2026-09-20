@@ -117,6 +117,6 @@
 
 ## Language and complete handbook
 
-The current source supports `smart-search --lang en --help`, `smart-search search QUERY --lang zh`, and saved `SMART_SEARCH_LANGUAGE=auto|zh|en` through `config set`. Priority is per-call flag, dedicated environment variable, saved configuration, then system locale. Command/JSON identifiers and source content stay unchanged. App language is independent. These additions are not in stable v0.1.20; consult the selected release notes.
+From v0.1.21, Smart Search supports `smart-search --lang en --help`, `smart-search search QUERY --lang zh`, and saved `SMART_SEARCH_LANGUAGE=auto|zh|en` through `config set`. Priority is per-call flag, dedicated environment variable, saved configuration, then system locale. Command/JSON identifiers and source content stay unchanged. App language is independent.
 
 The [bilingual handbook](https://github.com/konbakuyomu/smartsearch/tree/main/docs/guide) contains the [complete command reference](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/cli-reference.md) and [all saved configuration keys](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/configuration-reference.md).

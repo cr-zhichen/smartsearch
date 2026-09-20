@@ -40,7 +40,7 @@ Smart Search 把搜索和网页读取服务接到 Codex、Claude Code 等 AI 工
 
 服务商测试和搜索可能消耗相应服务的付费额度。打开 App 或检查本机环境不会发起付费搜索。
 
-当前开发分支新增了环境准备与完整语言切换，已发布的 v0.1.20 稳定包尚不包含这些功能。下载版本的功能请看对应发行说明。桌面安装包目前未签名，macOS 与 Windows ARM64 实机验证仍待完成。
+v0.1.21 新增了环境准备与完整的 App/CLI 语言切换。桌面安装包目前未签名，macOS 与 Windows ARM64 实机验证仍待完成。
 
 [查看 App 配置步骤、支持平台和排障说明 →](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/zh-CN/app.md)
 

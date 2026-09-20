@@ -6,7 +6,7 @@
 
 Download the package for your operating system and architecture from [Releases](https://github.com/konbakuyomu/smartsearch/releases/latest). Windows installs for the current user. The App includes its own runtime; using the App does not require a separate Python, Node.js, or CLI installation.
 
-This guide describes the current source tree. Environment preparation and full App/CLI language switching are development features, absent from stable v0.1.20. Check your build's release notes. Desktop packages are unsigned; macOS, Windows ARM64, clean-machine installation, and the complete DPI matrix have not all been validated on devices.
+Environment preparation and full App/CLI language switching are available from v0.1.21. Desktop packages are unsigned; macOS, Windows ARM64, clean-machine installation, and the complete DPI matrix have not all been validated on devices.
 
 Open **Smart Search** from the Start menu or Applications. Existing configuration is reused. Overview shows whether you have providers for main search, documentation lookup, and page reading.
 

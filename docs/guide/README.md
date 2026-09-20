@@ -15,8 +15,8 @@ Choose a language. The pages in each column cover the same features.
 | [Troubleshooting](en/troubleshooting.md) | [排障](zh-CN/troubleshooting.md) |
 | [Development and releases](en/development.md) | [开发与发布](zh-CN/development.md) |
 
-This guide describes the current source tree. App environment preparation and full App/CLI language switching are being prepared for release; they are not features of the published v0.1.20 stable package. Check the [release notes](https://github.com/konbakuyomu/smartsearch/releases) for the features in a downloaded build.
+This guide covers v0.1.21, including App environment preparation and full App/CLI language switching. Check the [release notes](https://github.com/konbakuyomu/smartsearch/releases) when using an older build.
 
-本手册对应当前源码。App 环境准备和完整的 App/CLI 语言切换正在准备发布，已发布的 v0.1.20 稳定包尚不包含这些功能。下载版本的功能以[发行说明](https://github.com/konbakuyomu/smartsearch/releases)为准。
+本手册对应 v0.1.21，包含 App 环境准备和完整的 App/CLI 语言切换。使用旧版本时，请核对对应的[发行说明](https://github.com/konbakuyomu/smartsearch/releases)。
 
 [Project home / 项目首页](../../README.md) · [中文首页](../../README.zh-CN.md)
