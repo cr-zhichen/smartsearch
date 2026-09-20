@@ -165,6 +165,8 @@ async def test_backend_protocol_catalog_and_real_worker(tmp_path):
     assert not {"config/set", "skills/update", "setup", "ui"} & catalog.keys()
     fields = {f["name"] for f in catalog["search"]["fields"]}
     assert {"stream", "no_stream"} <= fields
+    assert any("\u4e00" <= character <= "\u9fff" for character in catalog["search"]["description"])
+    assert all(any("\u4e00" <= char <= "\u9fff" for char in item["description"]) for item in catalog.values())
     with pytest.raises(ValueError):
         await backend.handle("run.start", {"command": "config/set", "arguments": ["EXA_API_KEY", "no"]})
     launch = await backend.handle("run.start", {"command": "route", "arguments": ["中文路由", "--router-mode", "rules"]})
@@ -233,11 +235,12 @@ async def test_private_tasks_snapshot_cancel_and_secret_echo(tmp_path):
         assert backend.run_result(fast["run_id"])["status"] == "finished"
         assert seen[:2] == ["old-synthetic-secret", "new-synthetic-secret"]
         check = (await backend.handle("get_state", {}))["provider_checks"]["exa"]
-        assert check["scope"] == "draft" and check["source"] == "app" and check["checked_at"] > 0
+        assert check["scope"] == "current" and check["source"] == "app" and check["checked_at"] > 0
         echo = await backend.handle("provider.test", {"provider": "exa", "overrides": {"EXA_API_KEY": "echo-synthetic-secret"}})
         await asyncio.wait_for(backend.runs[echo["run_id"]]["task"], 10)
         assert "echo-synthetic-secret" not in json.dumps(backend.run_result(echo["run_id"]))
-        assert (await backend.handle("get_state", {}))["provider_checks"]["exa"]["status"] == "warning"
+        echo_check = (await backend.handle("get_state", {}))["provider_checks"]["exa"]
+        assert echo_check["status"] == "warning" and echo_check["scope"] == "draft"
         assert not (tmp_path / "provider_health.json").exists()
         assert config.exa_api_key == "new-synthetic-secret"
         journal = (tmp_path / "activity.sqlite3").read_bytes()

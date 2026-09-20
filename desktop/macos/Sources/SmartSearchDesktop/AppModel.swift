@@ -53,6 +53,7 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var noticeMessage: String?
     @Published private(set) var isBusy: Set<String> = []
+    private var operations = OperationState()
 
     @Published var configDraft: [String: String] = [:]
     @Published var clearSecretKeys: Set<String> = []
@@ -100,7 +101,8 @@ final class AppModel: ObservableObject {
 
     func connect() async {
         guard !isBusy.contains("connect") else { return }
-        begin("connect")
+        clearOperations()
+        guard begin("connect") else { return }
         intentionalShutdown = false
         connection = .connecting
         errorMessage = nil
@@ -127,7 +129,7 @@ final class AppModel: ObservableObject {
 
     func refreshState() async {
         guard connection == .ready else { return }
-        begin("state")
+        guard begin("state") else { return }
         defer { end("state") }
         do {
             applyState(try await backend.request(method: "get_state"))
@@ -138,7 +140,7 @@ final class AppModel: ObservableObject {
 
     func refreshActivity() async {
         guard connection == .ready, !isBusy.contains("activity") else { return }
-        begin("activity")
+        guard begin("activity") else { return }
         defer { end("activity") }
         var params: [String: JSONValue] = [:]
         let directories = Array(Set(([state?.configDirectory].compactMap { $0 }) + observedDirectories)).sorted()
@@ -167,6 +169,8 @@ final class AppModel: ObservableObject {
 
     func refreshCLIStatus() async {
         guard connection == .ready else { return }
+        guard begin("cli.status") else { return }
+        defer { end("cli.status") }
         do {
             cliStatus = try await backend.request(method: "cli.status")
         } catch {
@@ -176,6 +180,8 @@ final class AppModel: ObservableObject {
 
     func refreshSkillStatus() async {
         guard connection == .ready else { return }
+        guard begin("skills.status") else { return }
+        defer { end("skills.status") }
         do {
             let result = try await backend.request(method: "skills.status")
             skillStatuses = Dictionary(uniqueKeysWithValues: (result["targets"]?.arrayValue ?? []).compactMap { value in
@@ -235,7 +241,11 @@ final class AppModel: ObservableObject {
 
     func selectProfile(_ directory: String) async {
         guard connection == .ready else { return }
-        begin("profile")
+        guard configDraft.isEmpty && clearSecretKeys.isEmpty else {
+            errorMessage = "还有未保存的修改，请先保存或放弃，再切换配置目录。"
+            return
+        }
+        guard begin("profile") else { return }
         defer { end("profile") }
         do {
             applyState(try await backend.request(method: "profile.select", params: .object(["config_dir": .string(directory)])))
@@ -273,9 +283,10 @@ final class AppModel: ObservableObject {
     }
 
     func setDraft(_ value: String, for field: ConfigField) {
-        guard !isEnvironmentReadOnly(field) else { return }
+        guard !isEnvironmentReadOnly(field), !isBusy.contains("save") else { return }
+        configPreview = nil
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
+        if trimmed.isEmpty || (!field.isSecret && trimmed == state?.effectiveValue(for: field)) {
             configDraft.removeValue(forKey: field.key) // Empty secret input means KEEP.
         } else {
             configDraft[field.key] = value
@@ -284,12 +295,13 @@ final class AppModel: ObservableObject {
     }
 
     func clearSecret(_ field: ConfigField) {
-        guard field.isSecret, !isEnvironmentReadOnly(field) else { return }
+        guard field.isSecret, !isEnvironmentReadOnly(field), !isBusy.contains("save") else { return }
         configDraft.removeValue(forKey: field.key)
         clearSecretKeys.insert(field.key)
     }
 
     func keepSecret(_ field: ConfigField) {
+        guard !isBusy.contains("save") else { return }
         clearSecretKeys.remove(field.key)
         configDraft.removeValue(forKey: field.key)
     }
@@ -315,10 +327,12 @@ final class AppModel: ObservableObject {
 
     func previewConfig() async {
         guard connection == .ready else { return }
-        begin("preview")
+        guard begin("preview") else { return }
         defer { end("preview") }
+        let parameters = configMutationParameters(includeRevision: false)
         do {
-            configPreview = try await backend.request(method: "config.preview", params: configMutationParameters(includeRevision: false))
+            let preview = try await backend.request(method: "config.preview", params: parameters)
+            if parameters == configMutationParameters(includeRevision: false) { configPreview = preview }
         } catch {
             present(error)
         }
@@ -330,7 +344,7 @@ final class AppModel: ObservableObject {
             errorMessage = "没有可用的配置版本，请先刷新后再保存。"
             return
         }
-        begin("save")
+        guard begin("save") else { return }
         defer { end("save") }
         var params = configMutationParameters(includeRevision: false).objectValue ?? [:]
         params["revision"] = revision
@@ -338,13 +352,13 @@ final class AppModel: ObservableObject {
             let result = try await backend.request(method: "config.apply", params: .object(params))
             guard result["ok"]?.boolValue == true else {
                 errorMessage = result["error_type"]?.stringValue == "conflict"
-                    ? "配置已被其他进程修改；草稿已保留，请刷新后核对。"
-                    : "后端没有保存配置；草稿已保留。"
+                    ? "配置已被其他进程修改；你改的内容还在，请刷新后核对。"
+                    : "后端没有保存配置；你改的内容还在。"
                 return
             }
             // config.apply returns a compact status snapshot; get_state restores the
             // metadata and command catalog that the native form needs.
-            await refreshState()
+            applyState(try await backend.request(method: "get_state"))
             resetConfigDraft()
             noticeMessage = "配置已保存。后续新任务会使用新版本；正在运行的任务不受影响。"
         } catch {
@@ -354,7 +368,7 @@ final class AppModel: ObservableObject {
 
     func testProvider(_ provider: String) async {
         guard connection == .ready, let state else { return }
-        begin("test:\(provider)")
+        guard begin("test:\(provider)") else { return }
         defer { end("test:\(provider)") }
         let providerKeys = Set(state.fields.filter { $0.provider == provider }.map(\.key))
         var overrides = configDraft.reduce(into: [String: JSONValue]()) { partial, item in
@@ -372,12 +386,13 @@ final class AppModel: ObservableObject {
                 "overrides": .object(overrides),
             ]))
             guard result["ok"]?.boolValue == true, let runID = result["run_id"]?.stringValue else {
-                errorMessage = "后端未能开始草稿测试；正式配置没有改变。"
+                errorMessage = "后端未能开始测试；配置没有改变。"
                 return
             }
             ownedActiveRunIDs.insert(runID)
-            ownedRunResults.register(runID: runID, kind: .providerTest, label: "测试 \(provider) 草稿")
-            noticeMessage = "正在测试当前草稿，结果会出现在活动页。"
+            ownedRunResults.register(runID: runID, kind: .providerTest, label: "测试 \(provider)")
+            trackRun(runID, key: "test:\(provider)")
+            await recoverRun(runID)
             await refreshActivity()
         } catch {
             present(error)
@@ -423,7 +438,7 @@ final class AppModel: ObservableObject {
             errorMessage = "请填写必填项：\(missing.map(\.label).joined(separator: "、"))。"
             return
         }
-        begin("run:\(command.id)")
+        guard begin("run:\(command.id)") else { return }
         defer { end("run:\(command.id)") }
         do {
             let arguments = CommandArgumentBuilder.arguments(for: command, values: commandValues, booleans: commandBooleans)
@@ -437,10 +452,12 @@ final class AppModel: ObservableObject {
             }
             ownedActiveRunIDs.insert(runID)
             ownedRunResults.register(runID: runID, kind: .business, label: command.label)
+            trackRun(runID, key: "run:\(command.id)")
             selectedBusinessRunID = runID
             currentResult = nil
             currentResultCommand = command.label
             noticeMessage = "操作已开始，进度会显示在活动页。"
+            await recoverRun(runID)
             await refreshActivity()
         } catch {
             present(error)
@@ -449,11 +466,13 @@ final class AppModel: ObservableObject {
 
     func cancel(_ run: ActivityRun) async {
         guard ownedActiveRunIDs.contains(run.runID), run.isActive, connection == .ready else { return }
-        begin("cancel:\(run.runID)")
+        guard begin("cancel:\(run.runID)") else { return }
         defer { end("cancel:\(run.runID)") }
         do {
             let result = try await backend.request(method: "run.cancel", params: .object(["run_id": .string(run.runID)]))
             if result["ok"]?.boolValue == true {
+                if ownedActiveRunIDs.contains(run.runID) { trackRun(run.runID, key: "cancel:\(run.runID)") }
+                await recoverRun(run.runID)
                 noticeMessage = "已请求取消，等待后端确认最终状态。"
             } else {
                 errorMessage = "后端未接受取消请求；任务仍保持原状态。"
@@ -473,7 +492,7 @@ final class AppModel: ObservableObject {
         activityResultRunID = nil
         activityResult = nil
         guard connection == .ready else { return }
-        begin("details:\(run.runID)")
+        guard begin("details:\(run.runID)") else { return }
         defer { end("details:\(run.runID)") }
         var params: [String: JSONValue] = ["run_id": .string(run.runID)]
         if let directory = run.configDirectory { params["config_dir"] = .string(directory) }
@@ -491,7 +510,7 @@ final class AppModel: ObservableObject {
             errorMessage = "请至少选择一个目标后再安装或更新。"
             return
         }
-        begin("skills")
+        guard begin("skills") else { return }
         defer { end("skills") }
         do {
             let result = try await backend.request(method: "skills.install", params: .object([
@@ -507,7 +526,9 @@ final class AppModel: ObservableObject {
                 kind: .skillsInstall,
                 label: "Skills 安装或更新（\(selectedSkillTargets.count) 个目标）"
             )
+            trackRun(runID, key: "skills")
             noticeMessage = "Skills 安装或更新已开始。"
+            await recoverRun(runID)
             await refreshActivity()
         } catch {
             present(error)
@@ -516,7 +537,7 @@ final class AppModel: ObservableObject {
 
     func enableBundledCLI() async {
         guard connection == .ready else { return }
-        begin("cli.enable")
+        guard begin("cli.enable") else { return }
         defer { end("cli.enable") }
         do {
             let result = try await backend.request(method: "cli.enable", params: .object(["confirm": .bool(true)]))
@@ -533,6 +554,8 @@ final class AppModel: ObservableObject {
 
     func setActivityEnabled(_ enabled: Bool) async {
         guard connection == .ready else { return }
+        guard begin("activity-setting") else { return }
+        defer { end("activity-setting") }
         let priorValue = activityEnabled
         activityEnabled = enabled
         do {
@@ -549,7 +572,7 @@ final class AppModel: ObservableObject {
 
     func clearActivityHistory() async {
         guard connection == .ready else { return }
-        begin("clear-activity")
+        guard begin("clear-activity") else { return }
         defer { end("clear-activity") }
         do {
             let result = try await backend.request(method: "activity.clear")
@@ -566,7 +589,7 @@ final class AppModel: ObservableObject {
 
     func checkForUpdates() async {
         guard connection == .ready else { return }
-        begin("update")
+        guard begin("update") else { return }
         defer { end("update") }
         do {
             updateResult = try await backend.request(method: "app.update-check")
@@ -611,12 +634,16 @@ final class AppModel: ObservableObject {
             _ = try? await backend.request(method: "run.cancel", params: .object(["run_id": .string(runID)]))
         }
         ownedActiveRunIDs.removeAll()
+        clearOperations()
         await backend.shutdown()
         connection = .disconnected
     }
 
     func displayLabel(for run: ActivityRun) -> String {
-        ownedRunResults.descriptor(for: run.runID)?.label ?? run.command
+        ownedRunResults.descriptor(for: run.runID)?.label
+            ?? state?.commands.first { $0.id == run.command }?.label
+            ?? ["provider.test": "服务商测试", "version": "版本查询", "skills.install": "安装 / 更新 Skills"][run.command]
+            ?? "其他任务"
     }
 
     func hasOwnedResult(for run: ActivityRun) -> Bool {
@@ -705,6 +732,7 @@ final class AppModel: ObservableObject {
     private func receive(_ event: BackendEvent) {
         switch event.name {
         case "activity":
+            Task { await reconcileRuns() }
             // Backend push events cover its active profile.  With user-added directories,
             // refresh the explicitly scoped aggregate instead of silently dropping rows.
             if !observedDirectories.isEmpty {
@@ -725,11 +753,13 @@ final class AppModel: ObservableObject {
                 upsert(run)
             }
         case "run":
-            guard let runID = event.data["run_id"]?.stringValue else { return }
+            guard let runID = event.data["run_id"]?.stringValue, ownedActiveRunIDs.contains(runID) else { return }
             let status = event.data["status"]?.stringValue ?? "unknown"
-            if let run = ActivityRun(event.data) { upsert(run) }
+            if event.data["command"] != nil, let run = ActivityRun(event.data) { upsert(run) }
             if ["finished", "failed", "cancelled", "stale", "interrupted"].contains(status) {
                 ownedActiveRunIDs.remove(runID)
+                operations.finish(runID)
+                isBusy = operations.busyKeys
                 let descriptor = ownedRunResults.descriptor(for: runID)
                 if let result = event.data["result"], result != .null,
                    let descriptor = ownedRunResults.cache(result.redacted(), for: runID) {
@@ -741,11 +771,13 @@ final class AppModel: ObservableObject {
                 if descriptor?.kind == .providerTest {
                     // get_state carries only this backend's in-memory draft check map;
                     // applying it leaves the user's unsaved native draft and destination intact.
-                    Task { await refreshState() }
+                    Task { await refreshProviderChecks() }
                 }
+                if descriptor?.kind == .skillsInstall { Task { await refreshSkillStatus() } }
                 Task { await refreshActivity() }
             }
         case "backend.exited":
+            clearOperations()
             if intentionalShutdown {
                 connection = .disconnected
             } else {
@@ -753,6 +785,7 @@ final class AppModel: ObservableObject {
                 errorMessage = "后端进程已退出；上次状态保留时间标记，不再表示当前正常。"
             }
         case "backend.protocol-error":
+            clearOperations()
             connection = .failed
             errorMessage = "后端输出不符合桌面协议；没有把它当作正常状态读取。"
         default:
@@ -773,8 +806,67 @@ final class AppModel: ObservableObject {
         UserDefaults.standard.set(observedDirectories, forKey: DefaultsKey.observedDirectories)
     }
 
-    private func begin(_ identifier: String) { isBusy.insert(identifier) }
-    private func end(_ identifier: String) { isBusy.remove(identifier) }
+    var configOperationBusy: Bool { !isBusy.isDisjoint(with: ["state", "save", "preview", "profile"]) }
+
+    private func begin(_ identifier: String) -> Bool {
+        if ["state", "save", "preview", "profile"].contains(identifier), configOperationBusy { return false }
+        guard operations.begin(identifier) else { return false }
+        isBusy = operations.busyKeys
+        return true
+    }
+
+    private func end(_ identifier: String) {
+        operations.endRequest(identifier)
+        isBusy = operations.busyKeys
+    }
+
+    private func trackRun(_ runID: String, key: String) {
+        operations.track(runID, key: key)
+        isBusy = operations.busyKeys
+    }
+
+    private func clearOperations() {
+        operations.reset()
+        isBusy = []
+        ownedActiveRunIDs.removeAll()
+    }
+
+    private func recoverRun(_ runID: String) async {
+        guard connection == .ready, ownedActiveRunIDs.contains(runID) else { return }
+        let generation = state?.generation
+        if let result = try? await backend.request(method: "run.result", params: .object(["run_id": .string(runID)])),
+           state?.generation == generation {
+            receive(BackendEvent(name: "run", data: result, generation: generation))
+        }
+    }
+
+    private func reconcileRuns() async {
+        guard begin("reconcile") else { return }
+        defer { end("reconcile") }
+        for runID in Array(ownedActiveRunIDs) { await recoverRun(runID) }
+    }
+
+    private func refreshProviderChecks() async {
+        guard connection == .ready else { return }
+        let directory = state?.configDirectory
+        let generation = state?.generation
+        do {
+            let result = try await backend.request(method: "get_state")
+            guard state?.configDirectory == directory, state?.generation == generation,
+                  result["config_dir"]?.stringValue == directory,
+                  var snapshot = state?.raw.objectValue else { return }
+            snapshot["provider_checks"] = result["provider_checks"]
+            snapshot["provider_health"] = result["provider_health"]
+            // Probe completion must not silently adopt another process's config revision.
+            state = DesktopState(.object(snapshot))
+        } catch { present(error) }
+    }
+
+    func providerTestLabel(_ provider: String) -> String {
+        let keys = Set(state?.fields.filter { $0.provider == provider }.map(\.key) ?? [])
+        return keys.contains { configDraft[$0] != nil || clearSecretKeys.contains($0) }
+            ? "用未保存的修改测试" : "测试"
+    }
 
     private func present(_ error: Error) {
         errorMessage = (error as? LocalizedError)?.errorDescription ?? "操作未完成。"

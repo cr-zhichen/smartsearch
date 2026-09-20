@@ -45,7 +45,10 @@ Methods below return result objects. Ordinary business errors have `ok:false`.
 `run.start` catalog identifiers can include subcommands, e.g.
 `model/current`. `diagnose` selects its provider via its catalog fields. Arguments do not repeat command
 tokens. A secret configuration mutation uses `config.apply`, not CLI arguments.
-`provider.test` always tests a draft snapshot; no health changes are persisted.
+`provider.test` tests a snapshot of the effective configuration at click time,
+merged with any actual edits. No configuration or health changes are persisted.
+Its completion scope is `current` when overrides are empty and `draft` when edits
+are supplied. UI labels say “测试” or “用未保存的修改测试” accordingly.
 
 Full state extends `smart_search.ui_api.state()`:
 
@@ -54,12 +57,13 @@ Full state extends `smart_search.ui_api.state()`:
 - `minimum_profile` (`ok/required/missing`), `capability_status`,
   `capability_chains`, `provider_health`, `provider_profiles`, `probe_kinds`;
 - `provider_checks`: last in-memory test per provider for this App session, with
-  `status/checked_at/source/scope/probe/message`. Scope is `draft`, and a draft
+  `status/checked_at/source/scope/probe/message`. Scope is `current` or `draft`, and a draft
   test must never be described as a verified saved configuration. No entry means
   not tested during this session; cooldown `closed` alone is not a successful probe.
-- `metadata.fields`: key, section, tier, kind, label_zh/en, help_zh/en, default,
+- `metadata.fields`: key, section, tier, kind, label_zh/en, help_zh/en, default, placeholder,
   choices, provider, capabilities, key_url, docs_url; sections include
-  getting_started, providers, routing, reliability, diagnostics;
+  getting_started, providers, routing, reliability, diagnostics. Consume
+  `metadata.sections` order, label_zh/en and blurb_zh/en instead of alphabetic ordering;
 - `skill_targets`: id, label, default;
 - `protocol_version:1`, `version`, `generation`, `config_dir`, `cli`,
   `commands` (catalog below), `activity` (activity.list result).

@@ -111,7 +111,7 @@ class Backend:
                 continue
             result = run["result"] or {}
             checks[run["provider"]] = {"status": result.get("status", run["status"]), "checked_at": run["finished_at"],
-                                       "source": "app", "scope": "draft", "probe": result.get("probe", "none"),
+                                       "source": "app", "scope": run["scope"], "probe": result.get("probe", "none"),
                                        "message": result.get("message", result.get("error", ""))}
         data["provider_checks"] = checks
         return data
@@ -235,7 +235,8 @@ class Backend:
                    "sources": config.get_config_sources(), "config_dir": self.directory, "run_id": run_id}
         run = {"run_id": run_id, "status": "running", "result": None, "process": None, "cancel_requested": False,
                "directory": self.directory, "command": command, "started_at": time.time(),
-               "provider": params.get("provider", "") if method == "provider.test" else ""}
+               "provider": params.get("provider", "") if method == "provider.test" else "",
+               "scope": "draft" if params.get("overrides") else "current"}
         self.runs[run_id] = run
         run["task"] = asyncio.create_task(self.execute(run, payload))
         # Results contain user content only in memory; keep a bounded recent set.

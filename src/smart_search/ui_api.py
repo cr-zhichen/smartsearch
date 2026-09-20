@@ -101,7 +101,7 @@ async def test_provider(payload: dict[str, Any]) -> dict[str, Any]:
         return _parameter_error("timeout_seconds must be a positive finite number")
     return await service.test_provider_connection(
         provider,
-        overrides={str(k): str(v) for k, v in (overrides or {}).items()} or None,
+        overrides={str(k): str(v) for k, v in overrides.items()} if overrides is not None else None,
         timeout_seconds=timeout_seconds,
     )
 

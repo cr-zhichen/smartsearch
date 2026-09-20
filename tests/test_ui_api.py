@@ -80,6 +80,27 @@ async def test_test_provider_delegates(isolated, monkeypatch):
     assert result["ok"] is True
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("overrides", [None, {}, {"EXA_API_KEY": "unsaved-synthetic-key"}])
+async def test_empty_override_keeps_explicit_snapshot_semantics(isolated, monkeypatch, overrides):
+    service.config.set_config_value("EXA_API_KEY", "saved-synthetic-key")
+    seen = []
+
+    async def probe():
+        seen.append(service.config.exa_api_key)
+        return {"status": "ok", "message": "fine"}
+
+    monkeypatch.setitem(service._LIVE_PROBES, "exa", probe)
+    payload = {"provider": "exa"}
+    if overrides is not None:
+        payload["overrides"] = overrides
+    result = await ui_api.test_provider(payload)
+    assert result["ok"]
+    assert result["recorded_as"] == ("exa" if overrides is None else "")
+    assert seen == [(overrides or {}).get("EXA_API_KEY", "saved-synthetic-key")]
+    assert service.config.exa_api_key == "saved-synthetic-key"
+
+
 def test_reset_health_validates_its_argument(isolated):
     assert ui_api.reset_health({"providers": "zhipu"})["error_type"] == "parameter_error"
     assert ui_api.reset_health({"providers": ["zhipu"]})["ok"] is True
