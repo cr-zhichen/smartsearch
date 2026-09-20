@@ -182,8 +182,12 @@ jobs:
           expected = {f'SmartSearch-{version}-win-{a}-Setup-unsigned-test.exe' for a in ('x64', 'arm64')}
           expected |= {f'SmartSearch-{version}-macos-{a}-unsigned-test.dmg' for a in ('x86_64', 'arm64')}
           root = pathlib.Path('release-packages')
-          files = sorted(p for p in root.iterdir() if p.is_file())
-          assert {p.name for p in files} == expected, 'Missing or unexpected platform packages'
+          files = sorted(p for p in root.rglob('*') if p.is_file())
+          assert len(files) == len(expected) and {p.name for p in files} == expected, 'Missing or unexpected platform packages'
+          for p in files:
+              if p.parent != root:
+                  p.rename(root / p.name)
+          files = sorted(root / name for name in expected)
           rows = [hashlib.file_digest(p.open('rb'), 'sha256').hexdigest() + '  ' + p.name for p in files]
           (root / 'SHA256SUMS.txt').write_text('\n'.join(rows) + '\n')
           PY
@@ -193,4 +197,4 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
-          gh release upload "$RELEASE_TAG" release-packages/* --repo "$GITHUB_REPOSITORY"
+          gh release upload "$RELEASE_TAG" release-packages/*.exe release-packages/*.dmg release-packages/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY"
