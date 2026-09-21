@@ -16114,5 +16114,17 @@
   "evidence-only final synthesis": [
     "仅依据已有证据生成结论",
     "evidence-only final synthesis"
+  ],
+  "操作提示": [
+    "操作提示",
+    "Operation messages"
+  ],
+  "查看操作提示": [
+    "查看操作提示",
+    "Show operation messages"
+  ],
+  "清除提示": [
+    "清除提示",
+    "Clear messages"
   ]
 }

@@ -10,6 +10,9 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var configurationSelection: ConfigurationRoute?
+    @State private var showingFeedback = false
+
+    private var hasFeedback: Bool { model.errorMessage != nil || model.noticeMessage != nil }
 
     var body: some View {
         NavigationSplitView {
@@ -45,25 +48,27 @@ struct ContentView: View {
                 .padding(16)
             }
         } detail: {
-            VStack(spacing: 0) {
-                if let error = model.errorMessage {
-                    MessageBanner(message: error, symbol: "exclamationmark.triangle.fill", tint: .red) {
-                        model.errorMessage = nil
-                    }
-                }
-                if let notice = model.noticeMessage {
-                    MessageBanner(message: notice, symbol: "checkmark.circle.fill", tint: .green) {
-                        model.noticeMessage = nil
-                    }
-                }
-                destinationView
-                    // Refresh translated controls without replacing the native navigation container.
-                    .id(model.languagePreference)
-            }
+            destinationView
+            // Refresh translated controls without replacing the native navigation container.
+            .id(model.languagePreference)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DesktopAppearance.contentBackground)
             .navigationTitle(model.selectedDestination.title)
             .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { showingFeedback.toggle() } label: {
+                        Label(L("操作提示"), systemImage: model.errorMessage == nil ? "info.circle" : "exclamationmark.circle")
+                    }
+                    .help(L("查看操作提示"))
+                    .disabled(!hasFeedback)
+                    .popover(isPresented: $showingFeedback, arrowEdge: .bottom) {
+                        OperationFeedback(error: model.errorMessage, notice: model.noticeMessage) {
+                            showingFeedback = false
+                            model.errorMessage = nil
+                            model.noticeMessage = nil
+                        }
+                    }
+                }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await model.refreshState() }
@@ -88,7 +93,21 @@ struct ContentView: View {
         .onChange(of: model.selectedDestination) { destination in
             Task { await model.enter(destination) }
         }
+        .onChange(of: model.errorMessage) { message in
+            if message != nil { showingFeedback = true }
+        }
+        .onChange(of: model.errorPresentationID) { _ in
+            if model.errorMessage != nil { showingFeedback = true }
+        }
+        .onReceive(model.$noticeMessage) { message in
+            // A repeated action (such as copying the same path) still gets feedback.
+            if message != nil { showingFeedback = true }
+        }
+        .onChange(of: hasFeedback) { available in
+            if !available { showingFeedback = false }
+        }
         .task {
+            if hasFeedback { showingFeedback = true }
             await model.enter(model.selectedDestination)
         }
     }
@@ -106,24 +125,44 @@ struct ContentView: View {
     }
 }
 
-private struct MessageBanner: View {
-    let message: String
-    let symbol: String
-    let tint: Color
-    let dismiss: () -> Void
+private struct OperationFeedback: View {
+    let error: String?
+    let notice: String?
+    let clear: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: symbol).foregroundStyle(tint)
-            Text(message).fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 8)
-            Button(action: dismiss) { Image(systemName: "xmark") }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(L("关闭提示"))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(L("操作提示")).font(.headline)
+                Spacer()
+                Button(L("清除提示"), action: clear)
+            }
+            Divider()
+            ViewThatFits(in: .vertical) {
+                messages.fixedSize(horizontal: false, vertical: true)
+                ScrollView { messages }
+            }
+            .frame(maxHeight: 320)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(tint.opacity(0.10))
+        .frame(width: 360, alignment: .leading)
+        .padding(16)
+    }
+
+    private var messages: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let error {
+                Label(L("操作未完成。"), systemImage: "exclamationmark.triangle")
+                    .font(.headline).foregroundStyle(.red)
+                Text(error).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if error != nil && notice != nil { Divider() }
+            if let notice {
+                Text(notice).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -1236,7 +1275,7 @@ private struct ActivityView: View {
                     Text(L("失败")).tag("failed")
                 }.pickerStyle(.segmented).frame(maxWidth: 320)
                 Spacer()
-                Button(L("刷新")) { Task { await model.refreshActivity() } }.disabled(model.isBusy.contains("activity"))
+                Button(L("刷新")) { Task { await model.refreshActivity(repeatFeedback: true) } }.disabled(model.isBusy.contains("activity"))
                 Menu {
                     Button(L("观察设置…")) { showPreferences = true }
                     Button(L("清除已结束历史"), role: .destructive) { confirmClear = true }

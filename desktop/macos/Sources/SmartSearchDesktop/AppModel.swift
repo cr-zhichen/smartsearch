@@ -56,6 +56,7 @@ final class AppModel: ObservableObject {
     @Published private(set) var updateResult: JSONValue?
     @Published private(set) var environmentState: JSONValue?
     @Published var errorMessage: String?
+    @Published private(set) var errorPresentationID = UUID()
     @Published var noticeMessage: String?
     @Published private(set) var isBusy: Set<String> = []
     private var operations = OperationState()
@@ -197,7 +198,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    func refreshActivity() async {
+    func refreshActivity(repeatFeedback: Bool = false) async {
         guard connection == .ready, !isBusy.contains("activity") else { return }
         guard begin("activity") else { return }
         defer { end("activity") }
@@ -219,11 +220,12 @@ final class AppModel: ObservableObject {
             }
             activityEnabled = result["enabled"]?.boolValue ?? activityEnabled
             if result["ok"]?.boolValue == false {
-                errorMessage = L("一个或多个配置目录的活动记录不可读；可读取的记录仍已显示，其他状态未知。")
+                let message = L("一个或多个配置目录的活动记录不可读；可读取的记录仍已显示，其他状态未知。")
+                if repeatFeedback { showError(message) } else { errorMessage = message }
             }
-            await refreshSelectedActivity()
+            await refreshSelectedActivity(repeatFeedback: repeatFeedback)
         } catch {
-            present(error)
+            present(error, repeatFeedback: repeatFeedback)
         }
     }
 
@@ -307,7 +309,7 @@ final class AppModel: ObservableObject {
     func selectProfile(_ directory: String) async {
         guard connection == .ready else { return }
         guard configDraft.isEmpty && clearSecretKeys.isEmpty else {
-            errorMessage = L("还有未保存的修改，请先保存或放弃，再切换配置目录。")
+            showError(L("还有未保存的修改，请先保存或放弃，再切换配置目录。"))
             return
         }
         guard begin("profile") else { return }
@@ -410,7 +412,7 @@ final class AppModel: ObservableObject {
     func saveConfig() async {
         guard connection == .ready else { return }
         guard let revision = state?.revision else {
-            errorMessage = L("没有可用的配置版本，请先刷新后再保存。")
+            showError(L("没有可用的配置版本，请先刷新后再保存。"))
             return
         }
         guard begin("save") else { return }
@@ -420,9 +422,9 @@ final class AppModel: ObservableObject {
         do {
             let result = try await backend.request(method: "config.apply", params: .object(params))
             guard result["ok"]?.boolValue == true else {
-                errorMessage = result["error_type"]?.stringValue == "conflict"
+                showError(result["error_type"]?.stringValue == "conflict"
                     ? L("配置已被其他进程修改；你改的内容还在，请刷新后核对。")
-                    : L("后端没有保存配置；你改的内容还在。")
+                    : L("后端没有保存配置；你改的内容还在。"))
                 return
             }
             // config.apply returns a compact status snapshot; get_state restores the
@@ -455,7 +457,7 @@ final class AppModel: ObservableObject {
                 "overrides": .object(overrides),
             ]))
             guard result["ok"]?.boolValue == true, let runID = result["run_id"]?.stringValue else {
-                errorMessage = L("后端未能开始测试；配置没有改变。")
+                showError(L("后端未能开始测试；配置没有改变。"))
                 return
             }
             ownedActiveRunIDs.insert(runID)
@@ -504,7 +506,7 @@ final class AppModel: ObservableObject {
         guard connection == .ready, let command = selectedCommand else { return }
         let missing = CommandArgumentBuilder.missingRequired(for: command, values: commandValues, booleans: commandBooleans)
         guard missing.isEmpty else {
-            errorMessage = L("请填写必填项：{0}。", "\(missing.map(\.label).joined(separator: "、"))")
+            showError(L("请填写必填项：{0}。", "\(missing.map(\.label).joined(separator: "、"))"))
             return
         }
         guard begin("run:\(command.id)") else { return }
@@ -516,7 +518,7 @@ final class AppModel: ObservableObject {
                 "arguments": .array(arguments.map(JSONValue.string)),
             ]))
             guard result["ok"]?.boolValue == true, let runID = result["run_id"]?.stringValue else {
-                errorMessage = L("后端未能开始此操作。")
+                showError(L("后端未能开始此操作。"))
                 return
             }
             ownedActiveRunIDs.insert(runID)
@@ -544,7 +546,7 @@ final class AppModel: ObservableObject {
                 await recoverRun(run.runID)
                 noticeMessage = L("已请求取消，等待后端确认最终状态。")
             } else {
-                errorMessage = L("后端未接受取消请求；任务仍保持原状态。")
+                showError(L("后端未接受取消请求；任务仍保持原状态。"))
             }
         } catch {
             present(error)
@@ -555,7 +557,7 @@ final class AppModel: ObservableObject {
         ownedActiveRunIDs.contains(run.runID) && run.isActive
     }
 
-    private func refreshSelectedActivity() async {
+    private func refreshSelectedActivity(repeatFeedback: Bool) async {
         guard selectedDestination == .activity, let selected = selectedActivity else { return }
         guard let current = activityRuns.first(where: { $0.runID == selected.runID }) else {
             selectedActivity = nil
@@ -564,10 +566,10 @@ final class AppModel: ObservableObject {
             activityResult = nil
             return
         }
-        await showActivityDetails(current, preservingContent: true)
+        await showActivityDetails(current, preservingContent: true, repeatFeedback: repeatFeedback)
     }
 
-    func showActivityDetails(_ run: ActivityRun, preservingContent: Bool = false) async {
+    func showActivityDetails(_ run: ActivityRun, preservingContent: Bool = false, repeatFeedback: Bool = true) async {
         let selectionChanged = selectedActivity?.runID != run.runID
         selectedActivity = run
         if selectionChanged || !preservingContent {
@@ -588,7 +590,7 @@ final class AppModel: ObservableObject {
         } catch {
             guard selectedActivity?.runID == run.runID else { return }
             activityDetails = .object(["ok": .bool(false), "error": .string(error.localizedDescription)])
-            present(error)
+            present(error, repeatFeedback: repeatFeedback)
         }
     }
 
@@ -654,7 +656,7 @@ final class AppModel: ObservableObject {
                 noticeMessage = result["message"]?.displayString ?? L("已启用内置 CLI，请重新打开终端。")
                 await refreshCLIStatus()
             } else {
-                errorMessage = L("内置 CLI 未启用；已有同名外部 CLI 不会被覆盖。")
+                showError(L("内置 CLI 未启用；已有同名外部 CLI 不会被覆盖。"))
             }
         } catch {
             present(error)
@@ -671,7 +673,7 @@ final class AppModel: ObservableObject {
             let result = try await backend.request(method: "activity.enabled", params: .object(["enabled": .bool(enabled)]))
             if result["ok"]?.boolValue != true {
                 activityEnabled = priorValue
-                errorMessage = L("活动记录设置没有改变。")
+                showError(L("活动记录设置没有改变。"))
             }
         } catch {
             activityEnabled = priorValue
@@ -689,7 +691,7 @@ final class AppModel: ObservableObject {
                 noticeMessage = L("已清除已结束任务的活动元数据；配置和用户导出未受影响。")
                 await refreshActivity()
             } else {
-                errorMessage = L("活动历史没有被清除。")
+                showError(L("活动历史没有被清除。"))
             }
         } catch {
             present(error)
@@ -737,7 +739,7 @@ final class AppModel: ObservableObject {
             guard let path = ready["path"]?.stringValue, path.hasPrefix("/"), path.hasSuffix(".dmg") else { return }
             if NSWorkspace.shared.open(URL(fileURLWithPath: path)) {
                 noticeMessage = L("已打开校验过的 DMG，尚未安装。请退出 App 后按正常方式安装，再重新打开核对版本；系统代码签名尚未验证。")
-            } else { errorMessage = L("无法打开 DMG，请从下载目录手动打开。") }
+            } else { showError(L("无法打开 DMG，请从下载目录手动打开。")) }
         } catch { present(error) }
     }
 
@@ -771,7 +773,7 @@ final class AppModel: ObservableObject {
             try data.write(to: url, options: .atomic)
             noticeMessage = L("已导出脱敏结果。")
         } catch {
-            errorMessage = L("无法写入所选导出文件。")
+            showError(L("无法写入所选导出文件。"))
         }
     }
 
@@ -1059,8 +1061,18 @@ final class AppModel: ObservableObject {
         return changed ? L("用未保存的修改测试") : L("测试")
     }
 
-    private func present(_ error: Error) {
-        errorMessage = (error as? LocalizedError)?.errorDescription ?? L("操作未完成。")
+    func showError(_ message: String) {
+        errorMessage = message
+        errorPresentationID = UUID()
+    }
+
+    private func present(_ error: Error, repeatFeedback: Bool = true) {
+        let message = (error as? LocalizedError)?.errorDescription ?? L("操作未完成。")
+        if repeatFeedback {
+            showError(message)
+        } else {
+            errorMessage = message
+        }
     }
 
     private func presentExitChoice(for window: NSWindow?, completion: @escaping (ExitChoice) -> Void) {
