@@ -42,6 +42,41 @@ def release_files(root):
         ET.ElementTree(rss).write(root / f"appcast-macos-{arch}.xml")
 
 
+@pytest.mark.parametrize("architecture", ["arm64", "x86_64"])
+def test_sparkle_delta_names_are_architecture_specific_and_urls_are_decoded(tmp_path, monkeypatch, architecture):
+    from urllib.parse import quote
+
+    stage = tmp_path / "stage"
+    output = tmp_path / "output"
+    stage.mkdir()
+    output.mkdir()
+    release_files(stage)
+    feed = stage / f"appcast-macos-{architecture}.xml"
+    tree = ET.parse(feed)
+    item = tree.find("./channel/item")
+    prefix = f"https://github.com/{updates.REPOSITORY}/releases/download/v{VERSION}/"
+    delta = stage / f"Smart Search{VERSION}-1.0.0.delta"
+    delta.write_bytes(b"signed delta bytes")
+    ET.SubElement(ET.SubElement(item, f"{{{updates.SPARKLE}}}deltas"), "enclosure", {
+        "url": prefix + quote(delta.name), "length": str(delta.stat().st_size),
+        f"{{{updates.SPARKLE}}}edSignature": "fixture-delta-signature",
+        f"{{{updates.SPARKLE}}}deltaFrom": "1.0.0",
+    })
+    tree.write(feed)
+    script = (Path(__file__).resolve().parents[1] / "desktop/scripts/package-sparkle.sh").read_text(encoding="utf-8")
+    python = script.split("<<'PY'\n", 1)[1].split("\nPY", 1)[0]
+    monkeypatch.setattr(sys, "argv", ["package-sparkle", str(stage), str(output), str(feed),
+                                     VERSION, architecture, "true", prefix])
+    exec(compile(python, "package-sparkle.sh:python", "exec"), {})
+    target = f"SmartSearch-{VERSION}-from-1.0.0-macos-{architecture}.delta"
+    assert (output / target).read_bytes() == delta.read_bytes()
+    enclosures = list(ET.parse(output / feed.name).find("./channel/item").iter("enclosure"))
+    assert len(enclosures) == 2
+    assert enclosures[1].get("url") == prefix + target
+    assert enclosures[1].get(f"{{{updates.SPARKLE}}}edSignature") == "fixture-delta-signature"
+    assert len(list(output.iterdir())) == 3
+
+
 @pytest.mark.parametrize("damage", [None, "unsigned", "corrupt", "architecture", "traversal", "duplicate", "missing-full", "missing-signature", "foreign-url"])
 def test_release_assets_fail_closed(tmp_path, damage):
     release_files(tmp_path)

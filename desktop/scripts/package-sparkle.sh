@@ -45,11 +45,13 @@ feeds=("$staging"/*.xml)
 "$tools/bin/sign_update" --verify --ed-key-file "$key_file" "${feeds[0]}"
 python3 - "$staging" "$output" "${feeds[0]}" "$version" "$architecture" "$has_baseline" "$prefix" <<'PY'
 from pathlib import Path
-import shutil, sys, xml.etree.ElementTree as ET
+from urllib.parse import quote, unquote
+import re, shutil, sys, xml.etree.ElementTree as ET
 stage, output, feed = map(Path, sys.argv[1:4])
 version, architecture, baseline, prefix = sys.argv[4:]
 ns = 'http://www.andymatuschak.org/xml-namespaces/sparkle'
-items = ET.parse(feed).findall('./channel/item')
+tree = ET.parse(feed)
+items = tree.findall('./channel/item')
 current = [i for i in items if i.findtext(f'{{{ns}}}version') == version]
 assert len(current) == 1, 'Missing current appcast item'
 enclosures = list(current[0].iter('enclosure'))
@@ -57,10 +59,24 @@ assert enclosures and (baseline != 'true' or len(enclosures) > 1), 'Expected del
 for e in enclosures:
     url = e.attrib['url']
     assert url.startswith(prefix) and e.attrib.get(f'{{{ns}}}edSignature'), 'Untrusted or unsigned enclosure'
-    name = url[len(prefix):]
-    assert name and '/' not in name and '\\' not in name and f'macos-{architecture}' in name
+    name = unquote(url[len(prefix):])
+    assert name and name not in {'.', '..'} and '/' not in name and '\\' not in name
     assert (stage / name).stat().st_size == int(e.attrib['length'])
-    shutil.copy2(stage / name, output / name)
-shutil.copy2(feed, output / f'appcast-macos-{architecture}.xml')
+    delta_from = e.get(f'{{{ns}}}deltaFrom')
+    if delta_from is not None:
+        assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', delta_from) and name.endswith('.delta')
+        # Sparkle uses the App name for deltas; both architectures share that name.
+        target = f'SmartSearch-{version}-from-{delta_from}-macos-{architecture}.delta'
+    else:
+        target = f'SmartSearch-{version}-macos-{architecture}-sparkle.zip'
+        assert name == target, 'Unexpected full update archive'
+    assert not (output / target).exists(), 'Duplicate update artifact'
+    shutil.copy2(stage / name, output / target)
+    e.set('url', prefix + quote(target))
+ET.register_namespace('sparkle', ns)
+tree.write(output / f'appcast-macos-{architecture}.xml', encoding='utf-8', xml_declaration=True)
 PY
+# Renaming delta URLs changes the feed bytes, so sign and verify the final feed.
+"$tools/bin/sign_update" --ed-key-file "$key_file" "$output/appcast-macos-$architecture.xml"
+"$tools/bin/sign_update" --verify --ed-key-file "$key_file" "$output/appcast-macos-$architecture.xml"
 echo "Sparkle $version $architecture packaged; delta baseline=$has_baseline"
