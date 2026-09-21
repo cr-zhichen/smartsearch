@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import textwrap
 import xml.etree.ElementTree as ET
 
 import pytest
@@ -40,6 +41,31 @@ def release_files(root):
             "length": str(package.stat().st_size), f"{{{updates.SPARKLE}}}edSignature": "fixture-only",
         })
         ET.ElementTree(rss).write(root / f"appcast-macos-{arch}.xml")
+
+
+@pytest.mark.parametrize("duplicate", [False, True])
+def test_workflow_flattens_nested_assets_without_overwriting(tmp_path, monkeypatch, duplicate):
+    root = tmp_path / "release-packages"
+    nested = root / "runner-build" / "updates"
+    nested.mkdir(parents=True)
+    release_files(nested)
+    name = "appcast-macos-arm64.xml"
+    original = (nested / name).read_bytes()
+    if duplicate:
+        (root / name).write_bytes(b"keep existing")
+    workflow = (Path(__file__).resolve().parents[1] / ".github/workflows/desktop-build.yml").read_text()
+    step = workflow.split("- name: Verify every feed reference and create checksums", 1)[1]
+    python = textwrap.dedent(step.split("python3 - <<'PY'\n", 1)[1].split("\n          PY", 1)[0])
+    monkeypatch.chdir(tmp_path)
+    if duplicate:
+        with pytest.raises(ValueError, match="Duplicate release asset"):
+            exec(compile(python, "desktop-build.yml:flatten", "exec"), {})
+        assert (root / name).read_bytes() == b"keep existing"
+        assert (nested / name).read_bytes() == original
+    else:
+        exec(compile(python, "desktop-build.yml:flatten", "exec"), {})
+        assert updates.validate_release(root, VERSION)["assets"] == 12
+        assert (root / name).read_bytes() == original
 
 
 @pytest.mark.parametrize("architecture", ["arm64", "x86_64"])

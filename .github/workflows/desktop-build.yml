@@ -312,7 +312,29 @@ jobs:
       - name: Verify every feed reference and create checksums
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
-        run: python3 desktop/scripts/update_artifacts.py validate --version "${RELEASE_TAG#v}" --directory release-packages
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('release-packages')
+          files = []
+          names = set()
+          for path in root.rglob('*'):
+              if path.is_symlink():
+                  raise ValueError(f'Symlink in release assets: {path}')
+              if path.is_file():
+                  if path.name in names:
+                      raise ValueError(f'Duplicate release asset: {path.name}')
+                  names.add(path.name)
+                  files.append(path)
+          for path in files:
+              target = root / path.name
+              if path != target:
+                  if target.exists():
+                      raise ValueError(f'Release asset target exists: {target}')
+                  path.rename(target)
+          PY
+          python3 desktop/scripts/update_artifacts.py validate --version "${RELEASE_TAG#v}" --directory release-packages
       - name: Attach verified packages before exposing update feeds
         env:
           GH_TOKEN: ${{ github.token }}
@@ -325,6 +347,7 @@ jobs:
           if [[ "$REPLACE_EXISTING_ASSETS" == true ]]; then upload_args+=(--clobber); fi
           packages=(); feeds=()
           for file in release-packages/*; do
+            [[ -f "$file" ]] || continue
             case "$(basename "$file")" in
               releases.*.json|appcast-*.xml) feeds+=("$file") ;;
               *) packages+=("$file") ;;
