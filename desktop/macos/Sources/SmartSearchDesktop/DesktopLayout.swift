@@ -4,8 +4,8 @@ import SwiftUI
 // Codex Tweaks: MainWindowView, UpdateView and BackendPresentationTokens.
 // Keep the reference layout values local; no dependency on its backend contract.
 enum DesktopMetrics {
-    static let contentWidth: CGFloat = 920
     static let pagePadding: CGFloat = 24
+    static let insetListPadding: CGFloat = 8
     static let sectionSpacing: CGFloat = 24
     static let cardPadding: CGFloat = 16
     static let cardRadius: CGFloat = 12
@@ -14,19 +14,19 @@ enum DesktopMetrics {
 enum DesktopAppearance {
     // White in light appearance; use the matching native surface in dark appearance.
     static let contentBackground = Color(nsColor: .textBackgroundColor)
+    // Shared with Windows: the green from the approved macOS indicator (#35C759).
+    static let connectionReady = NSColor(srgbRed: 53.0 / 255, green: 199.0 / 255, blue: 89.0 / 255, alpha: 1)
 }
 
 struct DesktopPage<Content: View>: View {
     let title: String
     let subtitle: String
-    let padding: CGFloat
     let content: Content
 
-    init(_ title: String, subtitle: String, padding: CGFloat = DesktopMetrics.pagePadding,
+    init(_ title: String, subtitle: String,
          @ViewBuilder content: () -> Content) {
         self.title = title
         self.subtitle = subtitle
-        self.padding = padding
         self.content = content()
     }
 
@@ -43,8 +43,8 @@ struct DesktopPage<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 content
             }
-            .frame(maxWidth: DesktopMetrics.contentWidth, alignment: .leading)
-            .padding(padding)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(DesktopMetrics.pagePadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(DesktopAppearance.contentBackground)

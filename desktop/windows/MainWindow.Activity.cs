@@ -24,10 +24,16 @@ public sealed partial class MainWindow
 
     private UIElement BuildActivityPage()
     {
-        var filter = new SelectorBar { MinHeight = 36, VerticalAlignment = VerticalAlignment.Center };
+        var filter = new SelectorBar
+        {
+            MinHeight = 36, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center
+        };
         foreach (var (value, label) in new[] { ("all", L("全部")), ("running", L("运行中")), ("failed", L("失败")) })
         {
-            var item = new SelectorBarItem { Text = label, Tag = value };
+            var item = new SelectorBarItem
+            {
+                Text = label, Tag = value, MinHeight = 36, Padding = new Thickness(12, 8, 12, 5)
+            };
             filter.Items.Add(item);
             if (value == _activityFilter) filter.SelectedItem = item;
         }
@@ -53,6 +59,7 @@ public sealed partial class MainWindow
         var actions = ActionRow(
             ActionButton(L("刷新"), () => RefreshActivityAsync(silent: false), operationKey: "activity-refresh", busyText: L("刷新中…")),
             new Button { Content = L("更多"), Flyout = more });
+        actions.VerticalAlignment = VerticalAlignment.Center;
         Grid.SetColumn(actions, 1);
         toolbar.Children.Add(actions);
         var toolbarSurface = new Border { Style = UiStyle("WorkspaceToolbarStyle"), Child = toolbar };

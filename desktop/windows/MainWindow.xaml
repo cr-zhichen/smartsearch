@@ -101,11 +101,20 @@
           <Image.RenderTransform><TranslateTransform Y="16" /></Image.RenderTransform>
         </Image>
       </Grid>
-      <Grid x:Name="ConnectionIndicator" Width="24" Height="24" Background="Transparent"
-            HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,16,10"
-            AutomationProperties.AccessibilityView="Content" AutomationProperties.LiveSetting="Polite">
+      <Button x:Name="ConnectionIndicator" Width="24" Height="24" MinWidth="24" MinHeight="24"
+            Padding="8" BorderThickness="0" Background="Transparent"
+            HorizontalAlignment="Right" VerticalAlignment="Bottom"
+            PointerEntered="OnConnectionPointerEntered" PointerExited="OnConnectionPointerExited"
+            Click="OnConnectionIndicatorClick" AutomationProperties.LiveSetting="Polite">
+        <Button.Resources>
+          <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="Transparent" />
+          <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="Transparent" />
+        </Button.Resources>
+        <ToolTipService.ToolTip>
+          <ToolTip x:Name="ConnectionToolTip" Placement="Top" />
+        </ToolTipService.ToolTip>
         <Ellipse x:Name="ConnectionDot" Style="{StaticResource ConnectionIdleStyle}" />
-      </Grid>
+      </Button>
     </Grid>
   </Grid>
 </Window>

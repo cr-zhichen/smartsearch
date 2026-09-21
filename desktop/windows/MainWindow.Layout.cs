@@ -10,6 +10,7 @@ namespace SmartSearch.Desktop;
 
 public sealed partial class MainWindow
 {
+    private const double PageInset = 24;
     private readonly Dictionary<string, double> _splitWidths = [];
     private string _noticeTitle = string.Empty;
     private bool _hasNotice;
@@ -18,7 +19,7 @@ public sealed partial class MainWindow
 
     private static StackPanel PagePanel() => new()
     {
-        Spacing = 24, MaxWidth = 840, HorizontalAlignment = HorizontalAlignment.Left
+        Spacing = PageInset, HorizontalAlignment = HorizontalAlignment.Left
     };
 
     private void OnNavigationDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
@@ -40,15 +41,16 @@ public sealed partial class MainWindow
         var visibility = RootNavigation.DisplayMode == NavigationViewDisplayMode.Expanded && RootNavigation.IsPaneOpen
             ? Visibility.Visible : Visibility.Collapsed;
         MascotFooter.Visibility = MascotSpacer.Visibility = visibility;
+        if (visibility == Visibility.Collapsed) ConnectionToolTip.IsOpen = false;
     }
 
-    private ScrollViewer Scroll(UIElement content) => PaneScroll(content, _currentPage, 24);
+    private ScrollViewer Scroll(UIElement content) => PaneScroll(content, _currentPage);
 
-    private ScrollViewer PaneScroll(UIElement content, string key, double padding = 24)
+    private ScrollViewer PaneScroll(UIElement content, string key)
     {
         var scroll = new ScrollViewer
         {
-            Content = content, Padding = new Thickness(padding),
+            Content = content, Padding = new Thickness(PageInset),
             HorizontalContentAlignment = HorizontalAlignment.Left,
             VerticalContentAlignment = VerticalAlignment.Top,
             HorizontalScrollMode = ScrollMode.Disabled,
@@ -58,7 +60,7 @@ public sealed partial class MainWindow
         void FitContent()
         {
             if (content is FrameworkElement element && scroll.ActualWidth > 0)
-                element.Width = Math.Min(element.MaxWidth, Math.Max(0, scroll.ActualWidth - padding * 2));
+                element.Width = Math.Min(element.MaxWidth, Math.Max(0, scroll.ActualWidth - PageInset * 2));
         }
         scroll.SizeChanged += (_, _) => FitContent();
         scroll.Loaded += (_, _) =>
@@ -293,6 +295,21 @@ public sealed partial class MainWindow
         }
         ConnectionDot.Style = UiStyle(style);
         AutomationProperties.SetName(ConnectionIndicator, L("后端状态：{0}", label));
-        ToolTipService.SetToolTip(ConnectionIndicator, L("后端状态：{0}", label));
+        ConnectionToolTip.Content = L("后端状态：{0}", label);
+    }
+
+    private void OnConnectionPointerEntered(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs args)
+        => ShowConnectionToolTip();
+
+    private void OnConnectionPointerExited(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs args)
+        => ConnectionToolTip.IsOpen = false;
+
+    private void OnConnectionIndicatorClick(object sender, RoutedEventArgs args)
+        => ShowConnectionToolTip();
+
+    private void ShowConnectionToolTip()
+    {
+        ConnectionToolTip.PlacementTarget = ConnectionIndicator;
+        ConnectionToolTip.IsOpen = true;
     }
 }

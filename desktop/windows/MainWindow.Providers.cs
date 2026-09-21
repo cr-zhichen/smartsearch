@@ -24,7 +24,7 @@ public sealed partial class MainWindow
     {
         _fieldEditors.Clear();
         if (_state is null) return Scroll(Section(L("服务商"), [OfflineHint()]));
-        var filter = new TextBox { PlaceholderText = L("查找服务商"), Text = _providerFilter, Margin = new Thickness(24, 12, 24, 8) };
+        var filter = new TextBox { PlaceholderText = L("查找服务商"), Text = _providerFilter, Margin = new Thickness(PageInset, PageInset, PageInset, 8) };
         AutomationProperties.SetName(filter, L("查找服务商"));
         filter.TextChanged += (_, _) => { _providerFilter = filter.Text; RenderProviderList(); };
         _providerList = new ListView { SelectionMode = ListViewSelectionMode.Single,

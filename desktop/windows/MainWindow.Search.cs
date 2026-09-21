@@ -17,7 +17,7 @@ public sealed partial class MainWindow
         _commandControls.Clear();
         _commandArguments.Clear();
         if (_state is not { } state) return Scroll(Section(L("搜索与研究"), [OfflineHint()]));
-        var form = new StackPanel { Spacing = 20 };
+        var form = new StackPanel { Spacing = PageInset };
         form.Children.Add(SectionHeading(L("输入")));
         form.Children.Add(Secondary(L("选择工具并填写请求，结果会显示在右侧。")));
         _commandPicker = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
@@ -59,7 +59,7 @@ public sealed partial class MainWindow
             DetailsButton(L("高级 JSON"), () => ShowDetailsAsync(L("高级 JSON"), DataText(_rawResult.Text)))));
         resultPanel.Children.Add(_resultText);
         resultPanel.Children.Add(_sourceDisclosure);
-        _searchResultContent = PaneScroll(resultPanel, "search:result", 24);
+        _searchResultContent = PaneScroll(resultPanel, "search:result");
         ShowSearchState(L("先选择工具并运行一次请求。"), false);
         if (_commandPicker.Items.Count > 0)
             _commandPicker.SelectedItem = _commandPicker.Items.OfType<CommandOption>().FirstOrDefault(command => command.Id == _selectedCommandId) ?? _commandPicker.Items[0];

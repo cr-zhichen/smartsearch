@@ -44,7 +44,6 @@ struct ContentView: View {
                     }
                     ConnectionIndicator(state: model.connection, compact: true)
                         .frame(maxWidth: .infinity, alignment: .trailing)
-                        .padding(.horizontal, 16).padding(.vertical, 10)
                 }
             }
         } detail: {
@@ -54,38 +53,10 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(DesktopAppearance.contentBackground)
             .navigationTitle(model.selectedDestination.title)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Button { showingFeedback.toggle() } label: {
-                        Label(L("操作提示"), systemImage: model.errorMessage == nil ? "info.circle" : "exclamationmark.circle")
-                    }
-                    .help(L("查看操作提示"))
-                    .disabled(!hasFeedback)
-                    .popover(isPresented: $showingFeedback, arrowEdge: .bottom) {
-                        OperationFeedback(error: model.errorMessage, notice: model.noticeMessage) {
-                            showingFeedback = false
-                            model.errorMessage = nil
-                            model.noticeMessage = nil
-                        }
-                    }
-                }
-                ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.refreshState() }
-                    } label: {
-                        if model.isBusy.contains("state") {
-                            ProgressView().controlSize(.small)
-                        } else {
-                            Label(L("刷新状态"), systemImage: "arrow.clockwise")
-                        }
-                    }
-                    .id(model.languagePreference)
-                    .help(L("刷新状态"))
-                    .disabled(model.connection != .ready || model.configOperationBusy)
-                }
-            }
         }
         .navigationSplitViewStyle(.balanced)
+        .toolbar { workspaceToolbar }
+        .toolbarBackground(.visible, for: .windowToolbar)
         .groupBoxStyle(DesktopGroupBoxStyle())
         .toggleStyle(.switch)
         .disclosureGroupStyle(WholeRowDisclosureStyle())
@@ -109,6 +80,41 @@ struct ContentView: View {
         .task {
             if hasFeedback { showingFeedback = true }
             await model.enter(model.selectedDestination)
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var workspaceToolbar: some ToolbarContent {
+        ToolbarItem(id: "workspace-feedback", placement: .primaryAction) {
+            Button { showingFeedback.toggle() } label: {
+                Label(L("操作提示"), systemImage: model.errorMessage == nil ? "info.circle" : "exclamationmark.circle")
+            }
+            .help(L("查看操作提示"))
+            .disabled(!hasFeedback)
+            .popover(isPresented: $showingFeedback, arrowEdge: .bottom) {
+                OperationFeedback(error: model.errorMessage, notice: model.noticeMessage) {
+                    showingFeedback = false
+                    model.errorMessage = nil
+                    model.noticeMessage = nil
+                }
+            }
+        }
+        ToolbarItem(id: "workspace-refresh", placement: .primaryAction) {
+            Button {
+                Task { await model.refreshState() }
+            } label: {
+                ZStack {
+                    Image(systemName: "arrow.clockwise")
+                        .opacity(model.isBusy.contains("state") ? 0 : 1)
+                    if model.isBusy.contains("state") {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                .frame(width: 16, height: 16)
+                .accessibilityLabel(L("刷新状态"))
+            }
+            .help(L("刷新状态"))
+            .disabled(model.connection != .ready || model.configOperationBusy)
         }
     }
 
@@ -171,30 +177,62 @@ private struct ConnectionIndicator: View {
     var compact = false
 
     var body: some View {
-        Group {
-            if compact {
-                Circle().fill(tint).frame(width: 8, height: 8)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
-            } else {
-                Label {
-                    Text(state.title).foregroundStyle(.secondary)
-                } icon: {
-                    Image(systemName: state.symbol).foregroundStyle(tint)
-                }
+        if compact {
+            NativeConnectionLight(statusDescription: L("后端状态：{0}", state.title), color: nativeTint)
+                .frame(width: 24, height: 24)
+        } else {
+            Label {
+                Text(state.title).foregroundStyle(.secondary)
+            } icon: {
+                Image(systemName: state.symbol).foregroundStyle(Color(nsColor: nativeTint))
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(L("后端状态：{0}", state.title))
+            .help(L("后端状态：{0}", state.title))
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(L("后端状态：{0}", state.title))
-        .help(L("后端状态：{0}", state.title))
     }
 
-    private var tint: Color {
+    private var nativeTint: NSColor {
         switch state {
-        case .ready: return .green
-        case .connecting: return .orange
-        case .failed: return .red
-        case .disconnected: return .secondary
+        case .ready: return DesktopAppearance.connectionReady
+        case .connecting: return .systemOrange
+        case .failed: return .systemRed
+        case .disconnected: return .secondaryLabelColor
+        }
+    }
+}
+
+private struct NativeConnectionLight: NSViewRepresentable {
+    let statusDescription: String
+    let color: NSColor
+
+    func makeNSView(context: Context) -> LightView {
+        let view = LightView()
+        view.setAccessibilityElement(true)
+        view.setAccessibilityRole(.image)
+        return view
+    }
+
+    func updateNSView(_ view: LightView, context: Context) {
+        view.color = color
+        if view.toolTip != statusDescription {
+            view.toolTip = statusDescription
+            view.setAccessibilityLabel(statusDescription)
+        }
+        view.needsDisplay = true
+    }
+
+    final class LightView: NSView {
+        var color = NSColor.secondaryLabelColor
+
+        override func draw(_ dirtyRect: NSRect) {
+            color.setFill()
+            NSBezierPath(ovalIn: NSRect(x: bounds.midX - 4, y: bounds.midY - 4, width: 8, height: 8)).fill()
+        }
+
+        override func viewDidChangeEffectiveAppearance() {
+            super.viewDidChangeEffectiveAppearance()
+            needsDisplay = true
         }
     }
 }
@@ -344,7 +382,9 @@ private struct ProvidersView: View {
                 DesktopSplitView("providers") {
                     VStack(spacing: 0) {
                         TextField(L("查找服务商"), text: $filter)
-                            .textFieldStyle(.roundedBorder).padding(12)
+                            .textFieldStyle(.roundedBorder)
+                            .padding([.horizontal, .top], DesktopMetrics.pagePadding)
+                            .padding(.bottom, 12)
                         List(selection: $selection) {
                             if let field = state.fields.first(where: { $0.key == "SMART_SEARCH_INTENT_ROUTER" }) {
                                 navigationRow(L("意图路由"), subtitle: configurationChoiceLabel(
@@ -379,9 +419,10 @@ private struct ProvidersView: View {
                         }
                         .listStyle(.inset)
                         .scrollContentBackground(.hidden)
+                        .padding(.horizontal, DesktopMetrics.insetListPadding)
                         if providers.isEmpty && !filter.isEmpty {
                             Text(L("没有匹配的服务商")).font(.caption)
-                                .foregroundStyle(.secondary).padding(12)
+                                .foregroundStyle(.secondary).padding(DesktopMetrics.pagePadding)
                         }
                     }
                 } detail: {
@@ -439,7 +480,7 @@ private struct ProvidersView: View {
                                 fields: researchSourceFields(state), section: "routing")
                 .id(ConfigurationRoute.researchSources)
         case .routing:
-            DesktopPage(L("冷却与路由详情"), subtitle: L("查看路由顺序和最近请求状态。"), padding: 16) {
+            DesktopPage(L("冷却与路由详情"), subtitle: L("查看路由顺序和最近请求状态。")) {
                 ProviderHealthView(health: state.providerHealth)
                 ForEach(state.capabilityChains.keys.sorted(), id: \.self) { key in
                     KeyValueLine(label: capabilityName(key), value: state.capabilityChains[key, default: []].joined(separator: " → "))
@@ -520,7 +561,7 @@ private struct IntentRoutingEditor: View {
     }
 
     var body: some View {
-        DesktopPage(L("意图路由"), subtitle: L("先选择路由方式，再填写该模式使用的参数。"), padding: 20) {
+        DesktopPage(L("意图路由"), subtitle: L("先选择路由方式，再填写该模式使用的参数。")) {
             if let modeField {
                 DesktopPanel {
                     ConfigFieldEditor(model: model, state: state, field: modeField)
@@ -626,7 +667,7 @@ private struct ConfigActions: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(count == 0 || model.connection != .ready || model.configOperationBusy)
-            }.padding(16)
+            }.padding(.horizontal, DesktopMetrics.pagePadding).padding(.vertical, 12)
         }.background(DesktopAppearance.contentBackground)
         .sheet(isPresented: $showingPreview) {
             DetailSheet(L("配置检查")) {
@@ -647,7 +688,7 @@ private struct ConfigurationEditor: View {
 
     var body: some View {
         if let state = model.state {
-            DesktopPage(title, subtitle: subtitle, padding: 16) {
+            DesktopPage(title, subtitle: subtitle) {
                 ProviderSection(model: model, state: state, section: section, fields: fields)
             }
         }
@@ -1126,14 +1167,14 @@ private struct SearchResearchView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(20)
+                    .padding(DesktopMetrics.pagePadding)
                 }
             } detail: {
                 if let result = model.currentResult {
                     ScrollView {
                         ReadableResultView(result: result, command: model.currentResultCommand,
                                            copy: model.copyCurrentResult, export: model.exportCurrentResult)
-                            .padding(24)
+                            .padding(DesktopMetrics.pagePadding)
                     }
                 } else {
                     VStack(spacing: 12) {
@@ -1148,7 +1189,7 @@ private struct SearchResearchView: View {
                             Text(L("先选择工具并运行一次请求。")).foregroundStyle(.secondary)
                         }
                     }
-                    .multilineTextAlignment(.center).padding(24)
+                    .multilineTextAlignment(.center).padding(DesktopMetrics.pagePadding)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
@@ -1298,14 +1339,14 @@ private struct ActivityView: View {
                         .disabled(model.isBusy.contains("clear-activity"))
                 } label: { Image(systemName: "ellipsis.circle") }
                 .menuStyle(.borderlessButton).fixedSize().help(L("活动选项"))
-            }.padding(.horizontal, 16).padding(.vertical, 12)
+            }.padding(DesktopMetrics.pagePadding)
             if !model.activityEnabled || !model.activityErrors.isEmpty {
                 HStack {
                     Label(model.activityErrors.isEmpty ? L("活动记录已暂停") : L("部分活动目录无法读取"), systemImage: "exclamationmark.circle")
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button(L("查看设置")) { showPreferences = true }
-                }.font(.callout).padding(.horizontal, 20).padding(.bottom, 12)
+                }.font(.callout).padding(.horizontal, DesktopMetrics.pagePadding).padding(.bottom, 12)
             }
             Divider()
             DesktopSplitView("activity", leadingWidths: 224...320, initialLeadingWidth: 260, detailMinimumWidth: 360) {
@@ -1330,6 +1371,7 @@ private struct ActivityView: View {
                         }.padding(.vertical, 6).tag(run.runID)
                     }
                 }.listStyle(.inset).scrollContentBackground(.hidden)
+                    .padding(.horizontal, DesktopMetrics.insetListPadding)
             } detail: {
                 if let run = model.selectedActivity {
                     VStack(alignment: .leading, spacing: 0) {
@@ -1338,7 +1380,7 @@ private struct ActivityView: View {
                                 Spacer()
                                 Button(L("取消任务"), role: .destructive) { Task { await model.cancel(run) } }
                                     .disabled(model.isBusy.contains("cancel:\(run.runID)"))
-                            }.padding([.horizontal, .top], 20)
+                            }.padding([.horizontal, .top], DesktopMetrics.pagePadding)
                         }
                         ActivityDetailView(model: model, run: run, embedded: true)
                     }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -1452,7 +1494,7 @@ private struct ActivityDetailView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(20)
+        .padding(DesktopMetrics.pagePadding)
         .frame(minWidth: embedded ? 300 : 560, maxWidth: .infinity, minHeight: 360, maxHeight: .infinity)
     }
 }
@@ -1791,8 +1833,8 @@ private struct SettingsAboutView: View {
                     advancedSettings
                 }
             }
-            .frame(maxWidth: 800, alignment: .leading)
-            .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(DesktopMetrics.pagePadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(DesktopAppearance.contentBackground)

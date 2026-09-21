@@ -35,7 +35,6 @@
         "duration": ".monospacedDigit()"
       },
       "metrics": {
-        "contentWidth": 920,
         "pagePadding": 24,
         "sectionSpacing": 24,
         "cardPadding": 16,
@@ -45,7 +44,10 @@
         "sheetHeight": 480,
         "sheetPadding": 20,
         "disclosureMinimumHeight": 30,
-        "resultLineSpacing": 4
+        "resultLineSpacing": 4,
+        "insetListOuterPadding": 8,
+        "pageInsetPolicy": "All six workspace pages and split details use 24 pt leading/trailing/top padding. Native inset-list rows receive 8 pt outer compensation. Card padding remains 16 pt.",
+        "contentSizing": "fills the available detail viewport, including while the sidebar expands or collapses"
       },
       "window": {
         "default": [
@@ -56,7 +58,8 @@
           920,
           620
         ],
-        "sidebarWidth": 220
+        "sidebarWidth": 220,
+        "toolbar": "stable workspace toolbar on the NavigationSplitView container; explicit item identifiers, fixed refresh icon size and always-visible native background"
       },
       "visualAcceptance": "partial real GUI verification: search/provider/activity widths, compact settings and operation feedback at 920 pt; English, dark appearance and wide-window checks remain pending",
       "representation": "保留原生 API；不生成固定 CSS 色值、色阶、Web 断点或 HTML 控件仿制。",
@@ -74,7 +77,7 @@
             280
           ],
           "detailMinimum": 400,
-          "detailPadding": 16
+          "detailPadding": 24
         },
         "search": {
           "leadingMinInitialMax": [
@@ -83,7 +86,7 @@
             360
           ],
           "detailMinimum": 360,
-          "inputPadding": 20,
+          "inputPadding": 24,
           "resultPadding": 24
         },
         "activity": {
@@ -97,7 +100,6 @@
       },
       "settings": {
         "navigation": "single scrolling page",
-        "contentWidth": 800,
         "pagePadding": 24,
         "sectionSpacing": 24,
         "groupSpacing": 12,
@@ -117,7 +119,8 @@
         },
         "automaticUpdateRow": "leading wrapping description with trailing fixed-size native switch",
         "visualAcceptance": "observed at 920 pt in a settings-start preview: update switch alignment, App and CLI updates, runtime and advanced panels; English, dark appearance and wider windows pending",
-        "appearance": "system by default; persistent light/dark override applied through NSApp and SwiftUI"
+        "appearance": "system by default; persistent light/dark override applied through NSApp and SwiftUI",
+        "contentSizing": "fills the available detail viewport"
       },
       "routingEditor": {
         "placement": "first ordinary two-line row in the shared provider list; same row component, no icon or special container",
@@ -164,7 +167,8 @@
         "imageRegionHeight": 160,
         "imageOffsetY": 16,
         "alignment": "leading, flush to window edge",
-        "status": "bottom-trailing 8 pt status light in a 24 pt hover target, 16 pt trailing inset and 10 pt bottom inset; localized tooltip and accessibility label; no visible text"
+        "readyColor": "#35C759",
+        "status": "bottom-trailing 8 pt status light centered in a 24 pt hover target flush with the corner, giving an 8 pt visible edge gap; localized tooltip and accessibility label; no visible text"
       },
       "skills": {
         "order": [
@@ -200,10 +204,10 @@
         "toolbarHeight": 52,
         "pagePadding": 24,
         "sectionSpacing": 24,
-        "maximumReadingWidth": 840,
-        "scrollContent": "Width bounded by the viewport; leading aligned",
+        "scrollContent": "fills viewport width minus the shared page inset; remeasured on size changes",
         "sectionHeaderSpacing": 4,
-        "sectionContentSpacing": 12
+        "sectionContentSpacing": 12,
+        "pageInsetPolicy": "24 px outer padding for scrolling pages, split panes and activity toolbar; provider search field uses the same top inset."
       },
       "actions": "Native buttons wrap at their measured widths; shared footer has a top divider and trailing actions",
       "mascot": {
@@ -226,14 +230,16 @@
         "fieldHelpButton": 28,
         "fieldHelpSymbol": 14
       },
-      "activityToolbar": "native SelectorBar on the leading side, refresh and more trailing; full-width divider above split view",
+      "activityToolbar": "native SelectorBar with zero outer padding and 36 px minimum item height on the leading side; vertically centered refresh and more trailing; full-width divider above split view",
       "connectionIndicator": {
         "diameter": 8,
+        "readyColor": "#35C759",
         "hoverTarget": 24,
-        "trailingInset": 16,
-        "bottomInset": 10,
+        "trailingInset": 0,
+        "bottomInset": 0,
         "states": "ready green, connecting amber, failed red, disconnected secondary",
-        "description": "localized tooltip and automation name; no visible text"
+        "description": "localized tooltip and automation name; no visible text",
+        "visibleEdgeGap": 8
       }
     }
   },
