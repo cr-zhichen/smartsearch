@@ -105,6 +105,11 @@ final class AppModel: ObservableObject {
     }
 
     var hasOwnedActiveRuns: Bool { !ownedActiveRunIDs.isEmpty }
+    var isSearchRunning: Bool {
+        guard let selectedBusinessRunID else { return false }
+        return ownedActiveRunIDs.contains(selectedBusinessRunID)
+    }
+    var interfaceLocale: Locale { Locale(identifier: Localization.resolve(languagePreference)) }
     var isUpdatingCLI: Bool { isBusy.contains("cli.update") || updateResult?["cli_update"]?["status"]?.stringValue == "running" }
     var environmentBusy: Bool { isBusy.contains("environment.request") || environmentState?["busy"]?.boolValue == true }
     var skillsBusy: Bool { isBusy.contains("skills.sync") || skillsState?["busy"]?.boolValue == true }
@@ -156,7 +161,7 @@ final class AppModel: ObservableObject {
     }
 
     func setLanguage(_ preference: String) async {
-        guard !environmentBusy && !isUpdatingCLI && !isBusy.contains("language") else { return }
+        guard !environmentBusy && !skillsBusy && !isUpdatingCLI && !isBusy.contains("language") else { return }
         guard begin("language") else { return }
         defer { end("language") }
         do {
@@ -168,7 +173,16 @@ final class AppModel: ObservableObject {
             languagePreference = preference
             errorMessage = nil
             noticeMessage = nil
-            if let snapshot { applyState(snapshot) }
+            if let snapshot {
+                applyState(snapshot)
+            } else if let cached = state?.raw {
+                // Offline language changes still rebuild the cached field labels.
+                // Keep the last refresh time: this did not read a new backend state.
+                state = DesktopState(cached)
+                if let selectedBusinessRunID, let descriptor = ownedRunResults.descriptor(for: selectedBusinessRunID) {
+                    currentResultCommand = localizedLabel(descriptor)
+                }
+            }
         } catch { present(error) }
     }
 
@@ -442,7 +456,7 @@ final class AppModel: ObservableObject {
                 return
             }
             ownedActiveRunIDs.insert(runID)
-            ownedRunResults.register(runID: runID, kind: .providerTest, label: L("测试 {0}", "\(provider)"))
+            ownedRunResults.register(runID: runID, kind: .providerTest, label: L("测试 {0}", "\(provider)"), providerID: provider)
             trackRun(runID, key: "test:\(provider)")
             await recoverRun(runID)
             await refreshActivity()
@@ -503,11 +517,11 @@ final class AppModel: ObservableObject {
                 return
             }
             ownedActiveRunIDs.insert(runID)
-            ownedRunResults.register(runID: runID, kind: .business, label: command.label)
+            ownedRunResults.register(runID: runID, kind: .business, label: command.label, commandID: command.id)
             trackRun(runID, key: "run:\(command.id)")
             selectedBusinessRunID = runID
             currentResult = nil
-            currentResultCommand = command.label
+            currentResultCommand = state?.commands.first { $0.id == command.id }?.label ?? command.label
             noticeMessage = L("操作已开始，进度会显示在活动页。")
             await recoverRun(runID)
             await refreshActivity()
@@ -778,10 +792,21 @@ final class AppModel: ObservableObject {
     }
 
     func displayLabel(for run: ActivityRun) -> String {
-        ownedRunResults.descriptor(for: run.runID)?.label
+        ownedRunResults.descriptor(for: run.runID).map(localizedLabel)
             ?? state?.commands.first { $0.id == run.command }?.label
             ?? ["provider.test": L("服务商测试"), "version": L("版本查询"), "skills.install": L("安装 / 更新 Skills")][run.command]
             ?? L("其他任务")
+    }
+
+    private func localizedLabel(_ descriptor: OwnedRunDescriptor) -> String {
+        switch descriptor.kind {
+        case .business:
+            return state?.commands.first { $0.id == descriptor.commandID }?.label ?? descriptor.label
+        case .providerTest:
+            return descriptor.providerID.map { L("测试 {0}", $0) } ?? L("服务商测试")
+        case .skillsInstall:
+            return L("安装 / 更新 Skills")
+        }
     }
 
     func hasOwnedResult(for run: ActivityRun) -> Bool {
@@ -801,7 +826,7 @@ final class AppModel: ObservableObject {
         if descriptor.kind.updatesSearchResult {
             selectedBusinessRunID = run.runID
             currentResult = result
-            currentResultCommand = descriptor.label
+            currentResultCommand = localizedLabel(descriptor)
         }
     }
 
@@ -844,6 +869,9 @@ final class AppModel: ObservableObject {
             return
         }
         state = parsed
+        if let selectedBusinessRunID, let descriptor = ownedRunResults.descriptor(for: selectedBusinessRunID) {
+            currentResultCommand = localizedLabel(descriptor)
+        }
         updateResult = snapshot["updates"]
         cliStatus = snapshot["cli"]
         environmentState = snapshot["environment"]
@@ -920,7 +948,7 @@ final class AppModel: ObservableObject {
                    let descriptor = ownedRunResults.cache(result.redacted(), for: runID) {
                     if descriptor.kind.updatesSearchResult, selectedBusinessRunID == runID {
                         currentResult = result.redacted()
-                        currentResultCommand = descriptor.label
+                        currentResultCommand = localizedLabel(descriptor)
                     }
                 }
                 if descriptor?.kind == .providerTest {

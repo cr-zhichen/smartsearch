@@ -9,6 +9,8 @@ import SwiftUI
 // FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
 struct ContentView: View {
     @ObservedObject var model: AppModel
+    @State private var configurationSelection: ConfigurationRoute?
+    @State private var settingsSelection = SettingsPane.general
 
     var body: some View {
         NavigationSplitView {
@@ -79,6 +81,10 @@ struct ContentView: View {
         .groupBoxStyle(DesktopGroupBoxStyle())
         .toggleStyle(.switch)
         .disclosureGroupStyle(WholeRowDisclosureStyle())
+        // Native controls and value-only child views may retain translated strings.
+        // Recreate their presentation while keeping navigation and drafts above this identity.
+        .id(model.languagePreference)
+        .environment(\.locale, model.interfaceLocale)
         .onChange(of: model.selectedDestination) { destination in
             Task { await model.enter(destination) }
         }
@@ -91,11 +97,11 @@ struct ContentView: View {
     private var destinationView: some View {
         switch model.selectedDestination {
         case .overview: OverviewView(model: model)
-        case .providers: ProvidersView(model: model)
+        case .providers: ProvidersView(model: model, selection: $configurationSelection)
         case .search: SearchResearchView(model: model)
         case .activity: ActivityView(model: model)
         case .integration: IntegrationView(model: model)
-        case .settings: SettingsAboutView(model: model)
+        case .settings: SettingsAboutView(model: model, pane: $settingsSelection)
         }
     }
 }
@@ -272,114 +278,134 @@ private struct OverviewView: View {
 private enum ConfigurationRoute: Hashable {
     case provider(String)
     case section(String)
-    case advanced
     case routing
 }
 
 private struct ProvidersView: View {
     @ObservedObject var model: AppModel
-    @State private var capability = "main_search"
+    @Binding var selection: ConfigurationRoute?
     @State private var filter = ""
 
     var body: some View {
-        NavigationStack {
-            if let state = model.state {
-                VStack(spacing: 0) {
-                    VStack(alignment: .leading, spacing: 14) {
-                        Text(L("服务商")).font(.title2.weight(.semibold))
-                        Text(L("每类能力选择一个服务商，填写连接信息后测试并保存。"))
-                            .foregroundStyle(.secondary)
-                        Picker(L("能力"), selection: $capability) {
-                            ForEach(["main_search", "docs_search", "web_fetch"], id: \.self) { key in
-                                Text(capabilityName(key)).tag(key)
-                            }
-                            Text(L("全部")).tag("all")
-                        }.pickerStyle(.segmented)
-                        HStack {
-                            TextField(L("查找服务商"), text: $filter).textFieldStyle(.roundedBorder)
-                            NavigationLink(value: ConfigurationRoute.advanced) { Text(L("高级配置")) }
-                        }
-                    }.padding(24)
-                    Divider()
-                    List {
-                        ForEach(groups(state)) { group in
-                            NavigationLink(value: ConfigurationRoute.provider(group.id)) {
-                                HStack(spacing: 12) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(group.id).font(.body.weight(.medium))
-                                        Text(group.primaryCapability.map(capabilityName) ?? L("扩展能力"))
-                                            .font(.caption).foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    if group.fields.contains(where: { model.configDraft[$0.key] != nil || model.clearSecretKeys.contains($0.key) }) {
-                                        Text(L("有未保存修改")).font(.caption).foregroundStyle(.orange)
-                                    } else {
-                                        Text(providerIsConfigured(group, state: state) ? L("已配置") : L("未配置"))
-                                            .font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }.padding(.vertical, 8)
-                            }
-                        }
-                    }
-                    .listStyle(.inset).scrollContentBackground(.hidden)
-                    if groups(state).isEmpty { Text(L("没有匹配的服务商")).foregroundStyle(.secondary).padding() }
-                    ConfigActions(model: model)
-                }
-                .navigationDestination(for: ConfigurationRoute.self) { route in
-                    switch route {
-                    case .provider(let id):
-                        if let group = model.state?.providerGroups.first(where: { $0.id == id }) {
-                            ConfigurationEditor(model: model, title: id, fields: group.fields, section: id)
-                        }
-                    case .section(let id):
-                        let fields = model.state?.fields.filter { ($0.provider == nil || $0.provider == "") && $0.section == id } ?? []
-                        ConfigurationEditor(model: model, title: model.state?.sections.first(where: { $0.id == id })?.label ?? id,
-                                            fields: fields, section: id)
-                    case .advanced:
-                        List {
-                            ForEach(advancedSectionIDs(state), id: \.self) { id in
-                                let section = state.sections.first { $0.id == id }
-                                NavigationLink(value: ConfigurationRoute.section(id)) {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(section?.label ?? id)
-                                        if let blurb = section?.blurb, !blurb.isEmpty {
-                                            Text(blurb).font(.caption).foregroundStyle(.secondary)
-                                        }
-                                    }.padding(.vertical, 6)
+        if let state = model.state {
+            VStack(spacing: 0) {
+                DesktopSplitView {
+                    VStack(spacing: 0) {
+                        TextField(L("查找服务商"), text: $filter)
+                            .textFieldStyle(.roundedBorder).padding(12)
+                        List(selection: $selection) {
+                            Section(L("服务商")) {
+                                ForEach(groups(state)) { group in
+                                    providerRow(group, state: state)
+                                        .tag(ConfigurationRoute.provider(group.id))
                                 }
                             }
-                            NavigationLink(L("冷却与路由详情"), value: ConfigurationRoute.routing)
+                            Section(L("高级配置")) {
+                                ForEach(advancedSectionIDs(state), id: \.self) { id in
+                                    Text(state.sections.first { $0.id == id }?.label ?? id)
+                                        .padding(.vertical, 5)
+                                        .tag(ConfigurationRoute.section(id))
+                                }
+                                if matches(L("冷却与路由详情")) {
+                                    Text(L("冷却与路由详情")).padding(.vertical, 5)
+                                        .tag(ConfigurationRoute.routing)
+                                }
+                            }
                         }
                         .listStyle(.inset)
                         .scrollContentBackground(.hidden)
-                        .navigationTitle(L("高级配置"))
-                    case .routing:
-                        DesktopPage(L("冷却与路由详情"), subtitle: L("查看路由顺序和最近请求状态。")) {
-                            ProviderHealthView(health: model.state?.providerHealth)
-                            ForEach(state.capabilityChains.keys.sorted(), id: \.self) { key in
-                                KeyValueLine(label: capabilityName(key), value: state.capabilityChains[key, default: []].joined(separator: " → "))
-                            }
+                        if groups(state).isEmpty && !filter.isEmpty {
+                            Text(L("没有匹配的服务商")).font(.caption)
+                                .foregroundStyle(.secondary).padding(12)
                         }
                     }
+                } detail: {
+                    configurationDetail(state)
                 }
-            } else { BackendUnavailableView(model: model) }
+                ConfigActions(model: model)
+            }
+            .onAppear { reconcileSelection(state) }
+            .onChange(of: availableRoutes(state)) { _ in reconcileSelection(state) }
+        } else {
+            BackendUnavailableView(model: model)
         }
     }
 
-    private func advancedSectionIDs(_ state: DesktopState) -> [String] {
+    private func providerRow(_ group: ProviderFieldGroup, state: DesktopState) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(group.id).fontWeight(.medium)
+                if group.fields.contains(where: { model.configDraft[$0.key] != nil || model.clearSecretKeys.contains($0.key) }) {
+                    Image(systemName: "pencil.circle")
+                        .foregroundStyle(.orange).help(L("有未保存修改"))
+                        .accessibilityLabel(L("有未保存修改"))
+                }
+            }
+            Text(group.primaryCapability.map(capabilityName) ?? L("扩展能力"))
+                .font(.caption).foregroundStyle(.secondary)
+            Text(providerIsConfigured(group, state: state) ? L("已配置") : L("未配置"))
+                .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 5)
+    }
+
+    @ViewBuilder
+    private func configurationDetail(_ state: DesktopState) -> some View {
+        switch selection {
+        case .provider(let id):
+            if let group = state.providerGroups.first(where: { $0.id == id }) {
+                ConfigurationEditor(model: model, title: id, fields: group.fields, section: id)
+                    .id(ConfigurationRoute.provider(id))
+            }
+        case .section(let id):
+            ConfigurationEditor(model: model, title: state.sections.first { $0.id == id }?.label ?? id,
+                                fields: state.fields.filter { $0.provider?.isEmpty != false && $0.section == id }, section: id)
+                .id(ConfigurationRoute.section(id))
+        case .routing:
+            DesktopPage(L("冷却与路由详情"), subtitle: L("查看路由顺序和最近请求状态。"), padding: 16) {
+                ProviderHealthView(health: state.providerHealth)
+                ForEach(state.capabilityChains.keys.sorted(), id: \.self) { key in
+                    KeyValueLine(label: capabilityName(key), value: state.capabilityChains[key, default: []].joined(separator: " → "))
+                }
+            }
+        case nil:
+            Text(L("从左侧选择服务商或配置项目。"))
+                .foregroundStyle(.secondary).padding(24)
+        }
+    }
+
+    private func availableRoutes(_ state: DesktopState) -> [ConfigurationRoute] {
+        state.providerGroups.map { .provider($0.id) } + sectionIDs(state).map { .section($0) } + [.routing]
+    }
+
+    private func reconcileSelection(_ state: DesktopState) {
+        if let selection, availableRoutes(state).contains(selection) { return }
+        // Filtering does not switch away from the field currently being edited.
+        selection = groups(state).first.map { .provider($0.id) }
+    }
+
+    private func sectionIDs(_ state: DesktopState) -> [String] {
         let sections = Set(state.fields.filter { $0.provider?.isEmpty != false }.map(\.section))
         return orderedSectionIDs(state: state, present: sections)
     }
 
-    private func groups(_ state: DesktopState) -> [ProviderFieldGroup] {
-        state.providerGroups.filter {
-            (capability == "all" || $0.fields.contains { $0.capabilities.contains(capability) }) &&
-            (filter.isEmpty || $0.id.localizedCaseInsensitiveContains(filter))
-        }.sorted {
-            let left = providerIsConfigured($0, state: state)
-            let right = providerIsConfigured($1, state: state)
-            return left == right ? $0.id < $1.id : left
+    private func advancedSectionIDs(_ state: DesktopState) -> [String] {
+        sectionIDs(state).filter { id in
+            matches(id) || matches(state.sections.first { $0.id == id }?.label ?? id)
         }
+    }
+
+    private func groups(_ state: DesktopState) -> [ProviderFieldGroup] {
+        state.providerGroups.filter { matches($0.id) || matches($0.primaryCapability.map(capabilityName) ?? "") }
+            .sorted {
+                let left = providerIsConfigured($0, state: state)
+                let right = providerIsConfigured($1, state: state)
+                return left == right ? $0.id < $1.id : left
+            }
+    }
+
+    private func matches(_ text: String) -> Bool {
+        filter.isEmpty || text.localizedCaseInsensitiveContains(filter)
     }
 }
 
@@ -426,24 +452,13 @@ private struct ConfigurationEditor: View {
     let title: String
     let fields: [ConfigField]
     let section: String
-    @State private var advanced = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            if let state = model.state {
-                DesktopPage(title, subtitle: L("修改先保留为草稿；测试使用当前填写的值。")) {
-                    if fields.contains(where: { !$0.isAdvanced }) && fields.contains(where: \.isAdvanced) {
-                        Picker(L("配置范围"), selection: $advanced) {
-                            Text(L("连接设置")).tag(false)
-                            Text(L("高级参数")).tag(true)
-                        }.pickerStyle(.segmented)
-                    }
-                    let visible = fields.filter { $0.isAdvanced == advanced || !fields.contains(where: { !$0.isAdvanced }) }
-                    ProviderSection(model: model, state: state, section: section, fields: visible)
-                }
+        if let state = model.state {
+            DesktopPage(title, subtitle: L("修改先保留为草稿；测试使用当前填写的值。"), padding: 16) {
+                ProviderSection(model: model, state: state, section: section, fields: fields)
             }
-            ConfigActions(model: model)
-        }.navigationTitle(title)
+        }
     }
 }
 
@@ -711,17 +726,23 @@ private struct ProviderSection: View {
     let fields: [ConfigField]
 
     private var provider: String? {
-        let providers = Set(fields.compactMap(\.provider))
+        let providers = Set(fields.compactMap(\.provider).filter { !$0.isEmpty })
         return providers.count == 1 ? providers.first : nil
     }
 
     private var testKey: String { "test:" + (provider ?? section) }
+    private var connectionFields: [ConfigField] { fields.filter { !$0.isAdvanced } }
+    private var advancedFields: [ConfigField] { fields.filter(\.isAdvanced) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            ForEach(fields) { field in
-                ConfigFieldEditor(model: model, state: state, field: field)
-                if field.id != fields.last?.id { Divider() }
+            if !connectionFields.isEmpty && !advancedFields.isEmpty {
+                Text(L("连接设置")).font(.headline)
+                fieldEditors(connectionFields)
+                Text(L("高级参数")).font(.headline).padding(.top, 10)
+                fieldEditors(advancedFields)
+            } else {
+                fieldEditors(fields)
             }
             if let provider, let check = state.providerChecks?[provider] {
                 ProviderDraftCheckRow(provider: provider, check: check)
@@ -747,6 +768,13 @@ private struct ProviderSection: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
+
+    private func fieldEditors(_ fields: [ConfigField]) -> some View {
+        ForEach(fields) { field in
+            ConfigFieldEditor(model: model, state: state, field: field)
+            if field.id != fields.last?.id { Divider() }
+        }
+    }
 }
 
 private struct ConfigFieldEditor: View {
@@ -759,15 +787,12 @@ private struct ConfigFieldEditor: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline) {
                 Text(field.label).fontWeight(.medium)
-                if model.isEnvironmentReadOnly(field) {
-                    Text(L("环境变量")).foregroundStyle(.secondary)
-                }
                 Spacer()
-                Text(model.draftStatus(for: field)).font(.caption).foregroundStyle(.secondary)
                 Button { showingInfo = true } label: { Image(systemName: "info.circle") }
                     .buttonStyle(.borderless).help(L("字段说明"))
                     .popover(isPresented: $showingInfo) { fieldDetails.padding(20).frame(width: 360) }
             }
+            Text(model.draftStatus(for: field)).font(.caption).foregroundStyle(.secondary)
 
             if model.isEnvironmentReadOnly(field) {
                 Text(state.effectiveValue(for: field).isEmpty ? L("后端未提供有效值") : state.effectiveValue(for: field))
@@ -820,17 +845,12 @@ private struct ConfigFieldEditor: View {
 
 private struct SearchResearchView: View {
     @ObservedObject var model: AppModel
-    @State private var pane = "input"
     @State private var showOptions = false
 
     var body: some View {
         if let state = model.state {
-            DesktopPage(L("搜索与研究"), subtitle: L("选择工具并输入内容。完成后在结果中阅读和导出。")) {
-                Picker(L("工作区"), selection: $pane) {
-                    Text(L("输入")).tag("input")
-                    Text(L("结果")).tag("result")
-                }.pickerStyle(.segmented)
-                if pane == "input" {
+            DesktopSplitView(leadingWidths: 280...420, idealLeadingWidth: 320, detailMinimumWidth: 360) {
+                DesktopPage(L("输入"), subtitle: L("选择工具并填写请求，结果会显示在右侧。"), padding: 16) {
                     if state.commands.isEmpty {
                         Text(L("后端尚未提供可运行的工具目录。"))
                     } else {
@@ -838,7 +858,8 @@ private struct SearchResearchView: View {
                             ForEach(state.commands) { command in
                                 Text(command.experimental ? L("{0}（实验性）", command.label) : command.label).tag(command.id)
                             }
-                        }.frame(maxWidth: 420, alignment: .leading)
+                        }
+                        .labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
                         if let command = model.selectedCommand {
                             Text(command.description).font(.callout).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -848,42 +869,42 @@ private struct SearchResearchView: View {
                             ForEach(command.fields.filter { !$0.isAdvanced }) { field in
                                 CommandFieldEditor(model: model, field: field)
                             }
-                            HStack {
-                                if command.fields.contains(where: \.isAdvanced) {
-                                    Button(L("搜索选项…")) { showOptions = true }
-                                }
-                                Spacer()
-                                Button { Task { await model.startSelectedCommand() } } label: {
-                                    BusyLabel(text: L("开始 {0}", command.label), busyText: L("运行中…"), busy: model.isBusy.contains("run:\(command.id)"))
-                                }
-                                .buttonStyle(.borderedProminent)
-                                .keyboardShortcut(.return, modifiers: .command)
-                                .disabled(model.connection != .ready || model.isBusy.contains("run:\(command.id)"))
+                            if command.fields.contains(where: \.isAdvanced) {
+                                Button(L("搜索选项…")) { showOptions = true }
                             }
-                            if model.isBusy.contains("run:\(command.id)") {
-                                HStack {
-                                    ProgressView().controlSize(.small)
-                                    Text(L("任务正在运行"))
-                                    Spacer()
-                                    Button(L("查看活动")) { model.selectedDestination = .activity }
-                                }
+                            Button { Task { await model.startSelectedCommand() } } label: {
+                                BusyLabel(text: L("开始 {0}", command.label), busyText: L("运行中…"), busy: model.isBusy.contains("run:\(command.id)"))
                             }
+                            .buttonStyle(.borderedProminent)
+                            .keyboardShortcut(.return, modifiers: .command)
+                            .disabled(model.connection != .ready || model.isBusy.contains("run:\(command.id)"))
                         }
                     }
-                } else if let result = model.currentResult {
-                    ReadableResultView(result: result, command: model.currentResultCommand,
-                                       copy: model.copyCurrentResult, export: model.exportCurrentResult)
+                }
+            } detail: {
+                if let result = model.currentResult {
+                    ScrollView {
+                        ReadableResultView(result: result, command: model.currentResultCommand,
+                                           copy: model.copyCurrentResult, export: model.exportCurrentResult)
+                            .padding(16)
+                    }
                 } else {
                     VStack(spacing: 12) {
-                        Image(systemName: "doc.text.magnifyingglass").font(.system(size: 36)).foregroundStyle(.secondary)
-                        Text(L("结果会显示在这里")).font(.headline)
-                        Text(L("先选择工具并运行一次请求。")).foregroundStyle(.secondary)
-                        Button(L("返回输入")) { pane = "input" }
-                    }.frame(maxWidth: .infinity, minHeight: 280)
+                        if model.isSearchRunning {
+                            ProgressView().controlSize(.large)
+                            Text(model.currentResultCommand ?? L("任务正在运行")).font(.headline)
+                            Text(L("任务正在运行")).foregroundStyle(.secondary)
+                            Button(L("查看活动")) { model.selectedDestination = .activity }
+                        } else {
+                            Image(systemName: "doc.text.magnifyingglass").font(.system(size: 36)).foregroundStyle(.secondary)
+                            Text(L("结果会显示在这里")).font(.headline)
+                            Text(L("先选择工具并运行一次请求。")).foregroundStyle(.secondary)
+                        }
+                    }
+                    .multilineTextAlignment(.center).padding(24)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
-            .onAppear { if model.currentResult != nil { pane = "result" } }
-            .onChange(of: model.currentResult) { if $0 != nil { pane = "result" } }
             .sheet(isPresented: $showOptions) {
                 DetailSheet(L("搜索选项")) {
                     if let command = model.selectedCommand {
@@ -938,46 +959,49 @@ private struct ReadableResultView: View {
     let export: () -> Void
 
     var body: some View {
-        DesktopPanel {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text(command.map { L("结果：{0}", "\($0)") } ?? L("结果")).font(.headline)
-                    Spacer()
-                    Button(L("复制脱敏 JSON"), action: copy)
-                    Button(L("导出脱敏结果"), action: export)
-                }
+        VStack(alignment: .leading, spacing: 16) {
+            Text(command.map { L("结果：{0}", $0) } ?? L("结果")).font(.title2.weight(.semibold))
+            ViewThatFits(in: .horizontal) {
+                HStack { resultActions }.fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading, spacing: 8) { resultActions }
+            }
+            Divider()
+            if let text = result.readableText, !text.isEmpty {
+                Text(text).textSelection(.enabled)
+                    .lineSpacing(4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(L("后端返回了结构化结果，但没有可直接阅读的文本字段。可在高级详情查看脱敏结构。"))
+                    .foregroundStyle(.secondary)
+            }
+            let sources = result.sourceLinks
+            if !sources.isEmpty {
                 Divider()
-                if let text = result.readableText, !text.isEmpty {
-                    Text(text).textSelection(.enabled)
-                        .lineSpacing(4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else {
-                    Text(L("后端返回了结构化结果，但没有可直接阅读的文本字段。可在高级详情查看脱敏结构。"))
-                        .foregroundStyle(.secondary)
-                }
-                let sources = result.sourceLinks
-                if !sources.isEmpty {
-                    Divider()
-                    Text(L("来源")).font(.headline)
-                    ForEach(sources, id: \.absoluteString) { url in
-                        Link(destination: url) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(url.host ?? url.absoluteString).font(.callout.weight(.medium))
-                                Text(url.absoluteString).font(.caption).foregroundStyle(.secondary)
-                                    .fixedSize(horizontal: false, vertical: true)
-                            }
+                Text(L("来源")).font(.headline)
+                ForEach(sources, id: \.absoluteString) { url in
+                    Link(destination: url) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(url.host ?? url.absoluteString).font(.callout.weight(.medium))
+                            Text(url.absoluteString).font(.caption).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
-                DisclosureGroup(L("高级 JSON")) {
-                    Text(result.redacted().prettyPrinted())
-                        .font(.system(.body, design: .monospaced))
-                        .textSelection(.enabled)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            DisclosureGroup(L("高级 JSON")) {
+                Text(result.redacted().prettyPrinted())
+                    .font(.system(.body, design: .monospaced))
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var resultActions: some View {
+        Button(L("复制脱敏 JSON"), action: copy)
+        Button(L("导出脱敏结果"), action: export)
     }
 }
 
@@ -1461,26 +1485,57 @@ private enum SettingsPane: String, CaseIterable, Identifiable {
         case .advanced: return L("高级")
         }
     }
+    var symbol: String {
+        switch self {
+        case .general: return "gearshape"
+        case .appUpdate: return "arrow.down.circle"
+        case .cli: return "terminal"
+        case .advanced: return "slider.horizontal.3"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .general: return L("管理语言和配置目录。")
+        case .appUpdate: return L("更新 App 和内置引擎。")
+        case .cli: return L("管理独立安装的命令行工具。")
+        case .advanced: return L("配置连接参数和内置 CLI。")
+        }
+    }
 }
 
 private struct SettingsAboutView: View {
     @ObservedObject var model: AppModel
-    @State private var pane = SettingsPane.general
+    @Binding var pane: SettingsPane
     @State private var showEnvironment = false
     @State private var confirmEnableCLI = false
 
     var body: some View {
-        DesktopPage(L("设置与关于"), subtitle: L("按类别管理应用偏好和更新。")) {
-            Picker(L("设置类别"), selection: $pane) {
-                ForEach(SettingsPane.allCases) { Text($0.title).tag($0) }
-            }.pickerStyle(.segmented)
-            switch pane {
-            case .general: generalSettings
-            case .appUpdate: UpdatesView(model: model, cliOnly: false)
-            case .cli:
-                UpdatesView(model: model, cliOnly: true)
-                Button(L("准备运行环境…")) { showEnvironment = true }
-            case .advanced: advancedSettings
+        VStack(spacing: 0) {
+            applicationInfo.padding(24)
+            Divider()
+            DesktopSplitView(leadingWidths: 152...230, idealLeadingWidth: 180) {
+                List(selection: Binding<SettingsPane?>(
+                    get: { pane }, set: { if let selected = $0 { pane = selected } }
+                )) {
+                    ForEach(SettingsPane.allCases) { category in
+                        Label(category.title, systemImage: category.symbol)
+                            .padding(.vertical, 5).tag(category)
+                    }
+                }
+                .listStyle(.inset).scrollContentBackground(.hidden)
+                .accessibilityLabel(L("设置类别"))
+            } detail: {
+                DesktopPage(pane.title, subtitle: pane.subtitle, padding: 16) {
+                    switch pane {
+                    case .general: generalSettings
+                    case .appUpdate: UpdatesView(model: model, cliOnly: false)
+                    case .cli:
+                        UpdatesView(model: model, cliOnly: true)
+                        Button(L("准备运行环境…")) { showEnvironment = true }
+                    case .advanced: advancedSettings
+                    }
+                }.id(pane)
             }
         }
         .sheet(isPresented: $showEnvironment) {
@@ -1492,55 +1547,53 @@ private struct SettingsAboutView: View {
         } message: { Text(L("这会要求后端创建用户级 CLI 链接；它不会覆盖已存在的同名外部 CLI。")) }
     }
 
-    private var generalSettings: some View {
-        VStack(alignment: .leading, spacing: 24) {
-            GroupBox(L("偏好设置")) {
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(L("界面语言")).fontWeight(.medium)
-                            Text(L("App 与独立 CLI 分别保存语言选择。环境写入期间请等待操作完成。"))
-                                .font(.callout).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: 16)
-                        Picker(L("界面语言"), selection: Binding(
-                            get: { model.languagePreference },
-                            set: { value in Task { await model.setLanguage(value) } })) {
-                            Text(L("跟随系统")).tag("auto")
-                            Text(L("简体中文")).tag("zh")
-                            Text("English").tag("en")
-                        }
-                        .labelsHidden().frame(width: 160)
-                        .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("language"))
-                    }
-                    Divider()
-                    HStack(spacing: 20) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(L("当前配置目录")).fontWeight(.medium)
-                            Text(model.state?.configDirectory ?? L("后端尚未提供"))
-                                .font(.system(.callout, design: .monospaced))
-                                .foregroundStyle(.secondary).textSelection(.enabled)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: 16)
-                        Button(model.isBusy.contains("profile") ? L("切换中…") : L("选择配置目录…"), action: model.chooseConfigDirectory)
-                            .fixedSize()
-                            .disabled(model.connection != .ready || model.configOperationBusy)
-                    }
+    private var applicationInfo: some View {
+        DesktopPanel {
+            HStack(spacing: 16) {
+                Image(nsImage: AppBranding.icon).resizable().frame(width: 56, height: 56)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Smart Search").font(.title2.weight(.semibold))
+                    Text(L("版本 {0}", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("尚未读取")))
+                        .foregroundStyle(.secondary)
+                    Text("konbakuyomu/smartsearch").font(.caption).foregroundStyle(.secondary)
                 }
+                Spacer(minLength: 12)
+                Link(destination: URL(string: "https://github.com/konbakuyomu/smartsearch")!) {
+                    Label("GitHub", systemImage: "arrow.up.right")
+                }
+                .buttonStyle(.bordered)
+                .help(L("项目主页"))
             }
+        }
+    }
 
-            Divider()
-            HStack(spacing: 12) {
-                Image(nsImage: AppBranding.icon).resizable().frame(width: 44, height: 44).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Smart Search").font(.headline)
-                    Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("尚未读取"))
-                        .font(.caption).foregroundStyle(.secondary)
+    private var generalSettings: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L("界面语言")).font(.headline)
+                Picker(L("界面语言"), selection: Binding(
+                    get: { model.languagePreference },
+                    set: { value in Task { await model.setLanguage(value) } })) {
+                    Text(L("跟随系统")).tag("auto")
+                    Text(L("简体中文")).tag("zh")
+                    Text("English").tag("en")
                 }
-                Spacer()
-                Link(L("项目主页"), destination: URL(string: "https://github.com/konbakuyomu/smartsearch")!)
+                .labelsHidden().frame(maxWidth: 220, alignment: .leading)
+                .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("language"))
+                Text(L("App 与独立 CLI 分别保存语言选择。环境写入期间请等待操作完成。"))
+                    .font(.callout).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Divider()
+            VStack(alignment: .leading, spacing: 10) {
+                Text(L("当前配置目录")).font(.headline)
+                Text(model.state?.configDirectory ?? L("后端尚未提供"))
+                    .font(.system(.callout, design: .monospaced))
+                    .foregroundStyle(.secondary).textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(model.isBusy.contains("profile") ? L("切换中…") : L("选择配置目录…"), action: model.chooseConfigDirectory)
+                    .disabled(model.connection != .ready || model.configOperationBusy)
             }
         }
     }

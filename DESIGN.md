@@ -29,18 +29,18 @@ description: 任务优先的原生 macOS 搜索工作台。
 
 ## Layout
 
-几何单位均为 macOS pt。`DesktopMetrics`：内容最大宽度 920、页面留白 24、章节间距 24、面板留白 16、圆角 12。内容左对齐并纵向滚动。
+几何单位均为 macOS pt。`DesktopMetrics`：内容最大宽度 920、页面留白 24、章节间距 24、面板留白 16、圆角 12。内容左对齐并纵向滚动。分栏内留白为 16 pt，分栏外不叠加页面留白；分隔条可拖动。服务商左右最小宽度为 176／400，设置为 152／400，搜索为 280／360；搜索输入理想宽度 320。
 
 窗口默认 1080 × 760，最小 920 × 620。主侧栏宽度为 196／220／244（最小／理想／最大），保留原生标题栏与工具栏。
 
 | 工作区 | 结构 |
 | --- | --- |
 | 概览 | 基础状态、下一步与能力；详情 sheet |
-| 服务商 | 列表进入二级编辑；连接／高级分段选择 |
-| 搜索与研究 | 输入／结果分段选择；选项 sheet |
+| 服务商 | 左侧服务商／配置列表，右侧直接编辑；连接与高级字段按组呈现 |
+| 搜索与研究 | 左侧输入、右侧结果；两栏分别滚动，选项使用 sheet |
 | 活动 | 左列表、右详情；原生可调整分栏 |
 | 更新 Skills | 目标开关列表；文件／偏好／环境 sheet |
-| 设置与关于 | 通用／App 更新／独立 CLI／高级四类 |
+| 设置与关于 | 顶部固定项目信息和 GitHub 入口；下方左侧类别、右侧选项 |
 
 ## Elevation & Depth
 
@@ -54,8 +54,9 @@ description: 任务优先的原生 macOS 搜索工作台。
 
 - **Buttons:** 当前主要动作使用 `.borderedProminent`；运行中显示进度与文字，冲突时禁用。危险动作声明对应 role。
 - **Inputs:** 字段按 metadata 使用 TextField／SecureField 或 Picker；现有 Toggle 使用 `.switch`。保留系统焦点与键盘交互，字段来源等详情进入 popover。
-- **Navigation:** `NavigationSplitView` 与 sidebar；同级内容使用 segmented Picker。配置和 Skills 底部保留操作区。
+- **Navigation:** `NavigationSplitView` 与 sidebar；记录筛选使用 segmented Picker；服务商、设置及搜索使用原生 HSplitView。配置和 Skills 底部保留操作区。
 - **Disclosure:** 整行使用真实 Button，最小高度 30，展开箭头旋转 90°；动画 `easeInOut(0.18s)`，减少动态效果开启时禁用。提供展开状态的可访问值。
+- **Language:** 语言变化时刷新原生控件和菜单；页面选择留在稳定的父视图，草稿与搜索参数保留在 AppModel。运行标题从稳定 ID 重新取词。
 - **Sheet:** 560 × 480，留白 20；标题、“完成”、分隔与滚动内容。
 - **Result:** 正文和来源优先，脱敏 JSON 按需展开；文本可选取，复制和导出说明范围。
 

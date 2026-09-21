@@ -15786,5 +15786,33 @@
   "服务商与模型": [
     "服务商与模型",
     "Provider and model"
+  ],
+  "从左侧选择服务商或配置项目。": [
+    "从左侧选择服务商或配置项目。",
+    "Select a provider or configuration section on the left."
+  ],
+  "更新 App 和内置引擎。": [
+    "更新 App 和内置引擎。",
+    "Update the App and its bundled engine."
+  ],
+  "版本 {0}": [
+    "版本 {0}",
+    "Version {0}"
+  ],
+  "管理独立安装的命令行工具。": [
+    "管理独立安装的命令行工具。",
+    "Manage the independently installed command-line tools."
+  ],
+  "管理语言和配置目录。": [
+    "管理语言和配置目录。",
+    "Manage language and configuration folders."
+  ],
+  "选择工具并填写请求，结果会显示在右侧。": [
+    "选择工具并填写请求，结果会显示在右侧。",
+    "Choose a tool and enter a request. Results appear on the right."
+  ],
+  "配置连接参数和内置 CLI。": [
+    "配置连接参数和内置 CLI。",
+    "Configure backend connections and the bundled CLI."
   ]
 }

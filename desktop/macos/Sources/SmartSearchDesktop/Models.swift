@@ -264,8 +264,8 @@ struct CommandField: Identifiable, Hashable {
     init?(_ value: JSONValue) {
         guard let raw = value.objectValue, let name = raw.string("name") else { return nil }
         self.name = name
-        label = raw.string("label") ?? name
-        help = raw.string("help") ?? ""
+        label = L(raw.string("label") ?? name)
+        help = L(raw.string("help") ?? "")
         flags = raw.array("flags").compactMap(\.stringValue)
         kind = raw.string("kind") ?? "text"
         choices = raw.array("choices").compactMap(\.stringValue)
@@ -287,8 +287,8 @@ struct CommandCatalogEntry: Identifiable, Hashable {
     init?(_ value: JSONValue) {
         guard let raw = value.objectValue, let id = raw.string("id") else { return nil }
         self.id = id
-        label = raw.string("label") ?? id
-        description = raw.string("description") ?? ""
+        label = L(raw.string("label") ?? id)
+        description = L(raw.string("description") ?? "")
         experimental = raw.bool("experimental") ?? false
         fields = raw.array("fields").compactMap(CommandField.init)
     }
@@ -364,6 +364,8 @@ enum OwnedRunKind: Hashable {
 struct OwnedRunDescriptor: Hashable {
     let kind: OwnedRunKind
     let label: String
+    var commandID: String? = nil
+    var providerID: String? = nil
 }
 
 struct OwnedRunResultStore {
@@ -376,8 +378,9 @@ struct OwnedRunResultStore {
         self.capacity = max(1, capacity)
     }
 
-    mutating func register(runID: String, kind: OwnedRunKind, label: String) {
-        descriptors[runID] = OwnedRunDescriptor(kind: kind, label: label)
+    mutating func register(runID: String, kind: OwnedRunKind, label: String,
+                           commandID: String? = nil, providerID: String? = nil) {
+        descriptors[runID] = OwnedRunDescriptor(kind: kind, label: label, commandID: commandID, providerID: providerID)
     }
 
     @discardableResult

@@ -62,7 +62,35 @@
         ]
       },
       "visualAcceptance": "pending; source-derived baseline",
-      "representation": "保留原生 API；不生成固定 CSS 色值、色阶、Web 断点或 HTML 控件仿制。"
+      "representation": "保留原生 API；不生成固定 CSS 色值、色阶、Web 断点或 HTML 控件仿制。",
+      "splitViews": {
+        "api": "HSplitView",
+        "columnPadding": 16,
+        "providers": {
+          "leadingMinIdealMax": [
+            176,
+            208,
+            280
+          ],
+          "detailMinimum": 400
+        },
+        "settings": {
+          "leadingMinIdealMax": [
+            152,
+            180,
+            230
+          ],
+          "detailMinimum": 400
+        },
+        "search": {
+          "leadingMinIdealMax": [
+            280,
+            320,
+            420
+          ],
+          "detailMinimum": 360
+        }
+      }
     },
     "motion": [
       {
@@ -108,6 +136,12 @@
       "kind": "custom",
       "description": "真实 Button、键盘操作、展开状态与减少动态效果分支。",
       "native": "WholeRowDisclosureStyle"
+    },
+    {
+      "name": "任务分栏",
+      "kind": "custom",
+      "description": "左侧选择或输入，右侧编辑或阅读结果；各栏独立滚动，原生分隔条可拖动。",
+      "native": "DesktopSplitView"
     }
   ],
   "narrative": {

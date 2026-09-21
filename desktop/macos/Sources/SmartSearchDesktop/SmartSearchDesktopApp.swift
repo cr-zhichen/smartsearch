@@ -16,13 +16,40 @@ struct SmartSearchDesktopApp: App {
         }
         .defaultSize(width: 1080, height: 760)
         .commands {
-            CommandGroup(replacing: .appSettings) {
-                Button(L("设置与关于")) {
-                    model.selectedDestination = .settings
-                    applicationDelegate.showMainWindow()
-                }.keyboardShortcut(",", modifiers: .command)
+            LocalizedCommands(model: model, showMainWindow: applicationDelegate.showMainWindow)
+        }
+
+        MenuBarExtra("Smart Search", systemImage: "magnifyingglass") {
+            Group {
+                Button(L("显示 Smart Search")) { applicationDelegate.showMainWindow() }
+                if model.hasOwnedActiveRuns {
+                    Text(L("有 App 任务正在后台运行"))
+                }
+                Divider()
+                Button(L("退出")) { NSApp.terminate(nil) }
             }
-            CommandMenu(L("导航")) {
+            .id(model.languagePreference)
+            .environment(\.locale, model.interfaceLocale)
+        }
+        .menuBarExtraStyle(.menu)
+    }
+}
+
+@MainActor
+private struct LocalizedCommands: Commands {
+    @ObservedObject var model: AppModel
+    let showMainWindow: () -> Void
+
+    var body: some Commands {
+        CommandGroup(replacing: .appSettings) {
+            Button(L("设置与关于")) {
+                model.selectedDestination = .settings
+                showMainWindow()
+            }.keyboardShortcut(",", modifiers: .command)
+            .id(model.languagePreference)
+        }
+        CommandMenu(L("导航")) {
+            Group {
                 Button(L("概览")) { model.selectedDestination = .overview }.keyboardShortcut("1", modifiers: .command)
                 Button(L("服务商")) { model.selectedDestination = .providers }.keyboardShortcut("2", modifiers: .command)
                 Button(L("搜索与研究")) { model.selectedDestination = .search }.keyboardShortcut("3", modifiers: .command)
@@ -30,20 +57,13 @@ struct SmartSearchDesktopApp: App {
                 Button(L("更新 Skills")) { model.selectedDestination = .integration }.keyboardShortcut("5", modifiers: .command)
                 Button(L("设置与关于")) { model.selectedDestination = .settings }.keyboardShortcut("6", modifiers: .command)
             }
-            CommandGroup(after: .appInfo) {
-                Button(L("刷新状态")) { Task { await model.refreshState() } }.keyboardShortcut("r", modifiers: .command)
-            }
+            .id(model.languagePreference)
+            .environment(\.locale, model.interfaceLocale)
         }
-
-        MenuBarExtra("Smart Search", systemImage: "magnifyingglass") {
-            Button(L("显示 Smart Search")) { applicationDelegate.showMainWindow() }
-            if model.hasOwnedActiveRuns {
-                Text(L("有 App 任务正在后台运行"))
-            }
-            Divider()
-            Button(L("退出")) { NSApp.terminate(nil) }
+        CommandGroup(after: .appInfo) {
+            Button(L("刷新状态")) { Task { await model.refreshState() } }.keyboardShortcut("r", modifiers: .command)
+            .id(model.languagePreference)
         }
-        .menuBarExtraStyle(.menu)
     }
 }
 
