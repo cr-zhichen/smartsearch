@@ -8,8 +8,7 @@ param(
     [string] $OutputRoot = ".desktop-artifacts",
     [ValidateSet("Auto", "Required", "Skip")]
     [string] $InstallerMode = "Auto",
-    [string] $InnoSetupPath,
-    [switch] $BootstrapInnoSetup,
+    [string] $PreviousReleaseDirectory,
     [ValidateSet("Required", "Skip")]
     [string] $SigningMode = "Skip"
 )
@@ -101,24 +100,6 @@ function Get-ProjectVersion([string] $ProjectRoot) {
     return $Matches[1]
 }
 
-function Find-InnoSetup([string] $ExplicitPath) {
-    if ($ExplicitPath) {
-        if (-not (Test-Path -LiteralPath $ExplicitPath -PathType Leaf)) {
-            throw "The requested Inno Setup compiler does not exist: $ExplicitPath"
-        }
-        return [System.IO.Path]::GetFullPath($ExplicitPath)
-    }
-    $command = Get-Command -Name "ISCC.exe" -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($null -ne $command) {
-        return $command.Source
-    }
-    $locations = @(
-        (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFilesX86)) "Inno Setup 6\ISCC.exe"),
-        (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)) "Inno Setup 6\ISCC.exe")
-    )
-    return $locations | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
-}
-
 $python = Resolve-ExecutablePath $PythonPath
 $dotnet = Resolve-ExecutablePath "dotnet"
 $pythonArchitecture = Get-PythonArchitecture $python
@@ -195,74 +176,12 @@ $installer = [ordered]@{
     note = "Installer packaging was not requested."
 }
 if ($InstallerMode -ne "Skip") {
-    $iscc = Find-InnoSetup $InnoSetupPath
-    $compilerOrigin = "existing-local-installation"
-    if ($null -eq $iscc -and $BootstrapInnoSetup) {
-        $bootstrapManifest = Join-Path $runDirectory "inno-setup.json"
-        $bootstrapScript = Join-Path $PSScriptRoot "Get-LocalInnoSetup.ps1"
-        & $bootstrapScript -OutputRoot $runDirectory -ResultFile $bootstrapManifest
-        if ($LASTEXITCODE -ne 0) {
-            throw "Local Inno Setup bootstrap failed. Its fresh evidence directory is $runDirectory."
-        }
-        $bootstrap = Get-Content -Raw -LiteralPath $bootstrapManifest | ConvertFrom-Json
-        $iscc = [string] $bootstrap.compiler_path
-        if (-not (Test-Path -LiteralPath $iscc -PathType Leaf)) {
-            throw "Local Inno Setup bootstrap did not provide ISCC.exe."
-        }
-        $compilerOrigin = "official-local-extraction"
-    }
-    if ($null -eq $iscc) {
-        $message = "Inno Setup 6 (ISCC.exe) was not found. No tool was installed; portable publish output remains available at $publishDirectory. Pass -BootstrapInnoSetup to download and locally extract the pinned official compiler inside this build run."
-        if ($InstallerMode -eq "Required") {
-            throw $message
-        }
-        Write-Warning $message
-        $installer = [ordered]@{ status = "not-built"; path = $null; note = $message }
-    }
-    else {
-        $installerDirectory = Join-Path $runDirectory "installer"
-        New-Item -ItemType Directory -Path $installerDirectory | Out-Null
-        $installerScript = Join-Path $repositoryRoot "desktop\packaging\windows\SmartSearch.iss"
-        if (-not (Test-Path -LiteralPath $installerScript -PathType Leaf)) {
-            throw "Inno Setup script is not available: $installerScript"
-        }
-        $version = Get-ProjectVersion $repositoryRoot
-        $allowedArchitectures = if ($Architecture -eq "arm64") { "arm64" } else { "x64compatible" }
-        $innoArguments = @(
-            "/DSourceDir=$publishDirectory",
-            "/DOutputDir=$installerDirectory",
-            "/DMyAppVersion=$version",
-            "/DMyAppArch=$Architecture",
-            "/DAllowedArchitectures=$allowedArchitectures",
-            "/DInstallModeArchitectures=$allowedArchitectures",
-            $installerScript
-        )
-        if ($signingEnabled) {
-            $uninstallerDirectory = Join-Path $runDirectory 'signed-uninstaller'
-            New-Item -ItemType Directory -Path $uninstallerDirectory | Out-Null
-            $signCommand = '/Ssmartsearch=$q{0}$q -NoProfile -File $q{1}$q -UninstallerDirectory $q{2}$q -Path $f' -f (Get-Process -Id $PID).Path, (Join-Path $PSScriptRoot 'Sign-WindowsFile.ps1'), $uninstallerDirectory
-            $innoArguments = @('/DSignedBuild=1', "/DSignedUninstallerDirectory=$uninstallerDirectory", $signCommand) + $innoArguments
-        }
-        & $iscc @innoArguments
-        if ($LASTEXITCODE -ne 0) {
-            throw "Inno Setup compilation failed. Its fresh evidence directory is $runDirectory."
-        }
-        $installerFile = Get-ChildItem -LiteralPath $installerDirectory -File -Filter "*.exe" | Select-Object -First 1
-        if ($null -eq $installerFile) {
-            throw "Inno Setup did not create an installer in $installerDirectory."
-        }
-        $installer = [ordered]@{
-            status = if ($signingEnabled) { 'built-self-signed-package' } else { 'built-unsigned-test-package' }
-            path = $installerFile.FullName
-            note = "Current-user installer only; compiler=$compilerOrigin; it does not modify PATH or remove shared config/results on uninstall."
-        }
-        if ($signingEnabled) {
-            $signatures += Test-WindowsSignature $installerFile.FullName $signingCertificate
-            $uninstallers = @(Get-ChildItem -LiteralPath $uninstallerDirectory -File)
-            if ($uninstallers.Count -ne 1) { throw 'Expected exactly one signed uninstaller generated by this Inno build.' }
-            $signatures += Test-WindowsSignature $uninstallers[0].FullName $signingCertificate
-        }
-    }
+    $packageResult = Join-Path $runDirectory 'package-result.json'
+    & (Join-Path $PSScriptRoot 'Package-Windows.ps1') -PublishDirectory $publishDirectory `
+        -OutputDirectory (Join-Path $runDirectory 'installer') -Version $version -Architecture $Architecture `
+        -SigningMode $SigningMode -PreviousReleaseDirectory $PreviousReleaseDirectory -ResultFile $packageResult
+    $installer = Get-Content -Raw -LiteralPath $packageResult | ConvertFrom-Json
+    $signatures += @($installer.signatures)
 }
 
 if ($signingEnabled) {

@@ -21,6 +21,7 @@
   <ItemGroup>
     <EmbeddedResource Include="$(LocalizationPath)" LogicalName="SmartSearch.Localizations.json" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
     <Content Include="Assets\smart-search.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\smart-search.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

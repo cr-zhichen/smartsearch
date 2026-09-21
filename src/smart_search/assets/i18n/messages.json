@@ -15502,5 +15502,345 @@
   "独立 CLI 已就绪。可返回上方检查并更新 Skills。": [
     "独立 CLI 已就绪。可返回上方检查并更新 Skills。",
     "The independent CLI is ready. Check and update Skills above."
+  ],
+  "App update available": [
+    "发现 App 新版本",
+    "App update available"
+  ],
+  "App 与独立 CLI 分别检查和更新。": [
+    "App 与独立 CLI 分别检查和更新。",
+    "The App and independent CLI are checked and updated separately."
+  ],
+  "App 更新未完成，请重新检查或使用完整安装包。": [
+    "App 更新未完成，请重新检查或使用完整安装包。",
+    "The App update did not finish. Check again or use the full installer."
+  ],
+  "App 更新配置无效，请使用完整安装包。": [
+    "App 更新配置无效，请使用完整安装包。",
+    "The App update configuration is invalid. Use the full installer."
+  ],
+  "App 正在准备更新，请等待重启。": [
+    "App 正在准备更新，请等待重启。",
+    "The App is preparing an update. Wait for it to restart."
+  ],
+  "CLI 包已更新，但 Python 运行环境准备失败；请查看日志并重试。": [
+    "CLI 包已更新，但 Python 运行环境准备失败；请查看日志并重试。",
+    "The CLI package was updated, but Python runtime setup failed. Review the log and retry."
+  ],
+  "CLI 包已更新，但缺少可用的独立 Python；请在“共用独立 CLI 环境”完成准备后重试。": [
+    "CLI 包已更新，但缺少可用的独立 Python；请在“共用独立 CLI 环境”完成准备后重试。",
+    "The CLI package was updated, but no independent Python is available. Complete Shared independent CLI environment setup, then retry."
+  ],
+  "CLI 包的位置或版本已变化，未准备运行环境；请重新检查。": [
+    "CLI 包的位置或版本已变化，未准备运行环境；请重新检查。",
+    "The CLI package location or version changed. Runtime setup was not started; check again."
+  ],
+  "CLI 更新或运行环境准备未完成，请查看日志并重试。": [
+    "CLI 更新或运行环境准备未完成，请查看日志并重试。",
+    "CLI update or runtime setup did not complete. Review the log and retry."
+  ],
+  "CLI 检查无法启动或读取（{0}）；请检查原安装后刷新。": [
+    "CLI 检查无法启动或读取（{0}）；请检查原安装后刷新。",
+    "CLI detection could not start or read its input ({0}). Check the original installation, then refresh."
+  ],
+  "CLI 检查未通过（{0}）；请点击“刷新已安装版本”重试。": [
+    "CLI 检查未通过（{0}）；请点击“刷新已安装版本”重试。",
+    "CLI detection failed ({0}). Select Refresh installed versions to retry."
+  ],
+  "CLI 检查超时（{0}）；请点击“刷新已安装版本”重试。": [
+    "CLI 检查超时（{0}）；请点击“刷新已安装版本”重试。",
+    "CLI detection timed out ({0}). Select Refresh installed versions to retry."
+  ],
+  "CLI 版本已是最新，但运行环境尚未就绪；点击“更新 CLI”完成准备。": [
+    "CLI 版本已是最新，但运行环境尚未就绪；点击“更新 CLI”完成准备。",
+    "The CLI version is current, but its runtime is not ready. Select Update CLI to finish setup."
+  ],
+  "Cancel the update download or wait for it to finish before quitting.": [
+    "请先取消更新下载或等待完成，再退出。",
+    "Cancel the update download or wait for it to finish before quitting."
+  ],
+  "Could not check App updates. Try again later.": [
+    "无法检查 App 更新，请稍后重试。",
+    "Could not check App updates. Try again later."
+  ],
+  "Download cancelled. Check again to retry the update.": [
+    "下载已取消，可重试更新。",
+    "Download cancelled. Check again to retry the update."
+  ],
+  "Download update and restart": [
+    "下载更新并重启",
+    "Download update and restart"
+  ],
+  "Downloading update: {0}%": [
+    "正在下载更新：{0}%",
+    "Downloading update: {0}%"
+  ],
+  "Finish active work or handle unsaved changes, then select Update and restart.": [
+    "请先处理正在进行的任务或未保存修改，再点击更新重启。",
+    "Finish active work or handle unsaved changes, then select Update and restart."
+  ],
+  "First installation with the new updater": [
+    "首次迁移到新更新方式",
+    "First installation with the new updater"
+  ],
+  "Got it": [
+    "知道了",
+    "Got it"
+  ],
+  "Later": [
+    "稍后",
+    "Later"
+  ],
+  "Migrate an older installation": [
+    "旧版迁移说明",
+    "Migrate an older installation"
+  ],
+  "Older installation detected: {0}": [
+    "检测到旧安装：{0}",
+    "Older installation detected: {0}"
+  ],
+  "Open App updater": [
+    "打开 App 更新",
+    "Open App updater"
+  ],
+  "Quit the older App and migrate once using the full installer. Subsequent updates are handled in the App. If Windows still lists an older copy, identify it by its installation path before uninstalling it manually. Configuration, results, independent CLI and Skills are preserved.": [
+    "旧版需要先退出并通过完整安装包迁移一次；之后可在 App 内更新。若系统仍列出旧版，请按安装位置辨认后手动卸载旧版。配置、结果、独立 CLI 和 Skills 保留。",
+    "Quit the older App and migrate once using the full installer. Subsequent updates are handled in the App. If Windows still lists an older copy, identify it by its installation path before uninstalling it manually. Configuration, results, independent CLI and Skills are preserved."
+  ],
+  "Save or discard configuration changes before quitting or installing an update.": [
+    "请先保存或放弃未保存的配置，再退出或安装更新。",
+    "Save or discard configuration changes before quitting or installing an update."
+  ],
+  "Sparkle downloads, verifies and updates the whole App. Older versions require one full installation first. Configuration, independent CLI and Skills are preserved.": [
+    "由 Sparkle 下载、校验并更新整个 App。旧版需先完整安装一次；用户配置、独立 CLI 和 Skills 保留。",
+    "Sparkle downloads, verifies and updates the whole App. Older versions require one full installation first. Configuration, independent CLI and Skills are preserved."
+  ],
+  "The App and independent CLI are checked and updated separately.": [
+    "App 与独立 CLI 分别检查和更新。",
+    "The App and independent CLI are checked and updated separately."
+  ],
+  "The App connection was restored. Check for updates again.": [
+    "已恢复 App 连接，请重新检查更新。",
+    "The App connection was restored. Check for updates again."
+  ],
+  "The App is preparing an update. Wait for it to restart.": [
+    "App 正在准备更新，请等待重启。",
+    "The App is preparing an update. Wait for it to restart."
+  ],
+  "The App update configuration is invalid. Use the full installer.": [
+    "App 更新配置无效，请使用完整安装包。",
+    "The App update configuration is invalid. Use the full installer."
+  ],
+  "The App update did not finish. Check again or use the full installer.": [
+    "App 更新未完成，请重新检查或使用完整安装包。",
+    "The App update did not finish. Check again or use the full installer."
+  ],
+  "The update is downloaded and verified, awaiting a safe restart.": [
+    "更新已下载并校验，等待安全重启。",
+    "The update is downloaded and verified, awaiting a safe restart."
+  ],
+  "This copy is not a framework installation. Install it once using the full installer.": [
+    "此副本尚未通过新安装器安装；请先完成一次完整安装。",
+    "This copy is not a framework installation. Install it once using the full installer."
+  ],
+  "This test build has no update signing configuration. App updates are unavailable.": [
+    "此测试包尚未配置更新签名，App 自动更新不可用。",
+    "This test build has no update signing configuration. App updates are unavailable."
+  ],
+  "Update and restart": [
+    "更新并重启",
+    "Update and restart"
+  ],
+  "Update download or verification failed. The installed App is unchanged; check again.": [
+    "更新下载或校验失败，原安装保持不变；请重新检查。",
+    "Update download or verification failed. The installed App is unchanged; check again."
+  ],
+  "Update downloading": [
+    "更新下载中",
+    "Update downloading"
+  ],
+  "Update not completed": [
+    "更新未完成",
+    "Update not completed"
+  ],
+  "Update now": [
+    "现在更新",
+    "Update now"
+  ],
+  "Update ready": [
+    "更新已就绪",
+    "Update ready"
+  ],
+  "Velopack verifies and updates the whole App, using a full package when a delta is unavailable. Configuration, independent CLI and Skills are preserved.": [
+    "由 Velopack 校验并更新整个 App；差分不可用时下载完整包。用户配置、独立 CLI 和 Skills 保留。",
+    "Velopack verifies and updates the whole App, using a full package when a delta is unavailable. Configuration, independent CLI and Skills are preserved."
+  ],
+  "You can update later in Settings.": [
+    "稍后可在设置中更新。",
+    "You can update later in Settings."
+  ],
+  "{0} → {1}. Download and restart now, or update later in Settings.": [
+    "{0} → {1}。现在下载更新并重启，或稍后在设置中更新。",
+    "{0} → {1}. Download and restart now, or update later in Settings."
+  ],
+  "{0} → {1}。现在下载更新并重启，或稍后在设置中更新。": [
+    "{0} → {1}。现在下载更新并重启，或稍后在设置中更新。",
+    "{0} → {1}. Download and restart now, or update later in Settings."
+  ],
+  "下载更新并重启": [
+    "下载更新并重启",
+    "Download update and restart"
+  ],
+  "历史检查结果，请重新检查更新。": [
+    "历史检查结果，请重新检查更新。",
+    "Previous check results; check for updates again."
+  ],
+  "发现 App 新版本": [
+    "发现 App 新版本",
+    "App update available"
+  ],
+  "已恢复 App 连接，请重新检查更新。": [
+    "已恢复 App 连接，请重新检查更新。",
+    "The App connection was restored. Check for updates again."
+  ],
+  "已找到 mise 的 CLI 入口，但当前 App 环境找不到 mise；请重新打开 App 后检查。": [
+    "已找到 mise 的 CLI 入口，但当前 App 环境找不到 mise；请重新打开 App 后检查。",
+    "A mise CLI shim was found, but mise is unavailable in this App environment. Reopen the App and check again."
+  ],
+  "打开 App 更新": [
+    "打开 App 更新",
+    "Open App updater"
+  ],
+  "无法检查 App 更新，请稍后重试。": [
+    "无法检查 App 更新，请稍后重试。",
+    "Could not check App updates. Try again later."
+  ],
+  "旧版迁移说明": [
+    "旧版迁移说明",
+    "Migrate an older installation"
+  ],
+  "旧版需要先退出并通过完整安装包迁移一次；之后可在 App 内更新。若系统仍列出旧版，请按安装位置辨认后手动卸载旧版。配置、结果、独立 CLI 和 Skills 保留。": [
+    "旧版需要先退出并通过完整安装包迁移一次；之后可在 App 内更新。若系统仍列出旧版，请按安装位置辨认后手动卸载旧版。配置、结果、独立 CLI 和 Skills 保留。",
+    "Quit the older App and migrate once using the full installer. Subsequent updates are handled in the App. If Windows still lists an older copy, identify it by its installation path before uninstalling it manually. Configuration, results, independent CLI and Skills are preserved."
+  ],
+  "更新下载中": [
+    "更新下载中",
+    "Update downloading"
+  ],
+  "更新下载或校验失败，原安装保持不变；请重新检查。": [
+    "更新下载或校验失败，原安装保持不变；请重新检查。",
+    "Update download or verification failed. The installed App is unchanged; check again."
+  ],
+  "更新已下载并校验，等待安全重启。": [
+    "更新已下载并校验，等待安全重启。",
+    "The update is downloaded and verified, awaiting a safe restart."
+  ],
+  "更新已就绪": [
+    "更新已就绪",
+    "Update ready"
+  ],
+  "更新并重启": [
+    "更新并重启",
+    "Update and restart"
+  ],
+  "更新未完成": [
+    "更新未完成",
+    "Update not completed"
+  ],
+  "未能核对 CLI 入口对应的安装包；请检查原安装后刷新。": [
+    "未能核对 CLI 入口对应的安装包；请检查原安装后刷新。",
+    "The package behind the CLI entry point could not be verified. Check the original installation, then refresh."
+  ],
+  "本机 CLI 调用信息需要刷新。": [
+    "本机 CLI 调用信息需要刷新。",
+    "The local CLI invocation details need refreshing."
+  ],
+  "核对 mise 全局安装": [
+    "核对 mise 全局安装",
+    "checking the global mise installation"
+  ],
+  "核对 npm 全局安装": [
+    "核对 npm 全局安装",
+    "checking the global npm installation"
+  ],
+  "检测到旧安装：{0}": [
+    "检测到旧安装：{0}",
+    "Older installation detected: {0}"
+  ],
+  "正在下载更新：{0}%": [
+    "正在下载更新：{0}%",
+    "Downloading update: {0}%"
+  ],
+  "此副本尚未通过新安装器安装；请先完成一次完整安装。": [
+    "此副本尚未通过新安装器安装；请先完成一次完整安装。",
+    "This copy is not a framework installation. Install it once using the full installer."
+  ],
+  "此测试包尚未配置更新签名，App 自动更新不可用。": [
+    "此测试包尚未配置更新签名，App 自动更新不可用。",
+    "This test build has no update signing configuration. App updates are unavailable."
+  ],
+  "独立 CLI 尚未验证；可更新 Skills 内容，原有本机调用信息会保留。": [
+    "独立 CLI 尚未验证；可更新 Skills 内容，原有本机调用信息会保留。",
+    "The independent CLI has not been verified. Skill content can still be updated; existing local invocation details are preserved."
+  ],
+  "现在更新": [
+    "现在更新",
+    "Update now"
+  ],
+  "由 Sparkle 下载、校验并更新整个 App。旧版需先完整安装一次；用户配置、独立 CLI 和 Skills 保留。": [
+    "由 Sparkle 下载、校验并更新整个 App。旧版需先完整安装一次；用户配置、独立 CLI 和 Skills 保留。",
+    "Sparkle downloads, verifies and updates the whole App. Older versions require one full installation first. Configuration, independent CLI and Skills are preserved."
+  ],
+  "由 Velopack 校验并更新整个 App；差分不可用时下载完整包。用户配置、独立 CLI 和 Skills 保留。": [
+    "由 Velopack 校验并更新整个 App；差分不可用时下载完整包。用户配置、独立 CLI 和 Skills 保留。",
+    "Velopack verifies and updates the whole App, using a full package when a delta is unavailable. Configuration, independent CLI and Skills are preserved."
+  ],
+  "知道了": [
+    "知道了",
+    "Got it"
+  ],
+  "稍后": [
+    "稍后",
+    "Later"
+  ],
+  "稍后可在设置中更新。": [
+    "稍后可在设置中更新。",
+    "You can update later in Settings."
+  ],
+  "管理器执行失败，或 CLI 实际版本/运行环境未通过验证；请查看日志并重新检查。": [
+    "管理器执行失败，或 CLI 实际版本/运行环境未通过验证；请查看日志并重新检查。",
+    "The manager failed, or the actual CLI version or runtime could not be verified. Review the log and check again."
+  ],
+  "解析 CLI 入口": [
+    "解析 CLI 入口",
+    "resolving the CLI entry point"
+  ],
+  "请先保存或放弃未保存的配置，再退出或安装更新。": [
+    "请先保存或放弃未保存的配置，再退出或安装更新。",
+    "Save or discard configuration changes before quitting or installing an update."
+  ],
+  "请先取消更新下载或等待完成，再退出。": [
+    "请先取消更新下载或等待完成，再退出。",
+    "Cancel the update download or wait for it to finish before quitting."
+  ],
+  "请先处理正在进行的任务或未保存修改，再点击更新重启。": [
+    "请先处理正在进行的任务或未保存修改，再点击更新重启。",
+    "Finish active work or handle unsaved changes, then select Update and restart."
+  ],
+  "读取 mise 安装配置": [
+    "读取 mise 安装配置",
+    "reading the mise installation configuration"
+  ],
+  "调用信息需刷新": [
+    "调用信息需刷新",
+    "Local invocation needs refreshing"
+  ],
+  "首次迁移到新更新方式": [
+    "首次迁移到新更新方式",
+    "First installation with the new updater"
+  ],
+  "下载已取消，请重新检查更新。": [
+    "下载已取消，请重新检查更新。",
+    "Download cancelled. Check for updates again to retry."
   ]
 }

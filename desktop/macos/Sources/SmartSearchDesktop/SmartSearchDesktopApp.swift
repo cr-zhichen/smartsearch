@@ -61,12 +61,26 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if model?.terminationReady == true { return .terminateNow }
+        if model?.appUpdatePreparing == true { return .terminateCancel }
+        if let model, !model.configDraft.isEmpty || !model.clearSecretKeys.isEmpty {
+            model.noticeMessage = L("请先保存或放弃未保存的配置，再退出或安装更新。")
+            showMainWindow()
+            return .terminateCancel
+        }
         if let model, model.isUpdatingCLI || model.environmentBusy || model.skillsBusy {
             model.noticeMessage = L("环境或 Skills 操作正在进行，请等待完成后退出。")
             showMainWindow()
             return .terminateCancel
         }
-        guard let model, model.hasOwnedActiveRuns else { return .terminateNow }
+        guard let model else { return .terminateNow }
+        if !model.hasOwnedActiveRuns {
+            Task {
+                await model.shutdownForQuit()
+                sender.reply(toApplicationShouldTerminate: true)
+            }
+            return .terminateLater
+        }
         model.presentQuitChoice { choice in
             switch choice {
             case .background, .return:
@@ -93,6 +107,7 @@ private final class MainWindowDelegate: NSObject, NSWindowDelegate {
     weak var model: AppModel?
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        if model?.appUpdatePreparing == true { return false }
         if let model, model.isUpdatingCLI || model.environmentBusy || model.skillsBusy {
             model.noticeMessage = L("环境操作或 CLI 更新正在进行，请等待完成；可以最小化窗口。")
             return false

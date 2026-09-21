@@ -51,7 +51,13 @@ final class AppModel: ObservableObject {
     @Published private(set) var skillStatuses: [String: String] = [:]
     @Published private(set) var skillsState: JSONValue?
     private var skillSelectionInitialized = false
-    @Published private(set) var updateResult: JSONValue?
+    @Published private(set) var updateResult: JSONValue? {
+        didSet {
+            if let installed = updateResult?["installed_cli"] { cliStatus = installed }
+            appUpdater.synchronize(automaticallyChecks: updateResult?["auto_check"]?.boolValue ?? true,
+                                   enabled: backendPathOverride.isEmpty)
+        }
+    }
     @Published private(set) var environmentState: JSONValue?
     @Published var errorMessage: String?
     @Published var noticeMessage: String?
@@ -71,6 +77,24 @@ final class AppModel: ObservableObject {
     @Published var requestTimeoutSeconds: Double
     @Published private(set) var languagePreference: String
 
+    @Published private(set) var appUpdatePreparing = false
+    private(set) var terminationReady = false
+    lazy var appUpdater: AppUpdater = {
+        let updates = AppUpdater()
+        updates.canInstall = { [weak self] in self?.canInstallAppUpdate == true }
+        updates.prepareInstall = { [weak self] in await self?.prepareForAppUpdate() ?? false }
+        updates.recoverInstall = { [weak self] in
+            guard let self else { return }
+            self.appUpdatePreparing = false
+            self.terminationReady = false
+            await self.connect()
+        }
+        return updates
+    }()
+    var canInstallAppUpdate: Bool {
+        connection == .ready && configDraft.isEmpty && clearSecretKeys.isEmpty && !hasOwnedActiveRuns &&
+        !isUpdatingCLI && !environmentBusy && !skillsBusy && !configOperationBusy && !appUpdatePreparing
+    }
     private let backend = BackendClient()
     private var eventTask: Task<Void, Never>?
     private var ownedActiveRunIDs: Set<String> = []
@@ -585,10 +609,18 @@ final class AppModel: ObservableObject {
         noticeMessage = L("已复制指引；请在 AI 内执行，本机检查不代表 AI 已调用成功。")
     }
 
+    var skillTargetsToUpdate: [String] {
+        (skillsState?["targets"]?.arrayValue ?? []).compactMap { row in
+            guard let id = row["target"]?.stringValue, selectedSkillTargets.contains(id),
+                  row["needs_update"]?.boolValue == true else { return nil }
+            return id
+        }.sorted()
+    }
+
     func installSelectedSkills() async {
+        let targets = skillTargetsToUpdate
         guard !environmentBusy, !isUpdatingCLI, !skillsBusy, !skillsChecking,
-              !selectedSkillTargets.isEmpty, skillsState?["can_sync"]?.boolValue == true else { return }
-        let targets = selectedSkillTargets.sorted()
+              !targets.isEmpty, skillsState?["can_sync"]?.boolValue == true else { return }
         let plan = skillsState?["plan_id"]?.stringValue ?? ""
         let paths = (skillsState?["targets"]?.arrayValue ?? []).filter { targets.contains($0["target"]?.stringValue ?? "") }
             .map { ($0["label"]?.displayString ?? "") + "\n" + ($0["path"]?.displayString ?? "") }.joined(separator: "\n\n")
@@ -659,14 +691,15 @@ final class AppModel: ObservableObject {
         guard begin("update") else { return }
         defer { end("update") }
         do {
-            updateResult = try await backend.request(method: "app.update-check")
+            appUpdater.check()
+            updateResult = try await backend.request(method: "cli.update-check")
         } catch {
             present(error)
         }
     }
 
     func updateAction(_ method: String, params: JSONValue = .object([:])) async {
-        if environmentBusy && ["cli.update", "updates.installer"].contains(method) { return }
+        if environmentBusy && ["cli.update", "app.update-prepare"].contains(method) { return }
         guard connection == .ready, begin(method) else { return }
         defer { end(method) }
         do { updateResult = try await backend.request(method: method, params: params) }
@@ -684,24 +717,21 @@ final class AppModel: ObservableObject {
         await updateAction("cli.update", params: .object(["confirm": .bool(true), "version": .string(version)]))
     }
 
-    func openDownloadedUpdate() async {
-        guard configDraft.isEmpty && clearSecretKeys.isEmpty && !hasOwnedActiveRuns && !isUpdatingCLI && !environmentBusy else {
-            noticeMessage = L("请先处理未保存配置，并等待 App 自有任务完成。"); return
+    private func prepareForAppUpdate() async -> Bool {
+        guard canInstallAppUpdate else {
+            noticeMessage = L("请先处理未保存配置，并等待 App 自有任务完成。")
+            return false
         }
-        guard begin("updates.installer") else { return }
-        defer { end("updates.installer") }
+        appUpdatePreparing = true
         do {
-            let ready = try await backend.request(method: "updates.installer")
-            guard let path = ready["path"]?.stringValue, path.hasPrefix("/"), path.hasSuffix(".dmg") else { return }
-            if NSWorkspace.shared.open(URL(fileURLWithPath: path)) {
-                noticeMessage = L("已打开校验过的 DMG，尚未安装。请退出 App 后按正常方式安装，再重新打开核对版本；系统代码签名尚未验证。")
-            } else { errorMessage = L("无法打开 DMG，请从下载目录手动打开。") }
-        } catch { present(error) }
-    }
-
-    func revealDownloadedUpdate() {
-        guard let path = updateResult?["download"]?["path"]?.stringValue else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+            _ = try await backend.request(method: "app.update-prepare")
+            await shutdownForQuit()
+            return true
+        } catch {
+            appUpdatePreparing = false
+            present(error)
+            return false
+        }
     }
 
     func copyCLIUpdateCommand() {
@@ -741,6 +771,7 @@ final class AppModel: ObservableObject {
     }
 
     func shutdownForQuit() async {
+        appUpdatePreparing = true
         intentionalShutdown = true
         eventTask?.cancel()
         for runID in ownedActiveRunIDs {
@@ -750,6 +781,7 @@ final class AppModel: ObservableObject {
         clearOperations()
         await backend.shutdown()
         connection = .disconnected
+        terminationReady = true
     }
 
     func displayLabel(for run: ActivityRun) -> String {
@@ -860,8 +892,8 @@ final class AppModel: ObservableObject {
             if let installed = event.data["cli"] { cliStatus = installed }
         case "updates":
             updateResult = event.data
-            if let installed = event.data["cli_update"]?["cli"] { cliStatus = installed }
         case "activity":
+            appUpdater.resumePromptIfPossible()
             Task { await reconcileRuns() }
             // Backend push events cover its active profile.  With user-added directories,
             // refresh the explicitly scoped aggregate instead of silently dropping rows.
@@ -941,6 +973,7 @@ final class AppModel: ObservableObject {
     var configOperationBusy: Bool { !isBusy.isDisjoint(with: ["state", "save", "preview", "profile"]) }
 
     private func begin(_ identifier: String) -> Bool {
+        if appUpdatePreparing { return false }
         if ["state", "save", "preview", "profile"].contains(identifier), configOperationBusy { return false }
         guard operations.begin(identifier) else { return false }
         isBusy = operations.busyKeys

@@ -66,7 +66,7 @@ def test_cli_discovery_never_triggers_npm_runtime_repair(tmp_path, monkeypatch):
     package = tmp_path / "node_modules/@konbakuyomu/smart-search"
     package.mkdir(parents=True)
     (package / "package.json").write_text(json.dumps({"name": "@konbakuyomu/smart-search", "version": "0.1.1"}))
-    monkeypatch.setattr("smart_search.desktop_backend.shutil.which", lambda _: str(wrapper))
+    monkeypatch.setattr("smart_search.desktop_backend.shutil.which", lambda _, **kwargs: str(wrapper))
     monkeypatch.setattr("smart_search.desktop_backend.subprocess.run", lambda *a, **k: pytest.fail("public wrapper was executed"))
     result = Backend(lambda _: None).cli_status()
     assert result["external_version"] == "0.1.1"

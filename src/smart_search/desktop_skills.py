@@ -16,7 +16,7 @@ import httpx
 
 from . import skill_installer as skills
 from .desktop_environment import depends_on_app, metadata
-from .desktop_updates import NPM_URL, PACKAGE, cache_directory, newer, stable_version
+from .desktop_updates import NPM_URL, PACKAGE, cache_directory, stable_version
 from .i18n import tr
 
 MAX_DOWNLOAD = 16 * 1024 * 1024
@@ -97,6 +97,7 @@ class Skills:
         self.directory = Path(directory) if directory else cache_directory() / "skills"
         self.task = None
         self.files = None
+        self.expected_files = None
         self.context = None
         self.state = {"auto_check": True, "last_attempt": 0, "checking": False, "busy": False,
                       "source": {}, "cached": True, "error": "", "targets": [], "plan_id": "", "can_sync": False,
@@ -139,15 +140,13 @@ class Skills:
         independent = (info.get("external_runtime_verified") and info.get("manager") != "bundled"
                        and not depends_on_app(info.get("package_root")) and not depends_on_app(node.get("path")))
         invocation = self.environment.invocation(node, info) if independent else []
-        expected = skills.with_invocation(files, invocation, config_dir)
-        result = skills.status_skill_targets(list(skills.SKILL_TARGET_BY_ID), project_root=self.environment.home, files=expected, env=env)
-        ready = bool(invocation) and stable_version(info.get("external_version")) is not None
-        behind = newer(self.state["source"].get("version"), info.get("external_version"))
-        reason = (tr('请先准备或验证独立 CLI，再更新 Skills。') if not ready else
-                  tr('独立 CLI 版本低于 Skills 来源版本，请先在设置页更新 CLI。') if behind else "")
+        self.expected_files = skills.with_invocation(files, invocation, config_dir)
+        result = skills.status_skill_targets(list(skills.SKILL_TARGET_BY_ID), project_root=self.environment.home, files=self.expected_files, env=env)
+        ready = bool(invocation)
+        reason = "" if ready else tr('独立 CLI 尚未验证；可更新 Skills 内容，原有本机调用信息会保留。')
         fingerprint = {"source": result["bundled_hash"], "targets": [(t["path"], t["installed_hash"]) for t in result["targets"]]}
         self.state.update(targets=result["targets"], cli_version=info.get("external_version", ""), cli_ready=ready,
-                          compatibility=reason, can_sync=bool(self.files and not self.state["cached"] and not self.state["error"] and not reason),
+                          compatibility=reason, can_sync=bool(self.files and not self.state["cached"] and not self.state["error"]),
                           plan_id=hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest())
         return self.state
 
@@ -202,8 +201,8 @@ class Skills:
             raise ValueError(tr('请确认并选择有效的 Skills 目标。'))
         if not self.state["can_sync"] or params.get("plan_id") != self.state["plan_id"]:
             raise ValueError(tr('Skills 来源或本机状态已变化，请重新检查后确认更新。'))
-        env, info, config_dir, node = self.context
-        files = skills.with_invocation(self.files, self.environment.invocation(node, info), config_dir)
+        env = self.context[0]
+        files = dict(self.expected_files)
         self.state.update(busy=True, result=None)
         self.task = asyncio.create_task(self._sync(list(dict.fromkeys(targets)), files, env))
         self.changed()
@@ -215,6 +214,10 @@ class Skills:
             for target in targets:
                 try:
                     dest = skills.target_path(target, self.environment.home, env)
+                    row = next(row for row in self.state["targets"] if row["target"] == target)
+                    if row["status"] in {"up_to_date", "extra_files"}:
+                        installed.append({"target": target, "path": str(dest), "changed_files": 0, "backup": ""})
+                        continue
                     receipt = await asyncio.to_thread(skills.write_skill_files, dest, files,
                                                      self.directory / "backups", backup_prefix=target + "-")
                     installed.append({"target": target, "path": str(dest), **receipt})

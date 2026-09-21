@@ -6,7 +6,7 @@
 
 在[发行页](https://github.com/konbakuyomu/smartsearch/releases/latest)下载适合系统与架构的安装包。Windows 安装到当前用户目录。App 自带运行环境，使用 App 不需要先安装 Python、Node.js 或独立 CLI。
 
-环境准备和完整 App/CLI 语言切换从 v0.1.21 起提供，“更新 Skills”页面从 v0.1.22 起提供，Windows 自签名和新透明图标从 v0.1.23 起提供。Windows 的 `-signed.exe` 包采用自签名，Windows 默认不信任该证书，仍可能弹出 SmartScreen 提示。先核对官方发行来源和[公开证书指纹](../../windows-signing.md)，再按系统允许的选项决定是否运行；这不等同永久信任证书，不需要关闭安全保护。旧 `-unsigned-test.exe` 包仍未签名，macOS 仍未签名和公证。macOS、Windows ARM64、干净机器完整使用和 DPI 矩阵尚未全部完成实机验收。
+环境准备和完整 App/CLI 语言切换从 v0.1.21 起提供，“更新 Skills”页面从 v0.1.22 起提供，Windows 自签名和新透明图标从 v0.1.23 起提供。Windows 的 `-signed.exe` 包采用自签名，Windows 默认不信任该证书，仍可能弹出 SmartScreen 提示。先核对官方发行来源和[公开证书指纹](../../windows-signing.md)，再按系统允许的选项决定是否运行；这不等同永久信任证书，不需要关闭安全保护。旧 `-unsigned-test.exe` 包仍未签名；新 macOS 更新框架候选只有 ad-hoc 签名，没有 Apple Developer ID 或公证。macOS、Windows ARM64、干净机器完整使用和 DPI 矩阵尚未全部完成实机验收。
 
 从开始菜单或“应用程序”打开 **Smart Search**。已有配置会被复用；“概览”会提示主搜索、文档检索或网页读取能力是否缺失。
 
@@ -22,7 +22,7 @@
 
 1. 打开“更新 Skills”，点击“检查最新 Skills”。页面从官方 npm 最新正式版下载说明文件，显示来源版本和检查时间；不会运行包内程序。
 2. 查看列表中的 Agent、目标路径和差异文件，勾选要维护的目标。状态只描述 Smart Search Skill，不代表 Agent 软件版本、安装情况或实际调用成功。
-3. 点击“更新所选 Skills”，核对来源和路径后确认。不同内容会先备份，完成后显示备份位置；额外文件、未选目标和历史副本保留。
+3. 已选目标有内容差异、缺失文件或需要刷新本机调用信息时，“更新所选 Skills”才可点击；全部一致或未选择时禁用。核对来源和路径后确认，不同内容会先备份，完成后显示备份位置；额外文件、未选目标和历史副本保留。
 4. 重新打开 Agent 会话；Gemini 可用 `/skills reload`。然后让 Agent 先调用 `smart-search --version`，再按需要测试搜索。
 
 默认每天自动检查并提示，不会自动写入 Agent 目录；可在页面关闭。断网或校验失败时显示错误和缓存来源，先重新检查再更新。App 和 CLI 升级都不会自动同步 Skills。
@@ -33,7 +33,7 @@ Codex、Claude Code、Cursor、Copilot、Gemini、OpenCode、Cline、Roo Code �
 
 在“更新 Skills → 共用独立 CLI 环境”依次检测环境、核对清单、安装缺少的组件、验证可用性。健康的 Node.js、Python 和独立 Smart Search CLI 会复用；缺项安装在用户可写且独立于 App 的目录。App 不代装或登录 Agent，也无需先装 mise。
 
-Skills 更新会重建本机独立 CLI 的调用路径。CLI 未验证时先准备环境；CLI 版本低于 Skills 来源时，先到设置页更新 CLI。所有 Agent 共用这套环境，但是否加载 Skill、能否搜索仍须在 Agent 中验证。缺少 Key 去配置服务商，不需重装环境。
+Skills 按文件内容比较，软件版本号变化不等于 Skills 变化。CLI 未验证或版本较旧不阻止说明文件同步；未验证时保留原本机调用信息，新目标使用通用说明。已验证的调用路径发生变化会单独提示需要刷新。实际使用前仍须准备 CLI，并在 Agent 中验证运行；缺少 Key 去配置服务商，不需重装环境。
 
 安装失败时保留已成功组件，重新检测后补缺。安装或 Skills 写入期间等待完成再退出。检查与本地版本验证不发收费请求。
 
@@ -72,6 +72,12 @@ App 私有引擎的绝对路径也能在关闭窗口后调用，但卸载 App �
 
 存在 App 任务时关闭窗口，可以选择后台继续、取消 App 任务并退出或返回。后台窗口可从通知区域恢复，再次启动也会唤起同一窗口。App 不会取消终端或 AI 独立启动的 CLI 任务。
 
-使用更新页，或从发行页下载新安装器。完成受保护的写入并关闭 App 后再替换文件；Windows 安装器发现 App 仍在运行时会拒绝覆盖私有资源。卸载保留共享配置、独立 CLI 数据、研究证据和导出结果。
+在“设置与关于”检查 App 更新：Windows 使用 Velopack，macOS 使用 Sparkle。App 运行期间至多每 24 小时自动检查一次；关闭开关后停止后续自动检查，仍可手动检查。检查只取元数据，发现新版提示“更新/稍后”，下载和安装需要你操作。检查失败会显示错误，不冒充“已是最新”。
+
+框架统一下载、验证并安装 App 与私有引擎；适用时使用差分，失败时回退到经过校验的完整包。重启前需完成 App 任务、CLI/环境/Skills 写入并处理未保存草稿；不会取消独立 CLI 任务。下载完成不等于安装完成，重启后核对实际版本。
+
+首次从 Inno Setup 版迁移需要完整安装：完成写入，退出旧 App，在 Windows 设置中卸载旧 App，再运行新的官方 Setup，并使用新快捷方式。检测与迁移说明不会自动卸载任何内容。macOS 需关闭旧 App 并完整替换一次。共享配置、独立 CLI、SmartSearchTools、Agent Skills、研究证据和导出结果留在原位置；之后 App 才能通过框架更新。
+
+Windows 正式包仍为自签名。Sparkle 使用独立 EdDSA 更新签名，不等于 Apple Developer ID 签名或公证。macOS 本地候选只有 ad-hoc 签名；未配置更新密钥的候选关闭更新。Windows 开发散包同样需先完整安装到框架布局才能更新。
 
 构建与协议说明见 [desktop README](../../../desktop/README.md) 和[桌面协议](../../../desktop/PROTOCOL.md)。遇到问题可查[排障](troubleshooting.md)。

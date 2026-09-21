@@ -42,10 +42,18 @@ On Windows npm/mise installs, verify non-ASCII JSON piping:
 smart-search deep "深度搜索一下最近的比特币行情" --format json | ConvertFrom-Json
 ```
 
+## The CLI package updated but its runtime is not ready
+
+Managers such as mise may skip npm lifecycle scripts, so the package version can change before its Python runtime exists. The App's Update CLI action verifies installation ownership, prepares that package's private Python environment, then checks actual execution. Failures retain their logs and allow a same-version retry after checking again. Ordinary refresh remains read-only. If no independent Python is available, use Shared independent CLI environment first. Running `smart-search --version` in a terminal may also repair a missing runtime, making the first invocation slower.
+
+## App update failed or is unavailable
+
+Retry the App check in Settings after restoring the network. A downloaded update still needs installation and restart. Finish App tasks, protected writes and unsaved drafts before proceeding. Windows development folders and old Inno installations must first use the new full installer; macOS test builds without an update key cannot update. Use only the official release matching your architecture. Signature or integrity failures must not be bypassed; keep using the installed version and report the error. App updates do not repair or upgrade the separate CLI/Skills automatically.
+
 ## Interface language
 
 Set the App language in Settings & about, and the independent CLI language with `smart-search config set SMART_SEARCH_LANGUAGE en`. If the CLI still uses another language, check a per-call `--lang` and the `SMART_SEARCH_LANGUAGE` environment override. `auto` follows the CLI locale, which can differ from the GUI session. Use `smart-search --lang en --help` to test without changing settings. Unreadable preferences fall back with a warning; repair that configuration file without deleting provider keys. Original page text and third-party logs do not change language.
 
 ## AI integration is still pending
 
-Use Update Skills to check the stable source and sync selected Agents. If the CLI is not ready, open Shared independent CLI environment to prepare it; update an older CLI in Settings. Matching files do not prove the Agent loaded the Skill. Reopen the session or use Gemini `/skills reload`, then verify the actual CLI version. Changed content is backed up and the result shows its recovery path. See [App setup](app.md).
+Use Update Skills to check the stable source and select Agents with changed files; a software version change alone does not require Skill sync. An unready CLI does not block content sync, but prepare it under Shared independent CLI environment before making calls. If detection fails in Settings, read the specific reason, select Refresh installed versions, then check for updates. Matching files do not prove the Agent loaded the Skill. Reopen the session or use Gemini `/skills reload`, then verify the actual CLI version. Changed content is backed up and the result shows its recovery path. See [App setup](app.md).

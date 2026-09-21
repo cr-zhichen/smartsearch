@@ -63,6 +63,7 @@ struct ContentView: View {
                 }
             }
         }
+        .disabled(model.appUpdatePreparing)
         .onChange(of: model.selectedDestination) { destination in
             Task { await model.enter(destination) }
         }
@@ -1175,6 +1176,9 @@ private struct AgentSkillsView: View {
     private var unavailable: Bool { model.connection != .ready || model.environmentBusy || model.isUpdatingCLI || model.skillsBusy || model.skillsChecking }
 
     private func status(_ value: JSONValue) -> String {
+        if value["invocation_changed"]?.boolValue == true,
+           (value["content_stale_files"]?.arrayValue ?? []).isEmpty,
+           (value["missing_files"]?.arrayValue ?? []).isEmpty { return L("调用信息需刷新") }
         switch value["status"]?.stringValue {
         case "missing": return L("未安装")
         case "stale": return L("内容不同，可同步")
@@ -1223,6 +1227,7 @@ private struct AgentSkillsView: View {
                             Text(target["path"]?.displayString ?? "").font(.caption).textSelection(.enabled)
                             let changed = (target["stale_files"]?.arrayValue ?? []) + (target["missing_files"]?.arrayValue ?? [])
                             if !changed.isEmpty { Text(L("将同步：{0}", changed.map(\.displayString).joined(separator: ", "))).font(.caption).foregroundStyle(.secondary) }
+                            if target["invocation_changed"]?.boolValue == true { Text(L("本机 CLI 调用信息需要刷新。")).font(.caption).foregroundStyle(.secondary) }
                             ForEach(target["legacy_locations"]?.arrayValue ?? [], id: \.self) { legacy in
                                 Text(L("历史副本，保留：{0}", legacy["path"]?.displayString ?? "")).font(.caption)
                             }
@@ -1232,7 +1237,7 @@ private struct AgentSkillsView: View {
                     Button { Task { await model.installSelectedSkills() } } label: {
                         BusyLabel(text: L("更新所选 Skills"), busyText: L("更新中…"), busy: model.skillsBusy)
                     }.buttonStyle(.borderedProminent)
-                        .disabled(unavailable || model.selectedSkillTargets.isEmpty || skills["can_sync"]?.boolValue != true)
+                        .disabled(unavailable || model.skillTargetsToUpdate.isEmpty || skills["can_sync"]?.boolValue != true)
                     ForEach(skills["result"]?["installed"]?.arrayValue ?? [], id: \.self) { receipt in
                         Text((receipt["target"]?.displayString ?? "") + L("：已同步"))
                         if let backup = receipt["backup"]?.stringValue, !backup.isEmpty {
@@ -1382,13 +1387,14 @@ private struct KeyValueLine: View {
 
 private struct UpdatesView: View {
     @ObservedObject var model: AppModel
-    private var app: JSONValue? { model.updateResult?["app"] }
+    @ObservedObject var updater: AppUpdater
     private var cli: JSONValue? { model.updateResult?["cli"] }
-    private var download: JSONValue? { model.updateResult?["download"] }
     private var checking: Bool { model.updateResult?["checking"]?.boolValue == true || model.isBusy.contains("update") }
-    private var cancelling: Bool { download?["status"]?.stringValue == "cancelling" || model.isBusy.contains("updates.cancel") }
-    private var downloading: Bool { download?["status"]?.stringValue == "downloading" || cancelling }
-    private var ready: Bool { download?["status"]?.stringValue == "ready" }
+
+    init(model: AppModel) {
+        self.model = model
+        self.updater = model.appUpdater
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1399,51 +1405,29 @@ private struct UpdatesView: View {
                         set: { value in Task { await model.updateAction("updates.auto", params: .object(["enabled": .bool(value)])) } }))
                     HStack {
                         Button { Task { await model.checkForUpdates() } } label: {
-                            BusyLabel(text: L("检查更新"), busyText: L("检查中…"), busy: checking)
-                        }.disabled(checking || model.connection != .ready)
+                            BusyLabel(text: L("检查更新"), busyText: L("检查中…"), busy: checking || updater.checking)
+                        }.disabled(checking || updater.checking || model.connection != .ready)
                         Button(L("刷新已安装版本")) { Task { await model.refreshState() } }.disabled(model.isBusy.contains("state"))
                     }
                     if let error = model.updateResult?["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.red) }
-                    if let timestamp = app?["checked_at"]?.numberValue {
-                        Text(L("App 检查时间：{0}", "\(Date(timeIntervalSince1970: timestamp).formatted())")).font(.caption).foregroundStyle(.secondary)
-                    }
                     Text(L("App 和内置引擎一起更新；独立 CLI 使用原管理器更新。")).font(.caption).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
-            appCard
-            cliCard
-        }
-    }
-
-    private var appCard: some View {
-        GroupBox(L("App 与内置引擎")) {
-            VStack(alignment: .leading, spacing: 10) {
-                KeyValueLine(label: "App", value: app?["current_version"]?.displayString ?? L("尚未读取"))
-                KeyValueLine(label: L("内置引擎"), value: model.state?.version ?? L("尚未读取"))
-                KeyValueLine(label: L("可安装稳定版"), value: app?["latest_version"]?.displayString ?? L("尚未检查"))
-                if app?["package_pending"]?.boolValue == true { Text(L("较新的发行版尚未提供本平台完整安装包。")).foregroundStyle(.orange) }
-                if downloading {
-                    let received = download?["received"]?.numberValue ?? 0
-                    let total = max(download?["total"]?.numberValue ?? 1, 1)
-                    ProgressView(value: received, total: total)
-                    Text(L("已下载 {0} / {1} MiB", "\(Int(received / 1048576))", "\(Int(total / 1048576))")).monospacedDigit()
-                }
-                if ready { Text(L("已下载并校验，尚未安装。")).foregroundStyle(.green) }
-                if cancelling { Text(L("正在取消下载…")).foregroundStyle(.secondary) }
-                if let error = download?["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.orange) }
-                HStack {
-                    Button(downloading ? L("下载中…") : L("下载安装包")) { Task { await model.updateAction("updates.download") } }
-                        .disabled(downloading || model.isBusy.contains("updates.download") || app?["available"]?.boolValue != true || !(app?["error"]?.stringValue ?? "").isEmpty)
-                    Button(cancelling ? L("正在取消…") : L("取消下载")) { Task { await model.updateAction("updates.cancel") } }.disabled(!downloading || cancelling)
-                    Button(L("打开安装包")) { Task { await model.openDownloadedUpdate() } }.disabled(model.environmentBusy || !ready || model.isBusy.contains("updates.installer"))
-                }
-                HStack {
-                    Button(L("打开下载目录"), action: model.revealDownloadedUpdate).disabled(!ready)
+            GroupBox(L("App 与内置引擎")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    KeyValueLine(label: "App", value: updater.currentVersion)
+                    KeyValueLine(label: L("内置引擎"), value: model.state?.version ?? L("尚未读取"))
+                    KeyValueLine(label: L("可安装稳定版"), value: updater.latestVersion.isEmpty ? L("尚未检查") : updater.latestVersion)
+                    Text(updater.statusMessage).foregroundStyle(.secondary)
+                    if let date = updater.checkedAt { Text(L("App 检查时间：{0}", date.formatted())).font(.caption) }
+                    Button(updater.waitingToRestart ? L("更新并重启") : L("打开 App 更新")) { updater.check() }
+                        .disabled(!updater.started || updater.checking || !model.canInstallAppUpdate)
                     Link(L("查看版本说明"), destination: URL(string: "https://github.com/konbakuyomu/smartsearch/releases")!)
-                }
-                Text(L("安装包校验 SHA256，尚未验证系统代码签名。打开 DMG 后先退出 App，再按正常方式安装并重新打开核对版本。"))
-                    .font(.caption).foregroundStyle(.secondary)
-            }.frame(maxWidth: .infinity, alignment: .leading)
+                    Text(L("由 Sparkle 下载、校验并更新整个 App。旧版需先完整安装一次；用户配置、独立 CLI 和 Skills 保留。"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            cliCard
         }
     }
 
@@ -1456,6 +1440,13 @@ private struct UpdatesView: View {
                 KeyValueLine(label: L("生效路径"), value: model.cliStatus?["resolved_path"]?.displayString ?? model.cliStatus?["external_path"]?.displayString ?? L("未发现"))
                 Text(L("入口：") + (model.cliStatus?["external_path"]?.displayString ?? L("未发现"))).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
                 Text(model.cliStatus?["update_note"]?.displayString ?? "").font(.caption).foregroundStyle(.secondary)
+                if cli?["cached"]?.boolValue == true {
+                    Text(L("历史检查结果，请重新检查更新。")).foregroundStyle(.orange)
+                } else if let error = cli?["error"]?.stringValue, !error.isEmpty {
+                    Text(error).foregroundStyle(.orange)
+                } else if cli?["runtime_needs_repair"]?.boolValue == true {
+                    Text(L("CLI 版本已是最新，但运行环境尚未就绪；点击“更新 CLI”完成准备。")).foregroundStyle(.orange)
+                }
                 HStack {
                     Button(model.isUpdatingCLI ? L("更新中…") : L("更新 CLI")) { Task { await model.updateCLI() } }
                         .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("cli.update") || checking || cli?["available"]?.boolValue != true || model.cliStatus?["can_update"]?.boolValue != true || !(cli?["error"]?.stringValue ?? "").isEmpty)

@@ -2,11 +2,11 @@
 
 ## 下载与信任 / Download and trust
 
-Windows 安装器文件名以 `-signed.exe` 结尾时，使用 Smart Search 的**自签名代码签名证书**。旧 `-unsigned-test.exe` 包没有因此变成已签名；请以对应版本的文件和验签结果为准。macOS 不属于这套 Windows 签名流程，仍未签名、未公证。
+Windows 安装器文件名以 `-signed.exe` 结尾时，使用 Smart Search 的**自签名代码签名证书**。旧 `-unsigned-test.exe` 包没有因此变成已签名；请以对应版本的文件和验签结果为准。macOS 不属于这套 Windows 签名流程；新框架候选使用 ad-hoc 签名，不具备 Apple Developer ID 或公证。Sparkle EdDSA 只验证更新包。
 
 Windows 默认不信任自签名证书。请从[官方 GitHub Releases](https://github.com/konbakuyomu/smartsearch/releases)下载并核对来源。如果 SmartScreen 显示提示，且系统策略提供“更多信息 → 仍要运行”，可以在确认来源后自行选择；这只是运行选择，不是永久信任证书。不保证只提示一次，受管理设备也可能禁止继续。无需关闭 SmartScreen，也不要为使用 App 自动导入根证书。
 
-Windows installers ending in `-signed.exe` use Smart Search's **self-signed code-signing certificate**. Older `-unsigned-test.exe` files remain unsigned. macOS is outside this Windows signing workflow and remains unsigned and unnotarized.
+Windows installers ending in `-signed.exe` use Smart Search's **self-signed code-signing certificate**. Older `-unsigned-test.exe` files remain unsigned. macOS is outside this Windows signing workflow; native updater candidates use ad-hoc signing without Apple Developer ID or notarization. Sparkle EdDSA verifies update packages separately.
 
 Windows does not trust this certificate by default. Download from the official Releases page and verify the source. If SmartScreen offers **More info → Run anyway**, decide whether to continue after checking the source. This is a run choice, not permanent certificate trust; future downloads may prompt again, and managed devices may prohibit it. Do not disable SmartScreen or automatically import a root certificate.
 
@@ -61,10 +61,10 @@ The import script validates the identity and imports it into `CurrentUser/My`, t
 ./desktop/scripts/Build-Windows.ps1 -PythonPath .venv/Scripts/python.exe -Architecture x64 -InstallerMode Required -SigningMode Required
 ```
 
-`Required` 缺密钥、签名失败、验签失败时均停止；默认 `Skip` 仅生成未签名测试物。签名覆盖 App EXE/DLL、冻结后端、安装器与卸载器。其他文件逐一核对 SHA-256，防止误签第三方库。Inno 临时卸载器的签名副本和记录保存在独立构建目录。签名用 SHA-256 和 DigiCert RFC3161 时间戳；核验时间戳签名及其 CA 链，不把文件 SHA256 清单当作代码签名。
+`Required` 缺密钥、签名失败、验签失败时均停止；默认 `Skip` 仅生成未签名测试物。签名覆盖 App EXE/DLL、冻结后端、Velopack Setup、启动包装器及负责更新/卸载的 Update.exe。生成的 helper 仅在无原发布者签名时使用项目身份签署，不覆盖其他发布者；包内 helper 解出后再次验签。其他文件逐一核对 SHA-256，防止误签第三方库。签名用 SHA-256 和 DigiCert RFC3161 时间戳；核验时间戳签名及其 CA 链，不把文件 SHA256 清单当作代码签名。
 
-`Required` fails if keys, signing or verification fail; the default `Skip` builds unsigned tests. Signing covers the App EXE/DLL, frozen backend, installer and uninstaller. Other files retain their hashes. The verifier checks the RFC3161 timestamp's signature and CA chain; checksums are not code signatures.
+`Required` fails if keys, signing or verification fail; the default `Skip` builds unsigned tests. Signing covers the App EXE/DLL, frozen backend, Velopack Setup, launch stub and Update.exe. Generated helpers are signed with the project identity only if they have no existing publisher; existing third-party signatures are not overwritten. Packaged helpers are extracted and verified again. Other files retain their hashes. The verifier checks the RFC3161 timestamp's signature and CA chain; checksums are not code signatures.
 
-在 **Actions → Desktop packages → Run workflow** 开启 `sign_windows`、保持 `release_tag` 为空，即可构建不发布版本的候选。PR 不读取 Secrets。填写 `release_tag` 会强制 Windows 签名，并在全部平台成功后上传到已有 Release，属于显式发布操作。CI runner 会移除导入的签名私钥，并静默安装候选检查实际安装文件的签名；不会启动 App 界面。查看签名 artifact 的 `result.json`、`installed-signatures.json` 与 14 项签名负面检查记录。
+在 **Actions → Desktop packages → Run workflow** 开启 `sign_windows`、保持 `release_tag` 为空，即可构建不发布版本的候选。PR 不读取 Secrets。填写 `release_tag` 会强制 Windows 签名，并在全部平台成功后上传到已有 Release，属于显式发布操作。CI runner 会移除导入的签名私钥，并在独立测试身份下真实安装和升级候选，检查落盘文件的签名；不会启动 App 界面。查看构建 `result.json`、升级 `receipt.json`、安装验签记录及签名负面检查记录。正式发布还要求配置 Sparkle 更新密钥。
 
-In **Actions → Desktop packages → Run workflow**, enable `sign_windows` and leave `release_tag` empty for candidates without publishing. PRs receive no signing secrets. A nonempty `release_tag` requires Windows signatures and uploads to the existing Release only after all platforms succeed. CI removes its imported private key and silently installs the candidate to verify installed signatures without opening the App. Inspect the signing artifacts; CI success does not prove device GUI acceptance or remove SmartScreen warnings.
+In **Actions → Desktop packages → Run workflow**, enable `sign_windows` and leave `release_tag` empty for candidates without publishing. PRs receive no signing secrets. A nonempty `release_tag` requires Windows signatures and uploads to the existing Release only after all platforms succeed. CI removes its imported private key and installs and upgrades a separate test identity to verify installed signatures without opening the App. Publishing also requires configured Sparkle update keys. Inspect the signing artifacts; CI success does not prove device GUI acceptance or remove SmartScreen warnings.

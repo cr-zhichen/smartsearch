@@ -155,7 +155,7 @@ async def test_auto_check_downloads_only_and_failed_check_blocks_sync(tmp_path, 
     assert manager.task.done()
 
 
-def test_changed_files_or_old_cli_invalidate_confirmation(tmp_path, monkeypatch):
+def test_changed_files_invalidate_confirmation_but_cli_version_does_not(tmp_path, monkeypatch):
     manager, info = isolated(tmp_path, monkeypatch)
     plan = manager.state["plan_id"]
     target = skills.target_path("codex", manager.environment.home, {})
@@ -164,9 +164,64 @@ def test_changed_files_or_old_cli_invalidate_confirmation(tmp_path, monkeypatch)
     with pytest.raises(ValueError):
         manager.sync({"targets": ["codex"], "confirm": True, "plan_id": plan})
     manager.snapshot({}, {**info, "external_version": "0.1.20"}, str(tmp_path))
-    assert not manager.state["can_sync"] and manager.state["compatibility"]
+    assert manager.state["can_sync"] and not manager.state["compatibility"]
     manager.snapshot({}, {**info, "external_runtime_verified": False}, str(tmp_path))
-    assert not manager.state["can_sync"] and not manager.state["cli_ready"]
+    assert manager.state["can_sync"] and not manager.state["cli_ready"] and manager.state["compatibility"]
+
+
+@pytest.mark.asyncio
+async def test_patch_release_with_identical_skills_has_no_content_or_write_changes(tmp_path, monkeypatch):
+    manager, info = isolated(tmp_path, monkeypatch)
+    manager.sync({"targets": ["codex"], "confirm": True, "plan_id": manager.state["plan_id"]})
+    await manager.task
+    target = skills.target_path("codex", manager.environment.home, {}) / "SKILL.md"
+    original = target.read_bytes().replace(b"\n", b"\r\n") + b"\r\n"
+    target.write_bytes(original)
+    before = target.stat().st_mtime_ns
+    manager.state["source"]["version"] = "0.1.23"
+    manager.snapshot({}, info, str(tmp_path / "config"))  # Installed CLI is still 0.1.22.
+    row = next(row for row in manager.state["targets"] if row["target"] == "codex")
+    assert manager.state["can_sync"] and row["status"] == "up_to_date" and not row["needs_update"]
+    assert not row["content_stale_files"] and not row["invocation_changed"]
+    monkeypatch.setattr(skills, "write_skill_files", lambda *a, **k: pytest.fail("An identical target must not be written or locked"))
+    manager.sync({"targets": ["codex"], "confirm": True, "plan_id": manager.state["plan_id"]})
+    await manager.task
+    assert manager.state["result"]["installed"][0]["changed_files"] == 0
+    assert target.read_bytes() == original and target.stat().st_mtime_ns == before
+
+
+@pytest.mark.asyncio
+async def test_unverified_cli_can_sync_body_preserving_each_targets_local_note(tmp_path, monkeypatch):
+    manager, info = isolated(tmp_path, monkeypatch)
+    notes = {}
+    for name in ("codex", "claude"):
+        target = skills.target_path(name, manager.environment.home, {})
+        target.mkdir(parents=True)
+        notes[name] = f"\n## Independent CLI on this computer\n{name}-existing-command\n".encode()
+        (target / "SKILL.md").write_bytes(b"Old skill\n" + notes[name])
+    manager.state["source"]["version"] = "0.1.23"
+    manager.snapshot({}, {**info, "external_runtime_verified": False}, str(tmp_path / "config"))
+    assert manager.state["can_sync"] and not manager.state["cli_ready"]
+    manager.sync({"targets": ["codex", "claude", "roo"], "confirm": True, "plan_id": manager.state["plan_id"]})
+    await manager.task
+    assert manager.state["result"]["ok"]
+    for name, note in notes.items():
+        actual = (skills.target_path(name, manager.environment.home, {}) / "SKILL.md").read_bytes()
+        assert actual == manager.files["SKILL.md"].rstrip() + b"\n" + note
+        row = next(row for row in manager.state["targets"] if row["target"] == name)
+        assert row["status"] == "up_to_date" and not row["needs_update"]
+    assert (skills.target_path("roo", manager.environment.home, {}) / "SKILL.md").read_bytes() == manager.files["SKILL.md"]
+
+
+@pytest.mark.asyncio
+async def test_invocation_only_change_is_distinct_from_upstream_skill_content(tmp_path, monkeypatch):
+    manager, info = isolated(tmp_path, monkeypatch)
+    manager.sync({"targets": ["codex"], "confirm": True, "plan_id": manager.state["plan_id"]})
+    await manager.task
+    manager.snapshot({}, {**info, "package_root": str(tmp_path / "npm-0.1.23")}, str(tmp_path / "config"))
+    row = next(row for row in manager.state["targets"] if row["target"] == "codex")
+    assert row["needs_update"] and row["invocation_changed"] and row["stale_files"] == ["SKILL.md"]
+    assert not row["content_stale_files"] and not row["missing_files"]
 
 
 def test_write_failure_restores_old_files_and_keeps_backup(tmp_path, monkeypatch):
@@ -247,7 +302,7 @@ async def test_backend_serializes_skill_and_runtime_mutations(tmp_path, monkeypa
     backend = Backend(lambda *_: None)
     backend.directory, backend.initialized = str(tmp_path), True
     backend.skills.state["busy"] = True
-    for method in ("profile.select", "cli.update", "cli.enable", "environment.install", "skills.install", "updates.installer", "shutdown", "language.set"):
+    for method in ("profile.select", "cli.update", "cli.enable", "environment.install", "skills.install", "app.update-prepare", "shutdown", "language.set"):
         with pytest.raises(ValueError):
             await backend.handle(method, {"lang": "en"})
     backend.skills.state["busy"] = False

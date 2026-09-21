@@ -144,6 +144,12 @@ def _write_skill_files(dest: Path, files: dict[str, bytes], backup_root: Path, *
             raise SkillInstallError(tr('归档包含越界路径。'))
         _refuse_links(path)
         original = path.read_bytes() if path.exists() else None
+        if original is not None and _same_content(rel, original, content):
+            continue
+        if rel == "SKILL.md" and original is not None and not split_local_note(content)[1]:
+            note = split_local_note(original)[1]
+            if note:
+                content = content.rstrip() + b"\n" + note
         if original != content:
             changes[path] = (original, content)
     backup = None
@@ -333,6 +339,9 @@ def _describe_installed_skill(
         "extra_files": [],
         "missing_files": sorted(source_by_path),
         "stale_files": [],
+        "content_stale_files": [],
+        "invocation_changed": False,
+        "needs_update": True,
     }
     try:
         installed_files = _target_installed_files(dest)
@@ -342,6 +351,7 @@ def _describe_installed_skill(
             return item
         if not dest.is_dir():
             item["status"] = "error"
+            item["needs_update"] = False
             item["error"] = "Installed skill path exists but is not a directory."
             return item
 
@@ -353,6 +363,11 @@ def _describe_installed_skill(
             for rel_path, content in source_by_path.items()
             if rel_path in installed_by_path and not _same_content(rel_path, installed_by_path[rel_path], content)
         )
+        content_stale_files = [rel for rel in stale_files if rel != "SKILL.md" or not _same_content(
+            rel, split_local_note(installed_by_path[rel])[0], split_local_note(source_by_path[rel])[0])]
+        expected_note = split_local_note(source_by_path.get("SKILL.md", b""))[1]
+        invocation_changed = bool(expected_note and "SKILL.md" in installed_by_path and
+                                  split_local_note(installed_by_path["SKILL.md"])[1].strip() != expected_note.strip())
         managed_hash_match = not missing_files and all(installed_by_path.get(rel) == content for rel, content in source_by_path.items())
         hash_match = installed_digest == bundled_digest
         item.update(
@@ -363,6 +378,9 @@ def _describe_installed_skill(
                 "extra_files": extra_files,
                 "missing_files": missing_files,
                 "stale_files": stale_files,
+                "content_stale_files": content_stale_files,
+                "invocation_changed": invocation_changed,
+                "needs_update": bool(missing_files or stale_files),
             }
         )
         if missing_files or stale_files:
@@ -374,6 +392,8 @@ def _describe_installed_skill(
     except (OSError, SkillInstallError) as e:
         item["status"] = "error"
         item["error"] = str(e)
+    if item["status"] == "error":
+        item["needs_update"] = False
     return item
 
 
@@ -467,14 +487,7 @@ def install_skill_targets(
         dest = root / target.skill_relative_path
         try:
             dest = target_path(target.target_id, root, os.environ if project_root is None else {})
-            expected = dict(files)
-            existing = dest / "SKILL.md"
-            _refuse_links(existing)
-            if existing.is_file() and not split_local_note(expected.get("SKILL.md", b""))[1]:
-                note = split_local_note(existing.read_bytes())[1]
-                if note:
-                    expected["SKILL.md"] = expected["SKILL.md"].rstrip() + b"\n" + note
-            receipt = write_skill_files(dest, expected, dest.parent / ".smart-search-backups")
+            receipt = write_skill_files(dest, files, dest.parent / ".smart-search-backups")
             installed.append(
                 {
                     "target": target.target_id,
