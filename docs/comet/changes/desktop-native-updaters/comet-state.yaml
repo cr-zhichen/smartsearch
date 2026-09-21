@@ -1,11 +1,11 @@
 schema: comet.native.v4
 name: desktop-native-updaters
 language: zh-CN
-phase: build
-status: active
-state_version: 19
+phase: verify
+status: await-user
+state_version: 27
 brief: brief.md
-shape_confirmation_hash: b2bd7f4867acec9e8e8a46d1109d1c9863e0fec63f88e756cfcb1163feabba19
+shape_confirmation_hash: 26e25250f8a2ccdb30cf5879d1012d2fc12414488f4094eeaf07ac7a8522bc02
 spec_changes:
   - capability: desktop-native-updaters
     operation: create
@@ -19,79 +19,98 @@ workspace:
   target_branch: main
   finish: null
 loop:
-  stage: repairing
-  goal_cycle: 3
+  stage: await-user
+  goal_cycle: 4
   iteration: 2
-  attempt: 0
+  attempt: 1
   retry_epoch: 0
   failed_iteration_count: 0
   no_progress_count: 0
   execution_failure_count: 0
   previous_unresolved_ids:
-    - A1
     - A2
     - A3
-    - A4
     - A5
-    - A6
-    - A7
-    - A8
-  next_action: submit-builder-candidate
+  next_action: resolve-verifier-blocker
 acceptance:
   - id: A1
     source: specs/desktop-native-updaters/spec.md
     text: Native frameworks own App updates WHEN 安装当前候选并检查 App 更新，THEN Windows 实际进入
       Velopack、macOS 实际进入 Sparkle，SDK 使用正确平台架构和稳定源；App 与内置后端版本一致，旧 Python App
       下载/安装动作不再与框架同时执行，开发散包明确报告未安装或测试模式。
-    result: pending
-    reason: null
+    result: passed
+    reason:
+      text: 当前HEAD仍为735b48a23f06f62fc1375e60359340a6b991b277。Windows在早于单实例/后端启动处进入Velopack（desktop/windows/Program.cs:15-17），按进程架构选择稳定频道（desktop/windows/AppUpdater.cs:27-42）；macOS实际使用Sparkle且禁止自动下载（desktop/macos/Sources/SmartSearchDesktop/AppUpdater.swift:27-45）。远端CI35636177494的四个原生架构job均success且绑定该SHA（.desktop-artifacts/integrated-ci-35636177494.json:1）；Sparkle两架构实际SDK回执均升级至0.1.23（.desktop-artifacts/ci-35636177494-macos-arm64/sparkle-check-6bf8cf0bb85949de8926c3e0b8dc3815/receipt.json:1；ci-35636177494-macos-x86_64/sparkle-check-f969860ada2f4e3a87f746b331e5dbb1/receipt.json:1）。
+      truncated: false
   - id: A2
     source: specs/desktop-native-updaters/spec.md
     text: Background checks and explicit consent WHEN 自动检查到期、用户关闭自动检查、手动重试或发现新版，THEN
       检查频率和提示正确；未点击更新不下载或安装，稍后不会循环弹窗，关闭开关及退出 App 能停止后续自动检查，检查失败不显示已最新。
-    result: pending
-    reason: null
+    result: blocked
+    reason:
+      text: 静态实现具备24小时节流、关闭自动检查及“现在更新/稍后”分支（desktop/windows/MainWindow.xaml.cs:713-727；desktop/macos/Sources/SmartSearchDesktop/AppUpdater.swift:35-45,75-91），但当前两份实际Sparkle回执均明确gui_tested=false（对应receipt.json:1）。没有当前整合候选的真实GUI自动检查、关闭开关、稍后提示不循环和失败文案端到端证据。
+      truncated: false
   - id: A3
     source: specs/desktop-native-updaters/spec.md
     text: Update and restart preserve active work WHEN 存在草稿、自有任务或不可取消写入时请求安装，THEN
       门禁生效且业务工作保留；解除门禁后 SDK 安装并重启，实际 App 和引擎均为目标版本；失败/取消不被记成成功，不终止外部 CLI。
-    result: pending
-    reason: null
+    result: blocked
+    reason:
+      text: Windows在下载前后检查门禁、字段变更即时捕获并在准备后再次防护（desktop/windows/MainWindow.xaml.cs:786-831；desktop/windows/MainWindow.Providers.cs:305-325）；后端拒绝忙环境/任务/CLI并在准备后锁住其他写入（src/smart_search/desktop_backend.py:476-478,629-641）；macOS也有同等草稿/任务门禁和受控关闭（desktop/macos/Sources/SmartSearchDesktop/AppModel.swift:98-100,788-852）。未发现确定缺陷，但未实跑当前GUI中的草稿、自有任务、不可取消写入、取消/失败后的重启路径；SDK回执也标记gui_tested=false。
+      truncated: false
   - id: A4
     source: specs/desktop-native-updaters/spec.md
     text: Real delta update and full fallback WHEN 为隔离的 A/B 两个版本打包并更新，THEN
       两个平台各有真实差分包产出和 SDK
       升级证据；结果版本/内容正确。移除或破坏差分后的完整包回退仍通过同等校验；缺失首版基线与基线下载失败分别记录，不把完整下载称为差分成功。
-    result: pending
-    reason: null
+    result: passed
+    reason:
+      text: Windows真实隔离Velopack检查要求先取delta、破坏delta后取full并校验落盘文件/后端版本（desktop/scripts/test_windows_updates.py:100-119）；Sparkle官方CLI对delta、full-fallback和错误公钥分别实跑（desktop/scripts/test_sparkle_updates.py:99-142）。macOS
+        arm64/x86_64回执均记录delta仅请求.delta、fallback随后请求.zip且版本为0.1.23（两份sparkle
+        receipt.json:1）；四个平台CI job均success。
+      truncated: false
   - id: A5
     source: specs/desktop-native-updaters/spec.md
     text: First migration preserves user data WHEN 从旧 Inno 安装或旧 macOS App
       转入第一版框架安装，THEN 操作路径清楚、安装身份和启动入口准确，能继续使用原配置和结果；CLI/Skills/SmartSearchTools
       保留，未确认时不卸载旧程序；完成一次完整安装后下一版可走框架更新。
-    result: pending
-    reason: null
+    result: blocked
+    reason:
+      text: 当前实现提供旧Inno检测和非破坏性迁移说明（desktop/windows/MainWindow.xaml.cs:730-735；docs/guide/en/app.md:81），并明确共享数据保留；但没有从真实旧Inno安装或旧macOS
+        App迁移当前候选、读回原配置/结果/快捷方式的证据。现有升级检查使用合成0.0.1框架基线，不能等同旧安装迁移。
+      truncated: false
   - id: A6
     source: specs/desktop-native-updaters/spec.md
     text: Signatures and trust fail closed WHEN 公钥不匹配、缺少正式密钥、下载包篡改或签名失败，THEN
       正式发布或安装被阻止，不能降级到未签名正式更新。测试身份不能进入正式 feed，Secrets 不泄露，报告区分更新签名、Windows
       自签名、Apple 代码签名、公证和系统信任。
-    result: pending
-    reason: null
+    result: passed
+    reason:
+      text: Windows签名核验固定公开身份、PE内容、CMS、RFC3161时间戳和不受信任自签名根状态（desktop/scripts/Windows-Signing.ps1:79-142）；两Windows
+        CI日志记录14项负例通过（.desktop-artifacts/integrated-windows-x64-35636177494.log:371-394）。Sparkle实际错误公钥保持0.0.1并非零退出，且断言固定Sparkle2.9.6的“improperly
+        signed”（desktop/scripts/test_sparkle_updates.py:122-141；两份Sparkle
+        receipt.json:1）。正式密钥缺失时构建脚本拒绝发布更新（desktop/scripts/build-macos.sh:60-69），测试身份仅用于隔离回执。
+      truncated: false
   - id: A7
     source: specs/desktop-native-updaters/spec.md
     text: Architecture and bundle integrity WHEN 构建和选择任一受支持架构的更新，THEN
       包内前后端/helper/资源完整且架构匹配，错误架构、旧版本或不适用的更新不允许安装；真实原生构建和协议 smoke
       分平台记录，不能把配置矩阵存在当作已经运行通过。
-    result: pending
-    reason: null
+    result: passed
+    reason:
+      text: Windows按ProcessArchitecture分频道（desktop/windows/AppUpdater.cs:27-30），macOS构建拒绝host/Python与请求架构不匹配（desktop/scripts/build-macos.sh:99-103）。远端35636177494的Windows
+        x64/arm64及macOS
+        arm64/x86_64原生job均success；macOS日志确认安装布局、架构、SDK和已安装后端启动（.desktop-artifacts/integrated-macos-arm64-35636177494.log:818-821；integrated-macos-x86_64-35636177494.log:825-828）。
+      truncated: false
   - id: A8
     source: specs/desktop-native-updaters/spec.md
     text: Release pipeline publishes complete updates WHEN 执行测试或受信发布流程，THEN PR 无发布
       Secrets；必要检查失败时停止发布；成功候选包含所需安装器、完整包、适用差分、feed 及校验信息，feed 引用均可解析且不跨架构。只改
       workflow 未运行时报告为未运行。
-    result: pending
-    reason: null
+    result: passed
+    reason:
+      text: PR触发路径只有contents:read（.github/workflows/desktop-build.yml:3-33），Windows私钥仅workflow_dispatch且显式签名/发布输入时读取（.github/workflows/desktop-build.yml:98-111），发布资产job仅非空release_tag才执行并先验证所有引用（.github/workflows/desktop-build.yml:279-323）。当前测试CI在四架构构建、签名/更新验证后成功，release-assets按预期skipped；未将其写成正式发布。
+      truncated: false
   - id: A9
     source: specs/desktop-native-updaters/spec.md
     text: Independent CLI and Skills stay healthy WHEN 带入修复并完成 App 框架升级，THEN 原
@@ -99,11 +118,8 @@ acceptance:
       可运行，测试不改真实全局安装或个人 Skills。
     result: passed
     reason:
-      text: Isolated actual mise upgrade receipt records `result=passed`,
-        `0.1.22→0.1.23`, private Python initialization, Skills sync,
-        `personal_installs_modified=false`, and `provider_calls=0`
-        (`.desktop-artifacts/isolated-cli-upgrade-0dcb27fdac004bb0bcd2402028b6b3b9/receipt.json`);
-        current bound Skill parity check passed.
+      text: Runtime回执核对当前六个后端源文件及MainWindow与真实冻结build逐字节一致（.desktop-artifacts/check_integrated_cli_receipt.py:5-14；.comet/runtime/native/changes/desktop-native-updaters/logs/checks/07e89c26-77c8-4cc4-9aa7-a270e4dad5a5-integrated-frozen-cli.log:1）。隔离实际mise从0.1.22升至0.1.23、自动初始化Python、同步旧CLI
+        Skills，且personal_installs_modified=false、provider_calls=0（.desktop-artifacts/isolated-cli-upgrade-0a37539a1af14e9095f5497fd483daed/receipt.json:1）。
       truncated: false
   - id: A10
     source: specs/desktop-native-updaters/spec.md
@@ -112,11 +128,7 @@ acceptance:
       与发布状态，任何未运行项保留未运行/受阻，不宣称正式已上线；用户数据和原工作区保持不变。
     result: passed
     reason:
-      text: Current CI readback is bound to HEAD `77a225c`
-        (`check_windows_ci.py:10-25`), and current documentation explicitly
-        distinguishes Windows-only CI, skipped macOS/release, GUI limits, and no
-        publication (`desktop/README.md:39-45`;
-        `docs/windows-signing.md:68-70`).
+      text: Runtime的当前绑定检查明确记录两次CI均为735b48a、stable_release=not-published、gui_acceptance=pending（.comet/runtime/native/changes/desktop-native-updaters/logs/checks/07e89c26-77c8-4cc4-9aa7-a270e4dad5a5-integrated-platform-ci.log:1）。交付文档也明确隔离安装/验签不能代替GUI、干净机器和SmartScreen验收（desktop/README.md:58-66）；未发现把测试或ad-hoc产物冒充正式上线的当前声明。
       truncated: false
   - id: A11
     source: specs/desktop-windows-signing/spec.md
@@ -125,12 +137,8 @@ acceptance:
       的设置只打印名称/操作状态。后续构建核对并复用该身份；证书指纹不匹配、用途错误、到期、缺少私钥或密码错误均不能用于发布。
     result: passed
     reason:
-      text: Public identity metadata is repository-only
-        (`desktop/packaging/windows/smart-search.json`); documentation places
-        encrypted PFX outside repo (`docs/windows-signing.md:36-44`), import
-        validates pinned identity and clears secret env
-        (`Import-WindowsSigningIdentity.ps1:7-43`), and both CI jobs passed 14
-        signing checks (`x64.log:394`, `arm64.log:386`).
+      text: 仓库公钥加载后显式拒绝带私钥的证书，并核对指纹、有效期和代码签名EKU（desktop/scripts/Windows-Signing.ps1:4-28）；已追踪Windows
+        packaging文件仅含smart-search.cer和公开元数据。两架构CI实际导入固定身份并通过缺密钥、错误密码、无私钥、错误证书、用途/到期负例（.desktop-artifacts/integrated-windows-x64-35636177494.log:371-394）。
       truncated: false
   - id: A12
     source: specs/desktop-windows-signing/spec.md
@@ -140,11 +148,10 @@ acceptance:
       实际构建、静态审查和未运行项目，不能以一种架构代替另一种架构。
     result: passed
     reason:
-      text: Bound x64/arm64 CI ran Required signing builds and installed-signature
-        verification (`.github/workflows/desktop-build.yml:110-131`;
-        `check_windows_ci.py:13-20`). Packaging validates signed Setup/owned
-        files (`Package-Windows.ps1:65-112`) and both jobs completed the real
-        upgrade/signature step (`x64.log:538-554`, `arm64.log:529-545`).
+      text: 构建先签署App
+        EXE/DLL和冻结后端，再打Velopack包；随后复验安装器和包内Update/helper（desktop/scripts/Build-Windows.ps1:163-210；desktop/scripts/Package-Windows.ps1:67-107；desktop/scripts/Test-WindowsUpdateInstall.ps1:8-12）。CI35636177494的Windows
+        x64/arm64均完成“Build self-contained App and Velopack packages”及“Verify
+        real delta update, full fallback and installed signatures”成功步骤。
       truncated: false
   - id: A13
     source: specs/desktop-windows-signing/spec.md
@@ -152,11 +159,7 @@ acceptance:
       可运行检查覆盖：缺失签名秘密、错误密码、错误证书、内容被篡改、缺失时间戳、签名工具失败。对应发布操作失败并阻止上传；秘密不出现在错误信息中。正确自签名文件在未导入信任的环境仍明确报告不受系统默认信任，不能将其写成公开可信。构建与验收不永久修改本机信任库。
     result: passed
     reason:
-      text: Both CI jobs report `Signing checks passed (14)` (`x64.log:394`,
-        `arm64.log:386`). The executed checker covers missing secrets, wrong
-        password/certificate, no private key, content/CMS/timestamp tampering,
-        signing failure, self-signed trust classification, and trust-store
-        invariance (`Test-WindowsSigning.ps1:37-111`).
+      text: 签名负例覆盖缺Secrets、错误密码、无私钥、错误证书、用途/到期、PE/CMS/时间戳篡改和签名工具失败（desktop/scripts/Test-WindowsSigning.ps1:35-80；.desktop-artifacts/integrated-windows-x64-35636177494.log:371-394）。验证器把未导入根时的状态明确标为untrusted-self-signed-root而非公开可信（desktop/scripts/Windows-Signing.ps1:94-131），且CI随后删除runner身份（.github/workflows/desktop-build.yml:134-141）。
       truncated: false
   - id: A14
     source: specs/desktop-windows-signing/spec.md
@@ -166,11 +169,7 @@ acceptance:
       签名构建和可运行的发布/资产检查验证；只有实际成功运行 GitHub Actions 后，才报告线上 CI 已通过。
     result: passed
     reason:
-      text: Actual GitHub Actions success is bound to HEAD and requires both signed
-        Windows jobs plus import/failure/build/delta/install/cleanup steps
-        (`check_windows_ci.py:10-20`). Runtime `release-contracts` passed 24
-        tests, while workflow prevents a Windows-only candidate from being
-        treated as a release (`desktop-build.yml:65-76,140-160`).
+      text: 工作流对release_tag执行版本/提交一致性检查、真实Windows签名和升级验证，并只在所有平台完成后进入发布资产步骤（.github/workflows/desktop-build.yml:67-164,279-323）。资产验证测试对未签名、损坏、错架构、路径穿越、重复、缺full/签名和外部URL均失败关闭（tests/test_native_update_artifacts.py:80-118）；当前线上CI成功事实已由远端gh读取并与本地结构化回执一致。
       truncated: false
   - id: A15
     source: specs/desktop-windows-signing/spec.md
@@ -179,57 +178,174 @@ acceptance:
       实机等未运行边界。生成候选产物不自动发布新版本、覆盖旧发行附件或替换本机正式 App。
     result: passed
     reason:
-      text: Current bilingual documentation states self-signed/default-untrusted
-        behavior, official source/fingerprint, SmartScreen boundary, macOS
-        non-claim, CI/GUI limits, and no release
-        (`docs/windows-signing.md:5-11,30-32,64-70`; `desktop/README.md:39-45`).
+      text: 中英文文档明确Windows自签名默认不受信、macOS仅ad-hoc且未公证、正式Sparkle密钥未配置、GUI/干净机仍需人工验收（desktop/README.md:50-66；docs/guide/en/app.md:7-13,77-83；docs/windows-signing.md:5-11,64-70）。当前Runtime回执和CI日志也保留stable-release未发布与GUI
+        pending边界，未见错误CA/SignPath/Developer-ID声明。
       truncated: false
 builder_handoff:
-  candidate_id: 8eb5343a-7ccd-4280-ac04-4d891aa9cdee
+  candidate_id: 32aeaf3d-637a-4f04-9939-8aa348e13dd8
   identity_provider: skill-coordinated
-  builder_execution_ref: skill-coordinated:builder:4a031aa2-ecd4-4a2f-a1d2-dcaec95dee37
-  iteration: 1
+  builder_execution_ref: skill-coordinated:builder:daa369c4-7548-4cd1-89f0-ac4f89e7c84b
+  iteration: 2
   summary:
-    text: 已按用户确认提交并推送77a225cc3529e33a8786cdeb9fc5225eac4c6dcc，新增windows_only只用于候选验证；macOS由另一开发者继续，正式版本后续统一合并。GitHub运行35602415331成功：Windows
-      x64和ARM64各953passed1skipped，14项签名检查、Required签名构建、真实SDK差分取消/回退、安装后验签及签名身份清理均通过。macOS与release-assets按授权跳过。产品源码沿用上轮已验证候选，本轮仅CI开关/对应测试文档与执行授权记录变化。
+    text: 候选735b48a完成PR51页面及原生更新整合，保留34个关键工程师文件。已修正Sparkle架构差分文件名/URL/最终feed签名，测试公钥夹具路径和实际签名拒绝文案。用户授权完成全部剩余合并并合入main。
     truncated: false
   addressed_acceptance_ids:
+    - A1
+    - A2
+    - A3
+    - A4
+    - A5
+    - A6
+    - A7
     - A8
+    - A9
+    - A10
     - A11
     - A12
     - A13
     - A14
+    - A15
   checks:
     - name:
-        text: Windows signed CI x64 and ARM64
+        text: local-regression
         truncated: false
       result: passed
       note:
-        text: https://github.com/konbakuyomu/smartsearch/actions/runs/35602415331; exact
-          tested implementation HEAD77a225c;
-          .desktop-artifacts/windows-ci-35602415331.json and per-architecture
-          logs.
+        text: 整合后998通过2跳过；Mac包装相关26项通过。本机Windows完整构建、SDK差分/取消/完整回退通过。
         truncated: false
     - name:
-        text: Workflow and release artifact regressions
+        text: real-frozen-cli-and-skills
         truncated: false
       result: passed
       note:
-        text: 24 passed locally after Windows-only switch.
+        text: 当前整合冻结后端实际隔离mise0.1.22→0.1.23升级、自动Python初始化、Skills备份和内容状态通过；receipt
+          isolated-cli-upgrade-0a37539a1af14e9095f5497fd483daed，与当前六个后端文件/主窗口源码一致。
+        truncated: false
+    - name:
+        text: preserved-engineer-baseline
+        truncated: false
+      result: passed
+      note:
+        text: 34个关键文件与92224fb相同；先前整合生命周期只读预审无确定新增缺陷。
+        truncated: false
+    - name:
+        text: current-ci
+        truncated: false
+      result: not-run
+      note:
+        text: 当前735b48a的CI35636183383全部成功；Desktop35636177494两Windows及MacARM64成功，MacIntel进入最后SDK测试。正式Runtime检查将读取最终结果和SHA。
         truncated: false
   checks_truncated: false
   known_limits:
-    - text: macOS由另一开发者推进，本轮明确跳过；完整跨平台验收仍缺macOS证据。
+    - text: PR51原Mac实机与用户Windows测试保留；新增整合GUI、真实旧Inno/旧Mac迁移及最终Mac实机仍待用户/工程师测试。
       truncated: false
-    - text: GUI/真实旧安装迁移未执行；Windows SDK差分夹具为当前payload与synthetic0.0.1版本。
-      truncated: false
-    - text: 没有正式合并、Tag/Release、正式Sparkle密钥配置或用户安装修改。候选提交授权不等于接受完整15项验收。
+    - text: Sparkle正式EdDSA身份未配置；CI仅隔离临时身份验证，MacApp仍adhoc，未公证。稳定发布和真实用户安装未执行。
       truncated: false
   known_limits_truncated: false
   review: null
-  submitted_at: 2026-09-21T13:06:17.449Z
-blockers: []
-verification: null
+  submitted_at: 2026-09-21T18:17:37.565Z
+blockers:
+  - owner: user
+    reason:
+      text: 无确定新增产品缺陷：当前735b48a保留PR51基线并以实际四架构CI、Windows签名负例/安装升级、Sparkle真实delta-fallback-wrong-key、冻结CLI/Skills回执证明核心实现。A2、A3、A5因当前整合GUI和真实旧安装迁移未实测而blocked，故总体blocked。
+      truncated: false
+    acceptance_ids:
+      - A2
+      - A3
+      - A5
+    resolution_action: resolve-verifier-blocker
+verification:
+  candidate_id: 32aeaf3d-637a-4f04-9939-8aa348e13dd8
+  identity_provider: skill-coordinated
+  verifier_execution_ref: skill-coordinated:verifier:8e8e368c-9eb9-4006-a276-afcf8ee4074e
+  iteration: 2
+  attempt: 1
+  assurance: skill-coordinated
+  verdict: blocked
+  checks:
+    - id: integrated-platform-ci
+      name:
+        text: Exact candidate three-job CI and four-platform signed SDK upgrade checks
+        truncated: false
+      argv_display:
+        - text: .desktop-artifacts/check_integrated_ci.py
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 146605
+    - id: integrated-frozen-cli
+      name:
+        text: Verify real isolated CLI upgrade and Skills receipt against current frozen
+          source
+        truncated: false
+      argv_display:
+        - text: .desktop-artifacts/check_integrated_cli_receipt.py
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 77
+    - id: preserve-pr51
+      name:
+        text: Verify 34 engineer-tested interface branding and platform validation files
+          are unchanged
+        truncated: false
+      argv_display:
+        - text: .desktop-artifacts/check_pr51_preservation.py
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 2043
+    - id: skill-parity
+      name:
+        text: Public and packaged Skills stay identical
+        truncated: false
+      argv_display:
+        - text: npm/scripts/check-skill-parity.js
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 69
+    - id: integrated-diff
+      name:
+        text: Check full integrated committed diff whitespace
+        truncated: false
+      argv_display:
+        - text: diff
+          truncated: false
+        - text: --check
+          truncated: false
+        - text: "65e7365"
+          truncated: false
+        - text: HEAD
+          truncated: false
+      argv_truncated: false
+      cwd_ref: .
+      status: passed
+      exit_code: 0
+      duration_ms: 76
+  summary:
+    text: 无确定新增产品缺陷：当前735b48a保留PR51基线并以实际四架构CI、Windows签名负例/安装升级、Sparkle真实delta-fallback-wrong-key、冻结CLI/Skills回执证明核心实现。A2、A3、A5因当前整合GUI和真实旧安装迁移未实测而blocked，故总体blocked。
+    truncated: false
+  risks:
+    - text: A2、A3缺少当前整合候选的真实GUI端到端验收；这不是已发现产品缺陷，仍不能以CI/源码替代。
+      truncated: false
+    - text: A5缺少真实旧Inno与旧macOS App迁移、原配置/结果/入口保留的实测证据。
+      truncated: false
+    - text: 正式Sparkle EdDSA身份尚未配置；macOS当前仅ad-hoc、未Developer
+        ID签名或公证。正式稳定发布、真实用户安装和干净机器信任验收均未执行，不能作为已上线或公开可信声明。
+      truncated: false
+    - text: 当前工作树除候选提交外有Runtime管理的comet-state.yaml修改和未跟踪handoff文件；最终核验时HEAD仍为735b48a，二者未改变候选代码提交。
+      truncated: false
+  risks_truncated: false
+  completed_at: 2026-09-21T18:32:13.155Z
 history:
   - goal_cycle: 1
     iteration: 0
@@ -336,6 +452,37 @@ history:
         保留工程师两端界面、Mac签名和打包修复，整合已有原生更新及CLI/Skills修复；执行适用本机与四架构CI后完成合并。正式版本发布仍待最终包测试确认。
       truncated: false
     completed_at: 2026-09-21T17:05:17.479Z
+  - goal_cycle: 3
+    iteration: 2
+    attempt: 0
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Native Shape artifacts changed
+      truncated: false
+    completed_at: 2026-09-21T17:58:59.493Z
+  - goal_cycle: 4
+    iteration: 1
+    attempt: 0
+    outcome: recovery
+    unresolved_ids: []
+    summary:
+      text: Mac实际SDK已正确拒绝错误公钥，保持旧版本。验证脚本却要求错误文本包含signatur，实际固定Sparkle2.9.6输出为improperly
+        signed，需要修正这一错误文本断言后重验。产品签名验证不变。
+      truncated: false
+    completed_at: 2026-09-21T18:05:11.695Z
+  - goal_cycle: 4
+    iteration: 2
+    attempt: 1
+    outcome: blocked
+    unresolved_ids:
+      - A2
+      - A3
+      - A5
+    summary:
+      text: 无确定新增产品缺陷：当前735b48a保留PR51基线并以实际四架构CI、Windows签名负例/安装升级、Sparkle真实delta-fallback-wrong-key、冻结CLI/Skills回执证明核心实现。A2、A3、A5因当前整合GUI和真实旧安装迁移未实测而blocked，故总体blocked。
+      truncated: false
+    completed_at: 2026-09-21T18:32:13.155Z
 history_overflow:
   dropped_entries: 0
   first_dropped_at: null
@@ -346,7 +493,7 @@ history_overflow:
     blocked: 0
     execution-error: 0
     recovery: 0
-verification_result: pending
-verification_report: null
+verification_result: blocked
+verification_report: verification.md
 archived: false
 created_at: 2026-09-21T10:31:09.371Z
