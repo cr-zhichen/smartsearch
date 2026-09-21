@@ -4,11 +4,11 @@ import SwiftUI
 // Codex Tweaks: MainWindowView, UpdateView and BackendPresentationTokens.
 // Keep the reference layout values local; no dependency on its backend contract.
 enum DesktopMetrics {
-    static let contentWidth: CGFloat = 1120
-    static let pagePadding: CGFloat = 32
-    static let sectionSpacing: CGFloat = 28
-    static let cardPadding: CGFloat = 20
-    static let cardRadius: CGFloat = 14
+    static let contentWidth: CGFloat = 920
+    static let pagePadding: CGFloat = 24
+    static let sectionSpacing: CGFloat = 24
+    static let cardPadding: CGFloat = 16
+    static let cardRadius: CGFloat = 12
 }
 
 enum DesktopAppearance {
@@ -31,7 +31,7 @@ struct DesktopPage<Content: View>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: DesktopMetrics.sectionSpacing) {
                 VStack(alignment: .leading, spacing: 7) {
-                    Text(title).font(.largeTitle.weight(.semibold))
+                    Text(title).font(.title2.weight(.semibold))
                     Text(subtitle)
                         .font(.body)
                         .foregroundStyle(.secondary)
@@ -61,7 +61,7 @@ struct DesktopPanel<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if let title { Text(title).font(.title2.weight(.semibold)) }
+            if let title { Text(title).font(.headline) }
             content
         }
         .desktopPanel()
@@ -71,16 +71,45 @@ struct DesktopPanel<Content: View>: View {
 struct DesktopGroupBoxStyle: GroupBoxStyle {
     func makeBody(configuration: Configuration) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            configuration.label.font(.title2.weight(.semibold))
+            configuration.label.font(.headline)
             configuration.content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-struct DesktopDisclosure<Content: View>: View {
+struct WholeRowDisclosureStyle: DisclosureGroupStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                    configuration.isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    configuration.label
+                    Spacer(minLength: 8)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))
+                }
+                .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(configuration.isExpanded ? L("已展开") : L("已收起"))
+            if configuration.isExpanded { configuration.content }
+        }
+    }
+}
+
+struct DetailSheet<Content: View>: View {
     let title: String
     let content: Content
+    @Environment(\.dismiss) private var dismiss
 
     init(_ title: String, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -88,16 +117,21 @@ struct DesktopDisclosure<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(spacing: 0) {
+            HStack {
+                Text(title).font(.headline)
+                Spacer()
+                Button(L("完成")) { dismiss() }.keyboardShortcut(.defaultAction)
+            }.padding(20)
             Divider()
-            DisclosureGroup {
-                VStack(alignment: .leading, spacing: 12) { content }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.top, 12)
-            } label: {
-                Text(title).font(.title2.weight(.semibold))
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) { content }
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(20)
             }
         }
+        .frame(width: 560, height: 480)
+        .disclosureGroupStyle(WholeRowDisclosureStyle())
+        .toggleStyle(.switch)
     }
 }
 

@@ -207,6 +207,7 @@ final class AppModel: ObservableObject {
             if result["ok"]?.boolValue == false {
                 errorMessage = L("一个或多个配置目录的活动记录不可读；可读取的记录仍已显示，其他状态未知。")
             }
+            await refreshSelectedActivity()
         } catch {
             present(error)
         }
@@ -379,6 +380,7 @@ final class AppModel: ObservableObject {
         guard connection == .ready else { return }
         guard begin("preview") else { return }
         defer { end("preview") }
+        configPreview = nil
         let parameters = configMutationParameters(includeRevision: false)
         do {
             let preview = try await backend.request(method: "config.preview", params: parameters)
@@ -536,11 +538,26 @@ final class AppModel: ObservableObject {
         ownedActiveRunIDs.contains(run.runID) && run.isActive
     }
 
-    func showActivityDetails(_ run: ActivityRun) async {
+    private func refreshSelectedActivity() async {
+        guard selectedDestination == .activity, let selected = selectedActivity else { return }
+        guard let current = activityRuns.first(where: { $0.runID == selected.runID }) else {
+            selectedActivity = nil
+            activityDetails = nil
+            activityResultRunID = nil
+            activityResult = nil
+            return
+        }
+        await showActivityDetails(current, preservingContent: true)
+    }
+
+    func showActivityDetails(_ run: ActivityRun, preservingContent: Bool = false) async {
+        let selectionChanged = selectedActivity?.runID != run.runID
         selectedActivity = run
-        activityDetails = nil
-        activityResultRunID = nil
-        activityResult = nil
+        if selectionChanged || !preservingContent {
+            activityDetails = nil
+            activityResultRunID = nil
+            activityResult = nil
+        }
         guard connection == .ready else { return }
         guard begin("details:\(run.runID)") else { return }
         defer { end("details:\(run.runID)") }
@@ -549,8 +566,11 @@ final class AppModel: ObservableObject {
         do {
             // activity.details carries only protocol-approved, redacted metadata.
             let result = try await backend.request(method: "activity.details", params: .object(params))
+            guard selectedActivity?.runID == run.runID else { return }
             activityDetails = result.redacted()
         } catch {
+            guard selectedActivity?.runID == run.runID else { return }
+            activityDetails = .object(["ok": .bool(false), "error": .string(error.localizedDescription)])
             present(error)
         }
     }

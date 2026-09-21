@@ -15570,5 +15570,221 @@
   "项目主页": [
     "项目主页",
     "Project website"
+  ],
+  "App 内置 CLI": [
+    "App 内置 CLI",
+    "Bundled CLI"
+  ],
+  "App 更新": [
+    "App 更新",
+    "App Updates"
+  ],
+  "任务正在运行": [
+    "任务正在运行",
+    "Task in progress"
+  ],
+  "修改先保留为草稿；测试使用当前填写的值。": [
+    "修改先保留为草稿；测试使用当前填写的值。",
+    "Changes stay in your draft until saved. Tests use the values entered here."
+  ],
+  "先选择工具并运行一次请求。": [
+    "先选择工具并运行一次请求。",
+    "Choose a tool and run a request first."
+  ],
+  "内置入口随 App 卸载失效。独立 CLI 接入不使用此入口；已有同名命令不会被覆盖。": [
+    "内置入口随 App 卸载失效。独立 CLI 接入不使用此入口；已有同名命令不会被覆盖。",
+    "The bundled entry point stops working when the App is removed. The independent CLI uses its own installation. Existing commands with the same name are preserved."
+  ],
+  "准备运行环境…": [
+    "准备运行环境…",
+    "Set Up Runtime…"
+  ],
+  "备份：{0}": [
+    "备份：{0}",
+    "Backup: {0}"
+  ],
+  "字段说明": [
+    "字段说明",
+    "Field Information"
+  ],
+  "工作区": [
+    "工作区",
+    "Workspace"
+  ],
+  "已展开": [
+    "已展开",
+    "Expanded"
+  ],
+  "已收起": [
+    "已收起",
+    "Collapsed"
+  ],
+  "当前：{0}": [
+    "当前：{0}",
+    "Current: {0}"
+  ],
+  "所有修改已保存": [
+    "所有修改已保存",
+    "All changes saved"
+  ],
+  "扩展能力": [
+    "扩展能力",
+    "Additional capabilities"
+  ],
+  "技能来源": [
+    "技能来源",
+    "Skills source"
+  ],
+  "按类别管理应用偏好和更新。": [
+    "按类别管理应用偏好和更新。",
+    "Manage preferences and updates by category."
+  ],
+  "搜索选项": [
+    "搜索选项",
+    "Search Options"
+  ],
+  "搜索选项…": [
+    "搜索选项…",
+    "Search Options…"
+  ],
+  "查找服务商": [
+    "查找服务商",
+    "Find a provider"
+  ],
+  "查看 {0} 的文件详情": [
+    "查看 {0} 的文件详情",
+    "View file details for {0}"
+  ],
+  "查看活动": [
+    "查看活动",
+    "View Activity"
+  ],
+  "查看设置": [
+    "查看设置",
+    "View Settings"
+  ],
+  "查看路由顺序和最近请求状态。": [
+    "查看路由顺序和最近请求状态。",
+    "Review routing order and recent request status."
+  ],
+  "检查使用当前草稿，不会保存或发起服务商请求。": [
+    "检查使用当前草稿，不会保存或发起服务商请求。",
+    "This checks your current draft without saving it or contacting providers."
+  ],
+  "检查偏好": [
+    "检查偏好",
+    "Check Preferences"
+  ],
+  "每类能力选择一个服务商，填写连接信息后测试并保存。": [
+    "每类能力选择一个服务商，填写连接信息后测试并保存。",
+    "Choose a provider for each capability, enter connection details, then test and save."
+  ],
+  "没有匹配的服务商": [
+    "没有匹配的服务商",
+    "No matching providers"
+  ],
+  "没有记录不代表外部 CLI 一定空闲。": [
+    "没有记录不代表外部 CLI 一定空闲。",
+    "No records does not mean an external CLI is idle."
+  ],
+  "活动筛选": [
+    "活动筛选",
+    "Filter Activity"
+  ],
+  "活动记录已暂停": [
+    "活动记录已暂停",
+    "Activity recording is paused"
+  ],
+  "活动选项": [
+    "活动选项",
+    "Activity Options"
+  ],
+  "管理连接信息和检索服务。": [
+    "管理连接信息和检索服务。",
+    "Manage connections and search providers."
+  ],
+  "结果会显示在这里": [
+    "结果会显示在这里",
+    "Results appear here"
+  ],
+  "观察设置": [
+    "观察设置",
+    "Observation Settings"
+  ],
+  "观察设置…": [
+    "观察设置…",
+    "Observation Settings…"
+  ],
+  "设置类别": [
+    "设置类别",
+    "Settings Category"
+  ],
+  "输入": [
+    "输入",
+    "Input"
+  ],
+  "运行环境…": [
+    "运行环境…",
+    "Runtime…"
+  ],
+  "返回输入": [
+    "返回输入",
+    "Back to Input"
+  ],
+  "这里显示当前观察范围内的任务。": [
+    "这里显示当前观察范围内的任务。",
+    "Tasks from the current observation scope appear here."
+  ],
+  "连接设置": [
+    "连接设置",
+    "Connection"
+  ],
+  "选择一条活动查看详情": [
+    "选择一条活动查看详情",
+    "Select an activity to view details"
+  ],
+  "选择工具并输入内容。完成后在结果中阅读和导出。": [
+    "选择工具并输入内容。完成后在结果中阅读和导出。",
+    "Choose a tool and enter your request. Read and export the result when it finishes."
+  ],
+  "选择要接入的 Agent，再更新对应的技能文件。": [
+    "选择要接入的 Agent，再更新对应的技能文件。",
+    "Choose your agents, then update their skill files."
+  ],
+  "通用": [
+    "通用",
+    "General"
+  ],
+  "部分活动目录无法读取": [
+    "部分活动目录无法读取",
+    "Some activity directories could not be read"
+  ],
+  "配置服务商": [
+    "配置服务商",
+    "Configure Providers"
+  ],
+  "配置范围": [
+    "配置范围",
+    "Configuration Scope"
+  ],
+  "配置详情…": [
+    "配置详情…",
+    "Configuration Details…"
+  ],
+  "高级": [
+    "高级",
+    "Advanced"
+  ],
+  "高级配置": [
+    "高级配置",
+    "Advanced Configuration"
+  ],
+  "当前阶段": [
+    "当前阶段",
+    "Current phase"
+  ],
+  "服务商与模型": [
+    "服务商与模型",
+    "Provider and model"
   ]
 }

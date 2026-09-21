@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-21T04:42:19Z",
+  "title": "Design System: Smart Search for macOS",
+  "extensions": {
+    "native": {
+      "platform": "macOS",
+      "frameworks": [
+        "SwiftUI",
+        "AppKit"
+      ],
+      "geometryUnit": "macOS logical point",
+      "sourceFiles": [
+        "desktop/macos/Sources/SmartSearchDesktop/DesktopLayout.swift",
+        "desktop/macos/Sources/SmartSearchDesktop/ContentView.swift",
+        "desktop/macos/Sources/SmartSearchDesktop/SmartSearchDesktopApp.swift"
+      ],
+      "colors": {
+        "accent": "Color.accentColor",
+        "contentBackground": "Color(nsColor: .textBackgroundColor)",
+        "primaryText": "default foreground / .primary",
+        "secondaryText": ".secondary",
+        "panelBorder": "Color(nsColor: .separatorColor).opacity(0.7)",
+        "success": "Color.green",
+        "attention": "Color.orange",
+        "error": "Color.red"
+      },
+      "typography": {
+        "pageTitle": ".title2.weight(.semibold)",
+        "sectionTitle": ".headline",
+        "body": ".body",
+        "supporting": ".callout / .caption",
+        "technical": ".system(..., design: .monospaced)",
+        "duration": ".monospacedDigit()"
+      },
+      "metrics": {
+        "contentWidth": 920,
+        "pagePadding": 24,
+        "sectionSpacing": 24,
+        "cardPadding": 16,
+        "cardRadius": 12,
+        "cardBorderWidth": 1,
+        "sheetWidth": 560,
+        "sheetHeight": 480,
+        "sheetPadding": 20,
+        "disclosureMinimumHeight": 30,
+        "resultLineSpacing": 4
+      },
+      "window": {
+        "default": [
+          1080,
+          760
+        ],
+        "minimum": [
+          920,
+          620
+        ],
+        "sidebarMinIdealMax": [
+          196,
+          220,
+          244
+        ]
+      },
+      "visualAcceptance": "pending; source-derived baseline",
+      "representation": "保留原生 API；不生成固定 CSS 色值、色阶、Web 断点或 HTML 控件仿制。"
+    },
+    "motion": [
+      {
+        "name": "disclosure",
+        "value": "SwiftUI .easeInOut(duration: 0.18)",
+        "purpose": "整行展开；accessibilityReduceMotion 开启时使用 nil animation。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "主要操作",
+      "kind": "button",
+      "description": "保存、运行和更新；进行中显示 BusyLabel，按条件禁用。",
+      "native": "Button.buttonStyle(.borderedProminent)"
+    },
+    {
+      "name": "原生输入",
+      "kind": "input",
+      "description": "保留系统标签、编辑、焦点和禁用语义。",
+      "native": "TextField / SecureField / Picker / Toggle"
+    },
+    {
+      "name": "主导航",
+      "kind": "nav",
+      "description": "六个工作区及底部连接状态。",
+      "native": "NavigationSplitView + List(selection:).listStyle(.sidebar)"
+    },
+    {
+      "name": "状态标签",
+      "kind": "chip",
+      "description": "文字加状态色；Capsule 底色透明度 0.12。",
+      "native": "StatusTag"
+    },
+    {
+      "name": "内容面板",
+      "kind": "card",
+      "description": "语义背景、连续圆角、细边界，无自定义投影。",
+      "native": "DesktopPanel"
+    },
+    {
+      "name": "整行展开",
+      "kind": "custom",
+      "description": "真实 Button、键盘操作、展开状态与减少动态效果分支。",
+      "native": "WholeRowDisclosureStyle"
+    }
+  ],
+  "narrative": {
+    "northStar": "Apple 原生 macOS 工作台",
+    "overview": "使用系统窗口、字体与控件建立熟悉感。Codex Tweaks 提供结构参考，Smart Search 保留自己的名称和图标。先呈现主要任务、必要状态与下一步行动，技术细节按需进入。",
+    "keyCharacteristics": [
+      "原生、清楚、克制；真实状态；稳定留白。"
+    ],
+    "rules": [
+      {
+        "name": "The 语义颜色 Rule",
+        "body": "保留系统 API，不以固定 Hex 替代；状态必须有文字依据。",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do 复用原生组件和统一间距，保持任务与返回上下文。",
+      "Do 为状态提供文字、为图标提供名称，并验证浅深色、缩放和键盘焦点。"
+    ],
+    "donts": [
+      "Don't 用 CSS 仿制品、固定色值或额外阴影替代原生系统。",
+      "Don't 让技术详情抢占主要任务，或将编译、打包视为视觉验收。"
+    ]
+  }
+}
