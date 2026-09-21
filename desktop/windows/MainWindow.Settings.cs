@@ -43,7 +43,7 @@ public sealed partial class MainWindow
         var preferences = new StackPanel { Spacing = 8 };
         preferences.Children.Add(SettingRow(L("界面语言"), L("App 与独立 CLI 分别保存语言选择。环境写入期间请等待操作完成。"), BuildLanguagePicker()));
         preferences.Children.Add(Divider());
-        preferences.Children.Add(SettingRow(L("外观"), string.Empty, theme));
+        preferences.Children.Add(SettingRow(L("外观"), L("跟随系统外观，或单独选择浅色、深色模式。"), theme));
         preferences.Children.Add(Divider());
         preferences.Children.Add(SettingRow(L("当前配置目录"), Text(_state, "config_dir", Text(_state, "config_path", L("未连接"))),
             ActionButton(L("选择配置目录…"), SelectConfigDirectoryAsync, operationKey: "profile", busyText: L("切换中…"))));
