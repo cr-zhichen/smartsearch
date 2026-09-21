@@ -1,6 +1,6 @@
-# Smart Search 桌面测试包
+# Smart Search 桌面构建
 
-这些脚本构建的是未做发行者签名的测试产物（macOS 使用 ad-hoc 完整性签名，但未公证），不创建 GitHub Release、不修改 PATH，也不会读取或删除共享配置、用户结果或外部 npm CLI。每次执行都会在 `.desktop-artifacts/` 新建独立目录；失败现场保留供排查。
+脚本默认构建未做发行者签名的测试产物：macOS 使用 ad-hoc 完整性签名，但未公证；Windows 显式使用 `-SigningMode Required` 时生成自签名产物，签名失败即停止。不创建 GitHub Release、不修改 PATH，也不会读取或删除共享配置、用户结果或外部 npm CLI。每次执行都会在 `.desktop-artifacts/` 新建独立目录；失败现场保留供排查。
 
 Python 后端固定为 PyInstaller `onedir`：`smart-search.exe`（Windows）或 `smart-search`（macOS），并验证 `smart_search/assets` 全量存在、`smart-search` 包元数据存在。`--smoke` 仅发送本机 `initialize` 与 `shutdown` 协议消息，使用本次运行目录中的空配置目录，不发真实服务商请求。
 
@@ -19,6 +19,8 @@ Python 后端固定为 PyInstaller `onedir`：`smart-search.exe`（Windows）或
 若本机已有 `innounp`，可显式加 `-BootstrapInnoSetup`。它只把固定版本的官方 Inno Setup 6.7.3 下载到本次 `.desktop-artifacts` 构建目录，核对固定 SHA-256、Pyrsys B.V. 的 Authenticode 签名与安装归档完整性，再本地解压 `ISCC.exe`；不会运行安装器、写注册表或改变 PATH。缺少 `innounp`、下载/签名/哈希/解压任一失败都会停止并保留该次目录。
 
 更新前需要用户先处理 Smart Search 自有任务并退出 App。安装器与 App 共享 `Local\SmartSearch.Desktop` mutex，且显式禁用自动关闭、自动重启；检测到正在运行的 App 时不能原地覆盖其后端或资源。
+
+Windows 签名覆盖自有 App EXE/DLL、后端、Setup 和卸载器，使用固定公开证书、SHA-256 和 RFC3161 时间戳。私钥从 GitHub Secrets 导入当前用户 `My`，不会导入 Root/TrustedPublisher；本地备份位于仓库外，密码受当前用户 DPAPI 保护。验签分别检查 CMS 签名、PE 内容摘要、固定证书链和时间戳，第三方文件保持原字节。说明及操作见 [Windows 签名](../docs/windows-signing.md)。
 
 ## macOS
 
@@ -49,11 +51,13 @@ mise run desktop:packaging:lint
 
 ## CI 与发布边界
 
-`.github/workflows/desktop-build.yml` 在 pull request 或普通手动触发时构建 Windows x64/ARM64 与 macOS x86_64/arm64，并只上传短期测试产物。手动提供已有稳定 `release_tag` 时会检出该 tag，在临时 Windows runner 安装 Inno Setup，生成两种 Windows 安装器和两种 DMG；全部构建成功并核对 tag/版本/四个文件名后，才向已有 Release 上传包和 `SHA256SUMS.txt`。不创建 Release/Tag、不推送提交，默认不覆盖已上传附件，不做发行者签名或公证。CI 的结构与协议 smoke 通过只是对应架构的构建证据；干净机器安装、启动、卸载、键盘/缩放/主题、发行者签名和 macOS 公证仍须分别验收。
+`.github/workflows/desktop-build.yml` 在 pull request 或普通手动触发时构建 Windows x64/ARM64 与 macOS x86_64/arm64 的测试产物，不向 PR 提供签名 Secrets。手动开启 `sign_windows` 可生成不发布版本的 Windows 自签名候选；填写已有稳定 `release_tag` 时，Windows 签名强制开启。在临时 Windows runner 安装 Inno Setup，生成两种 Windows 安装器和两种 DMG；全部构建、验签及版本/文件名校验成功后，才向已有 Release 上传包和 `SHA256SUMS.txt`。不创建 Release/Tag、不推送提交，默认不覆盖已上传附件。macOS 仅使用 ad-hoc 完整性签名，尚无 Developer ID 签名或公证。
+
+签名 CI 运行错误密码/证书、内容/签名/时间戳篡改及签名失败检查；在可丢弃 runner 静默安装候选并验签实际落盘的 App、后端与卸载器，不启动 GUI。结果记录在 `result.json`、`installed-signatures.json` 和签名检查结果中，随候选 artifact 提供。CI 不自动修改用户信任库；构建、验签和静默安装不能代替实机 GUI、完整升级/卸载或 SmartScreen 提示验收。
 
 修复既有发行版的打包时，产品源码仍固定在 tag，后端打包脚本、Windows 检查工程，以及 macOS 打包脚本、校验脚本、安装资源和 mise 配置取工作流本次提交。只有显式开启 `replace_existing_assets` 才替换附件和校验清单。桌面后端携带固定路径的 `package.json` 版本清单，避免覆盖升级遗留的旧版 `dist-info` 干扰版本读回。
 
-普通 Windows PR CI 仍只上传 self-contained `publish` 测试包。发行模式与本地安装器均清楚标为未签名测试包。
+普通 Windows PR CI 仍只上传 self-contained `publish` 测试包。签名构建使用 `-signed.exe` 文件名，但始终明确属于 self-signed；未签名构建使用 `-unsigned-test.exe`。既有历史发行附件不会因源码更新而自动获得签名。
 
 ## App 和 CLI 更新
 

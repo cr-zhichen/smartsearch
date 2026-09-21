@@ -6,7 +6,7 @@
 
 Download the package for your operating system and architecture from [Releases](https://github.com/konbakuyomu/smartsearch/releases/latest). Windows installs for the current user. The App includes its own runtime; using the App does not require a separate Python, Node.js, or CLI installation.
 
-Environment preparation and full App/CLI language switching are available from v0.1.21; the Update Skills page is available from v0.1.22. Desktop packages are unsigned; macOS, Windows ARM64, clean-machine installation, and the complete DPI matrix have not all been validated on devices.
+Environment preparation and full App/CLI language switching are available from v0.1.21; the Update Skills page is available from v0.1.22. Windows self-signing and the new transparent icon are available from v0.1.23. Windows `-signed.exe` packages use a self-signed certificate that Windows does not trust by default, so SmartScreen may still appear. Check the official release source and [public certificate fingerprint](../../windows-signing.md), then decide whether to use the options allowed by your system. This does not permanently trust the certificate or require disabling security protection. Older `-unsigned-test.exe` packages remain unsigned; macOS uses ad-hoc integrity signing without Developer ID signing or Apple notarization. Complete macOS/Windows ARM64 device use, clean-machine operation and the DPI matrix still require manual validation.
 
 Open **Smart Search** from the Start menu or Applications. Existing configuration is reused. Overview shows whether you have providers for main search, documentation lookup, and page reading.
 

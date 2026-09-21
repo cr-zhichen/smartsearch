@@ -304,12 +304,13 @@ def test_v015_release_notes_cover_beta_and_stable_lanes():
 
 
 @pytest.mark.skipif(sys.version_info < (3, 11), reason="The release runner uses Python 3.11+ file_digest")
-def test_desktop_release_accepts_nested_artifact_paths(tmp_path, monkeypatch):
+@pytest.mark.parametrize("windows_suffix", ["signed", "unsigned-test"])
+def test_desktop_release_requires_signed_windows_and_accepts_nested_paths(tmp_path, monkeypatch, windows_suffix):
     workflow = yaml.safe_load((ROOT / ".github/workflows/desktop-build.yml").read_text())
     step = next(step for step in workflow["jobs"]["release-assets"]["steps"]
                 if step.get("name") == "Validate version, platforms and checksums")
     script = step["run"].split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
-    names = [f"SmartSearch-0.1.20-win-{arch}-Setup-unsigned-test.exe" for arch in ("x64", "arm64")]
+    names = [f"SmartSearch-0.1.20-win-{arch}-Setup-{windows_suffix}.exe" for arch in ("x64", "arm64")]
     names += [f"SmartSearch-0.1.20-macos-{arch}-unsigned-test.dmg" for arch in ("x86_64", "arm64")]
     (tmp_path / "package.json").write_text('{"version":"0.1.20"}')
     for index, name in enumerate(names):
@@ -318,6 +319,11 @@ def test_desktop_release_accepts_nested_artifact_paths(tmp_path, monkeypatch):
         package.write_bytes(name.encode())
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("RELEASE_TAG", "v0.1.20")
+    if windows_suffix != "signed":
+        with pytest.raises(AssertionError, match="Missing or unexpected"):
+            exec(compile(script, "desktop-release-validation", "exec"), {})
+        assert not (tmp_path / "release-packages" / "SHA256SUMS.txt").exists()
+        return
     exec(compile(script, "desktop-release-validation", "exec"), {})
     root = tmp_path / "release-packages"
     assert {path.name for path in root.iterdir() if path.is_file()} == set(names) | {"SHA256SUMS.txt"}
