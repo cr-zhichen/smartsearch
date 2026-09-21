@@ -177,3 +177,31 @@ Release/DMG 构建、12 轮真实后端生命周期与并发响应、签名、�
 本机已启动独立 Smart Search Preview；读取窗口的 CUA 工具先超时，再出现 `Sky Computer Use native pipe closed before response`。应用与后端进程仍在运行，但未取得可用的新版截图。实际英文/窄窗口/主题，以及即时语言切换和草稿保留的操作验收仍待完成，不能称为视觉通过。
 
 本阶段产物：`.desktop-artifacts/macos-arm64-20260921T052759Z-7740-22532/SmartSearch-0.1.22-macos-arm64-unsigned-test.dmg`。仍为 ad-hoc 签名、未经 Apple 公证的测试包；上游 PR 等用户验收后创建。
+
+## 阶段 5：稳定分栏位置与连续设置页
+
+用户实机截图显示：`HSplitView` 的理想宽度没有成为实际初始宽度，搜索输入栏接近 420 pt；不同页面的主侧栏也有宽度变化。设置页顶部信息卡横跨两栏，下方再分成类别和选项，形成割裂的第三列。用户随后明确要求设置回到一个连续页面，以分组区分内容，并补齐 CLI 块的边框。
+
+- 主侧栏固定 220 pt，保留原生隐藏按钮、标题栏、工具栏和 SwiftUI Scene。语言变化只重建列表和详情展示，不重建外层导航容器；分栏页面重建时恢复自己的宽度。
+- 服务商、搜索与活动统一使用 `DesktopSplitView`，内部为 `NSSplitViewController` 和两个持久 hosting controllers。显式设置初始位置，按页面保存宽度，切换条目只更新内容。hosting view 禁用内容驱动的尺寸约束，明确传递 locale、colorScheme 和共用原生控件样式。
+- 三页左栏初始宽度分别为 220、320、260 pt；详情优先吸收窗口尺寸变化。左／右 holding priority 为 251／250，低于原生分隔条拖动优先级 490。首轮实机暴露 750 会阻止初始定位，已经纠正。初始位置以实际布局确认；窗口临时收窄不会覆盖更宽的保存偏好。参见 [NSSplitView holding priority](https://developer.apple.com/documentation/appkit/nssplitview/setholdingpriority(_:forsubviewat:)) 与 [setPosition](https://developer.apple.com/documentation/appkit/nssplitview/setposition(_:ofdividerat:))。
+- 搜索把工具与说明、输入字段、运行与选项分别成组，组内使用紧密间距，结果区域获得更多空间。运行和选项在窄栏可纵向排列，保留原执行与草稿语义。
+- 设置的项目信息、GitHub、通用、App 更新、独立 CLI、高级设置位于同一滚动内容区；标题、32 pt 章节间距和细边框面板区分层级。语言／配置目录采用左说明、右控件的行布局。CLI 版本与更新、运行环境、App 内置 CLI 均有完整面板，原路径、日志、更新、超时、环境准备及启用确认入口保留。
+
+### 实机证据与限制
+
+使用独立 `Smart Search Layout Preview` 调试，没有覆盖 `/Applications` 的用户安装。CUA 在用户协助切到搜索页后恢复过一段时间，取得搜索、服务商、活动及早期设置布局的实际截图。
+
+| 操作 | 观察结果 |
+| --- | --- |
+| 首次进入三处分栏 | 搜索 320、服务商 220、活动 260；主侧栏 220 |
+| 原生 AX 调整搜索栏至 348 | 切到在线研究、离开返回、隐藏再显示主侧栏，均保持 348 |
+| 原生 AX 调整服务商栏至 244 | context7 切到字段更多的 openai-compatible，保持 244 |
+| 原生 AX 调整活动栏至 276 | 切换筛选、原生窗口放大及恢复，保持 276 |
+| 窗口缩放的临时布局日志 | 内容宽度 860 → 2340 → 860，活动左栏保持 276；临时日志代码已移除 |
+
+坐标拖动未产生实际位置变化，因此不能称鼠标拖动验收通过；上表采用的是原生 AX 分隔条控件的调整。最窄窗口夹紧后恢复、最终中英文切换和深色外观仍需验收。进入最终连续设置页时，读取工具反复出现 `Sky Computer Use native pipe closed before response`；这是观察工具故障，尚未取得最终设置页的完整截图，不等于 App 崩溃，也不能据编译通过宣称视觉通过。
+
+独立布局审查与 simplify 收尾已完成：修复保持优先级、初始化确认和自动夹紧保存问题，移除设置分类导航与重复 CLI 标题，保留所有设置入口。最终布局扫描无机械发现，扫描不证明 SwiftUI 的实际视觉质量。
+
+Release/DMG 构建、12 轮真实后端启动／并发状态请求／停止、严格签名、复制安装后的后端启动、SDK 27.0／最低 macOS 13.0、语言资源一致性与打包静态检查通过。未编写 UI 单元测试。产物：`.desktop-artifacts/macos-arm64-20260921T061258Z-68964-14325/SmartSearch-0.1.22-macos-arm64-unsigned-test.dmg`，仍为 ad-hoc 签名、未经 Apple 公证的测试包；上游 PR 等用户验收。

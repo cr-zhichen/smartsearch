@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-21T04:42:19Z",
+  "generatedAt": "2026-09-21T06:12:58Z",
   "title": "Design System: Smart Search for macOS",
   "extensions": {
     "native": {
@@ -12,6 +12,7 @@
       "geometryUnit": "macOS logical point",
       "sourceFiles": [
         "desktop/macos/Sources/SmartSearchDesktop/DesktopLayout.swift",
+        "desktop/macos/Sources/SmartSearchDesktop/DesktopSplitView.swift",
         "desktop/macos/Sources/SmartSearchDesktop/ContentView.swift",
         "desktop/macos/Sources/SmartSearchDesktop/SmartSearchDesktopApp.swift"
       ],
@@ -55,41 +56,59 @@
           920,
           620
         ],
-        "sidebarMinIdealMax": [
-          196,
-          220,
-          244
-        ]
+        "sidebarWidth": 220
       },
-      "visualAcceptance": "pending; source-derived baseline",
+      "visualAcceptance": "partial real GUI verification: search/provider/activity widths; final settings, theme, language and mouse dragging still pending",
       "representation": "保留原生 API；不生成固定 CSS 色值、色阶、Web 断点或 HTML 控件仿制。",
       "splitViews": {
-        "api": "HSplitView",
-        "columnPadding": 16,
+        "api": "NSSplitViewController inside the existing SwiftUI Scene",
+        "persistence": "UserDefaults per page; temporary narrow-window clamping retains preferred width",
+        "holdingPriorities": {
+          "leading": 251,
+          "detail": 250
+        },
         "providers": {
-          "leadingMinIdealMax": [
-            176,
-            208,
+          "leadingMinInitialMax": [
+            184,
+            220,
             280
           ],
-          "detailMinimum": 400
-        },
-        "settings": {
-          "leadingMinIdealMax": [
-            152,
-            180,
-            230
-          ],
-          "detailMinimum": 400
+          "detailMinimum": 400,
+          "detailPadding": 16
         },
         "search": {
-          "leadingMinIdealMax": [
+          "leadingMinInitialMax": [
             280,
             320,
-            420
+            360
+          ],
+          "detailMinimum": 360,
+          "inputPadding": 20,
+          "resultPadding": 24
+        },
+        "activity": {
+          "leadingMinInitialMax": [
+            224,
+            260,
+            320
           ],
           "detailMinimum": 360
         }
+      },
+      "settings": {
+        "navigation": "single scrolling page",
+        "contentWidth": 800,
+        "pagePadding": 28,
+        "sectionSpacing": 32,
+        "groupSpacing": 16,
+        "sections": [
+          "project identity",
+          "general",
+          "app updates",
+          "independent CLI",
+          "advanced"
+        ],
+        "panels": "DesktopPanel including every CLI group"
       }
     },
     "motion": [

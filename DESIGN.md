@@ -13,7 +13,7 @@ description: 任务优先的原生 macOS 搜索工作台。
 
 **Key Characteristics:** 原生、清楚、克制；真实状态；稳定留白。
 
-范围为 `desktop/macos`，依据 `DesktopLayout.swift`、`ContentView.swift`、`SmartSearchDesktopApp.swift`。原生令牌保存在 sidecar 的 `extensions.native`。**视觉验收仍待实机完成**；本文记录源码设计基线。
+范围为 `desktop/macos`，依据 `DesktopLayout.swift`、`DesktopSplitView.swift`、`ContentView.swift`、`SmartSearchDesktopApp.swift`。原生令牌保存在 sidecar 的 `extensions.native`。搜索、服务商和活动的部分实机分栏检查已完成；最终设置页、语言和主题切换的视觉验收仍待完成。
 
 ## Colors
 
@@ -29,9 +29,15 @@ description: 任务优先的原生 macOS 搜索工作台。
 
 ## Layout
 
-几何单位均为 macOS pt。`DesktopMetrics`：内容最大宽度 920、页面留白 24、章节间距 24、面板留白 16、圆角 12。内容左对齐并纵向滚动。分栏内留白为 16 pt，分栏外不叠加页面留白；分隔条可拖动。服务商左右最小宽度为 176／400，设置为 152／400，搜索为 280／360；搜索输入理想宽度 320。
+几何单位均为 macOS pt。`DesktopMetrics`：内容最大宽度 920、页面留白 24、章节间距 24、面板留白 16、圆角 12。服务商编辑区留白 16，搜索输入 20、结果 24；分栏外不叠加页面留白。设置采用单一滚动内容区，最大宽度 800、页面留白 28、章节间距 32、组内间距 16。
 
-窗口默认 1080 × 760，最小 920 × 620。主侧栏宽度为 196／220／244（最小／理想／最大），保留原生标题栏与工具栏。
+窗口默认 1080 × 760，最小 920 × 620。主侧栏固定 220，可用原生工具栏按钮隐藏，保留 SwiftUI Scene 管理的标题栏和工具栏。内部分栏通过 `NSSplitViewController` 明确初始位置，并按页面保存调整后的宽度；内容切换只更新 hosting controller 内部视图。左侧 holding priority 为 251，右侧 250，均低于原生分隔条拖动优先级 490。窗口缩小时临时收窄，不覆盖用户偏好。
+
+| 分栏 | 左栏最小／初始／最大 | 右栏最小 |
+| --- | --- | --- |
+| 服务商 | 184／220／280 | 400 |
+| 搜索 | 280／320／360 | 360 |
+| 活动 | 224／260／320 | 360 |
 
 | 工作区 | 结构 |
 | --- | --- |
@@ -40,7 +46,7 @@ description: 任务优先的原生 macOS 搜索工作台。
 | 搜索与研究 | 左侧输入、右侧结果；两栏分别滚动，选项使用 sheet |
 | 活动 | 左列表、右详情；原生可调整分栏 |
 | 更新 Skills | 目标开关列表；文件／偏好／环境 sheet |
-| 设置与关于 | 顶部固定项目信息和 GitHub 入口；下方左侧类别、右侧选项 |
+| 设置与关于 | 顶部项目信息和 GitHub；同一页面依次呈现通用、App 更新、独立 CLI、高级设置，以标题、间距和有边框面板区分 |
 
 ## Elevation & Depth
 
@@ -54,9 +60,9 @@ description: 任务优先的原生 macOS 搜索工作台。
 
 - **Buttons:** 当前主要动作使用 `.borderedProminent`；运行中显示进度与文字，冲突时禁用。危险动作声明对应 role。
 - **Inputs:** 字段按 metadata 使用 TextField／SecureField 或 Picker；现有 Toggle 使用 `.switch`。保留系统焦点与键盘交互，字段来源等详情进入 popover。
-- **Navigation:** `NavigationSplitView` 与 sidebar；记录筛选使用 segmented Picker；服务商、设置及搜索使用原生 HSplitView。配置和 Skills 底部保留操作区。
+- **Navigation:** `NavigationSplitView` 与 sidebar；记录筛选使用 segmented Picker；服务商、搜索及活动共用 `DesktopSplitView` 原生分栏。设置不增加第二套导航。配置和 Skills 底部保留操作区。
 - **Disclosure:** 整行使用真实 Button，最小高度 30，展开箭头旋转 90°；动画 `easeInOut(0.18s)`，减少动态效果开启时禁用。提供展开状态的可访问值。
-- **Language:** 语言变化时刷新原生控件和菜单；页面选择留在稳定的父视图，草稿与搜索参数保留在 AppModel。运行标题从稳定 ID 重新取词。
+- **Language:** 语言变化时刷新列表、详情控件和菜单，保留外层 `NavigationSplitView` 的身份；页面选择留在稳定的父视图，草稿与搜索参数保留在 AppModel。运行标题从稳定 ID 重新取词。分栏 hosting controllers 明确传递 locale、colorScheme 和共用控件样式。
 - **Sheet:** 560 × 480，留白 20；标题、“完成”、分隔与滚动内容。
 - **Result:** 正文和来源优先，脱敏 JSON 按需展开；文本可选取，复制和导出说明范围。
 

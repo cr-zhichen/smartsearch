@@ -16,36 +16,6 @@ enum DesktopAppearance {
     static let contentBackground = Color(nsColor: .textBackgroundColor)
 }
 
-struct DesktopSplitView<Leading: View, Detail: View>: View {
-    let leadingWidths: ClosedRange<CGFloat>
-    let idealLeadingWidth: CGFloat
-    let detailMinimumWidth: CGFloat
-    let leading: Leading
-    let detail: Detail
-
-    init(leadingWidths: ClosedRange<CGFloat> = 176...280, idealLeadingWidth: CGFloat = 208,
-         detailMinimumWidth: CGFloat = 400,
-         @ViewBuilder leading: () -> Leading, @ViewBuilder detail: () -> Detail) {
-        self.leadingWidths = leadingWidths
-        self.idealLeadingWidth = idealLeadingWidth
-        self.detailMinimumWidth = detailMinimumWidth
-        self.leading = leading()
-        self.detail = detail()
-    }
-
-    var body: some View {
-        HSplitView {
-            leading
-                .frame(minWidth: leadingWidths.lowerBound, idealWidth: idealLeadingWidth,
-                       maxWidth: leadingWidths.upperBound, maxHeight: .infinity)
-            detail
-                .frame(minWidth: detailMinimumWidth, maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(DesktopAppearance.contentBackground)
-    }
-}
-
 struct DesktopPage<Content: View>: View {
     let title: String
     let subtitle: String
