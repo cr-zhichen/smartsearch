@@ -194,9 +194,10 @@
         "packagedAsset": "desktop/windows/Assets/mascot.png",
         "width": 168,
         "placement": "bottom edge of expanded sidebar, no frame; hidden with collapsed navigation",
-        "horizontalOffset": -12
+        "horizontalOffset": 0,
+        "verticalOffset": 16
       },
-      "verification": "Native Windows x64 publish and packaged backend startup passed. Preview 20260921T101447Z launched; overview alignment, compact toolbar and shifted bottom mascot observed. Final details/settings interactions and dark/English/narrow visual checks remain pending; not upstream acceptance.",
+      "verification": "Native Windows x64 publish and packaged backend startup passed. Preview 20260921T105910Z launched; overview alignment, compact toolbar and centered, lowered mascot with bottom clipping observed. Final details/settings interactions and dark/English/narrow visual checks remain pending; not upstream acceptance.",
       "toolbarIcons": {
         "buttonSize": 36,
         "symbolSize": 16,

@@ -97,7 +97,7 @@
       <Image x:Name="AppLogo" Source="ms-appx:///Assets/mascot.png" Width="168" Height="168"
              HorizontalAlignment="Center" VerticalAlignment="Bottom" Stretch="Uniform"
              AutomationProperties.Name="Smart Search">
-        <Image.RenderTransform><TranslateTransform X="-12" /></Image.RenderTransform>
+        <Image.RenderTransform><TranslateTransform Y="16" /></Image.RenderTransform>
       </Image>
     </Grid>
   </Grid>
