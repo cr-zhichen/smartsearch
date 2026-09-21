@@ -55,7 +55,7 @@ mise run desktop:packaging:lint
 
 ## CI 与发布边界
 
-`.github/workflows/desktop-build.yml` 在 PR 或手动触发时分别构建 Windows x64/ARM64 与 macOS arm64/x86_64，并运行各平台的真实框架升级检查；PR 不获取发布 Secrets。Mac 使用 PR #51 已验证的 Xcode 26.3、mise 工具与 ensurepip 安装路径。手动开启 `sign_windows` 可生成不发布的 Windows 自签名候选；`windows_only` 仅用于独立 Windows 候选，此时必须保持 `release_tag` 为空。
+`.github/workflows/desktop-build.yml` 在 PR 或手动触发时分别构建 Windows x64/ARM64 与 macOS arm64/x86_64，并运行各平台的真实框架升级检查；PR 不获取发布 Secrets。Mac 使用 PR #51 已验证的 Xcode 26.3、mise 工具与 ensurepip 安装路径。手动开启 `sign_windows` 或 `sign_macos_updates` 可生成相应平台使用正式身份签名的候选及完整资产 artifact；`release_tag` 为空时不会发布。`windows_only` 仅用于独立 Windows 候选，不能同时开启 `sign_macos_updates` 或填写 `release_tag`。
 
 填写已有稳定 `release_tag` 属于显式发布：强制 Windows 签名和 Sparkle EdDSA 身份，四架构全部通过后，先上传安装器、完整包、差分包与校验清单，最后上传引用它们的 feed。发布源必须已经包含原生更新客户端，不能把旧下载器产品和新更新包拼成一个发行版。桌面工作流不会创建 Release/Tag；但仓库独立的 `publish-npm.yml` 会在 main 推送后自动发布 npm beta 并创建 GitHub 预发布，正式 latest 由稳定 tag 控制。
 
@@ -63,7 +63,7 @@ mise run desktop:packaging:lint
 
 修复已有原生更新发行版的包装时，产品源码仍固定在 tag；Mac 打包脚本、成品校验、安装资源、mise 配置及发布资产校验器可取工作流提交。`replace_existing_assets` 仅用于明确批准的附件修复，不应重打同一已安装版本；正常更新提高版本号。后端携带固定路径的 `package.json` 清单，以实际版本读回确认升级。
 
-Windows 签名构建使用 `-signed.exe`，始终属于 self-signed；测试使用 `-unsigned-test.exe`。Sparkle 更新签名不是 Apple Developer ID 或公证。正式 Sparkle 配置为 Secret `SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY` 与公开变量 `SMART_SEARCH_SPARKLE_PUBLIC_KEY`，本次整合不会自动配置它们。缺少正式密钥时仍能跑隔离更新测试，但不能上传正式 Sparkle 更新资产。
+Windows 签名构建使用 `-signed.exe`，始终属于 self-signed；测试使用 `-unsigned-test.exe`。Sparkle 更新签名不是 Apple Developer ID 或公证。正式 Sparkle 配置为 Secret `SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY`（Base64 编码的 32 字节 Ed25519 seed）与公开变量 `SMART_SEARCH_SPARKLE_PUBLIC_KEY`；公钥必须与 [仓库记录](packaging/macos/sparkle-public-key.json) 一致。后续发行复用这一身份，私钥只保存于受限加密备份与 GitHub Secrets，不进入仓库或构建附件。缺少正式密钥时仍能跑隔离更新测试，但不能上传正式 Sparkle 更新资产。
 
 ## App 和 CLI 更新
 

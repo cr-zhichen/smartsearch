@@ -21,6 +21,10 @@ on:
         description: "Build self-signed Windows candidates (release_tag always requires signing)"
         type: boolean
         default: false
+      sign_macos_updates:
+        description: "Build Sparkle-signed macOS update candidates without publishing"
+        type: boolean
+        default: false
       release_tag:
         description: "Existing stable vX.Y.Z tag and release; build and attach verified native updates"
         default: ""
@@ -69,9 +73,11 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
           WINDOWS_ONLY: ${{ inputs.windows_only }}
+          SIGN_MACOS_UPDATES: ${{ inputs.sign_macos_updates }}
         run: |
           $version = (Get-Content -Raw package.json | ConvertFrom-Json).version
           if ($env:RELEASE_TAG -and $env:WINDOWS_ONLY -eq 'true') { throw 'A release requires both Windows and macOS; leave release_tag empty for Windows candidates.' }
+          if ($env:SIGN_MACOS_UPDATES -eq 'true' -and $env:WINDOWS_ONLY -eq 'true') { throw 'Sparkle signing requires macOS jobs; disable windows_only.' }
           if ($env:RELEASE_TAG) {
             if ($env:RELEASE_TAG -notmatch '^v[0-9]+\.[0-9]+\.[0-9]+$' -or $env:RELEASE_TAG -ne "v$version") { throw 'Tag and package version mismatch' }
             $tag = git rev-parse "$($env:RELEASE_TAG)^{commit}"
@@ -140,7 +146,7 @@ jobs:
           if (Test-Path -LiteralPath $identity) { Remove-Item -LiteralPath $identity -DeleteKey }
           $public.Dispose()
       - name: Stage complete Windows release assets
-        if: inputs.release_tag != ''
+        if: inputs.sign_windows || inputs.release_tag != ''
         uses: actions/upload-artifact@v4
         with:
           name: release-package-windows-${{ matrix.architecture }}
@@ -223,24 +229,29 @@ jobs:
           version="$(.venv/bin/python -c 'import json; print(json.load(open("package.json"))["version"])')"
           .venv/bin/python desktop/scripts/update_artifacts.py baseline --platform macos --architecture ${{ matrix.architecture }} --version "$version" --directory "$RUNNER_TEMP/previous-macos" --result "$RUNNER_TEMP/macos-baseline.json"
       - name: Prepare explicitly configured Sparkle release signing
-        if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
+        if: github.event_name == 'workflow_dispatch' && (inputs.sign_macos_updates || inputs.release_tag != '')
         env:
           SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY }}
           SMART_SEARCH_SPARKLE_PUBLIC_KEY: ${{ vars.SMART_SEARCH_SPARKLE_PUBLIC_KEY }}
         run: |
           set -euo pipefail
           test -n "$SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY" && test -n "$SMART_SEARCH_SPARKLE_PUBLIC_KEY"
+          expected="$(.venv/bin/python -c 'import json; print(json.load(open("desktop/packaging/macos/sparkle-public-key.json"))["public_key"])')"
+          test "$SMART_SEARCH_SPARKLE_PUBLIC_KEY" = "$expected"
           umask 077
           printf '%s' "$SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY" > "$RUNNER_TEMP/smartsearch-sparkle-key"
           printf 'SMART_SEARCH_SPARKLE_PUBLIC_KEY=%s\n' "$SMART_SEARCH_SPARKLE_PUBLIC_KEY" >> "$GITHUB_ENV"
       - name: Build App, DMG and configured Sparkle updates
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
+          SIGN_SPARKLE_UPDATES: ${{ inputs.sign_macos_updates || inputs.release_tag != '' }}
         run: |
           set -euo pipefail
           args=(--architecture '${{ matrix.architecture }}')
-          if [[ -n "$RELEASE_TAG" ]]; then
+          if [[ "$SIGN_SPARKLE_UPDATES" == true ]]; then
             args+=(--release-updates --update-key-file "$RUNNER_TEMP/smartsearch-sparkle-key" --update-public-key "$SMART_SEARCH_SPARKLE_PUBLIC_KEY")
+          fi
+          if [[ -n "$RELEASE_TAG" ]]; then
             previous="$(.venv/bin/python -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/macos-baseline.json"))["directory"] or "")')"
             if [[ -n "$previous" ]]; then args+=(--previous-release-directory "$previous"); fi
           fi
@@ -251,10 +262,10 @@ jobs:
           test "${#builds[@]}" -eq 1
           .venv/bin/python desktop/scripts/test_sparkle_updates.py "${builds[0]}"
       - name: Remove only the temporary release key
-        if: always() && inputs.release_tag != ''
+        if: always() && github.event_name == 'workflow_dispatch' && (inputs.sign_macos_updates || inputs.release_tag != '')
         run: .venv/bin/python -c 'import os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"],"smartsearch-sparkle-key").unlink(missing_ok=True)'
       - name: Stage complete macOS release assets
-        if: inputs.release_tag != ''
+        if: inputs.sign_macos_updates || inputs.release_tag != ''
         uses: actions/upload-artifact@v4
         with:
           name: release-package-macos-${{ matrix.architecture }}

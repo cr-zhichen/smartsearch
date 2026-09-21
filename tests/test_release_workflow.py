@@ -313,10 +313,18 @@ def test_native_release_requires_all_platforms_and_excludes_pr_secrets():
     assert "!inputs.windows_only" in workflow["jobs"]["macos"]["if"]
     events = read_workflow_events((ROOT / ".github/workflows/desktop-build.yml").read_text())
     assert events["workflow_dispatch"]["inputs"]["windows_only"]["default"] == "false"
+    assert events["workflow_dispatch"]["inputs"]["sign_macos_updates"]["default"] == "false"
     for job in (workflow["jobs"]["windows"], workflow["jobs"]["macos"]):
         for step in job["steps"]:
             if "secrets." in str(step.get("env", {})):
                 assert "github.event_name == 'workflow_dispatch'" in step["if"]
+    mac_steps = {step.get("name"): step for step in workflow["jobs"]["macos"]["steps"]}
+    signing = mac_steps["Prepare explicitly configured Sparkle release signing"]
+    assert "inputs.sign_macos_updates || inputs.release_tag != ''" in signing["if"]
+    assert 'test "$SMART_SEARCH_SPARKLE_PUBLIC_KEY" = "$expected"' in signing["run"]
+    assert signing["if"] in mac_steps["Remove only the temporary release key"]["if"]
+    windows_steps = {step.get("name"): step for step in workflow["jobs"]["windows"]["steps"]}
+    assert "Sparkle signing requires macOS jobs" in windows_steps["Validate release source before loading signing keys"]["run"]
     script = release["steps"][-1]["run"]
     assert script.index('"${packages[@]}"') < script.index('"${feeds[@]}"')
     assert "set -euo pipefail" in script
