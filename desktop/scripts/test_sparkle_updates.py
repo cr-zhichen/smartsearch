@@ -34,7 +34,7 @@ def main(build_file):
     evidence.mkdir()
     key = root / "test-key"
     public = root / "test-public-key"
-    wrong_public = root / "wrong-public-key"
+    wrong_public = root / "wrong-public-key.txt"
     env = {**os.environ, "SS_TEST_KEY_FILE": str(key), "SS_TEST_PUBLIC_FILE": str(public), "SS_WRONG_PUBLIC_FILE": str(wrong_public)}
     generator = root / "key.swift"
     generator.write_text('''import Foundation
