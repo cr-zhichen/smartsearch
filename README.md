@@ -40,7 +40,7 @@ These tasks need information from the web and a way to trace it back to its sour
 
 Provider tests and searches may use your providers' paid quota. Opening the App or checking the local environment does not run a paid search.
 
-Version 0.1.22 adds a dedicated Skills download and update page. Daily checks only notify; selected Agent files change after you click to update. The App, CLI and Skills are maintained separately. Windows packages ending in `-signed.exe` use a **self-signed certificate** and may still trigger SmartScreen; older `-unsigned-test.exe` packages are unsigned. See [Windows signatures and first launch](docs/windows-signing.md). macOS remains unsigned and unnotarized; macOS and Windows ARM64 device validation is still pending.
+Version 0.1.23 adds Windows self-signing and a new transparent icon across the App and Web UI. The Skills download and update page introduced in 0.1.22 remains separate from App and CLI updates: daily checks only notify, and selected Agent files change after you click to update. Windows packages ending in `-signed.exe` use a **self-signed certificate** and may still trigger SmartScreen; older `-unsigned-test.exe` packages are unsigned. See [Windows signatures and first launch](docs/windows-signing.md). macOS remains unsigned and unnotarized; macOS and Windows ARM64 device validation is still pending.
 
 [App setup, supported platforms, and troubleshooting →](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/app.md)
 
