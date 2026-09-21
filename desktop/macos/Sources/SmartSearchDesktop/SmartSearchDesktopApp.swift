@@ -152,6 +152,10 @@ enum AppBranding {
         .flatMap { NSImage(contentsOf: $0) }
 
     static let icon: NSImage = {
+        if let url = Bundle.main.url(forResource: "smart-search", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
         if let url = Bundle.main.url(forResource: "SmartSearch", withExtension: "icns"),
            let image = NSImage(contentsOf: url) {
             return image

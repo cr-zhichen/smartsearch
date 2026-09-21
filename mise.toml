@@ -86,6 +86,11 @@ run = "bash desktop/scripts/compile-macos.sh"
 description = "Generate Windows, Web and fallback macOS icons from the exported PNG"
 run = 'uv run --no-project --python "{{vars.python}}" --script desktop/scripts/build_icons.py'
 
+[tasks."desktop:macos:icon"]
+description = "Compile the Icon Composer source into native macOS icon resources"
+raw_args = true
+run = "bash desktop/scripts/compile-macos-icon.sh"
+
 [tasks."desktop:macos:verify"]
 description = "Verify a packaged DMG, its app signature and isolated backend startup"
 raw_args = true
@@ -99,7 +104,7 @@ run = "bash desktop/scripts/check-macos-backend.sh"
 [tasks."desktop:packaging:lint"]
 description = "Check the desktop workflow and macOS packaging scripts"
 run = [
-  "shellcheck desktop/scripts/build-macos.sh desktop/scripts/compile-macos.sh desktop/scripts/render-dmg-background.sh desktop/scripts/check-macos-backend.sh",
+  "shellcheck desktop/scripts/build-macos.sh desktop/scripts/compile-macos.sh desktop/scripts/compile-macos-icon.sh desktop/scripts/render-dmg-background.sh desktop/scripts/check-macos-backend.sh",
   "actionlint .github/workflows/desktop-build.yml",
   "git diff --check",
 ]
