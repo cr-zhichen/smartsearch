@@ -64,7 +64,10 @@ run = ['"{{vars.python}}" -m compileall -q src tests', "git diff --check"]
 
 [tasks."desktop:macos:install"]
 description = "Install the macOS backend packaging dependencies"
-run = '"{{vars.python}}" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"'
+run = [
+  '"{{vars.python}}" -m ensurepip --upgrade',
+  '"{{vars.python}}" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"',
+]
 
 [tasks."desktop:macos:build"]
 description = "Build and verify the macOS app and drag-to-install DMG"

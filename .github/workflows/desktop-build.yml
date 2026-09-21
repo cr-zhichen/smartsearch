@@ -187,6 +187,9 @@ jobs:
   macos:
     name: macOS ${{ matrix.architecture }} test package
     runs-on: ${{ matrix.runner }}
+    env:
+      # Both macOS 15 images include this SDK; their default Xcode 16.4 is too old.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     strategy:
       fail-fast: false
       matrix:
