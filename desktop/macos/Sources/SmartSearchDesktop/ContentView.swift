@@ -1688,7 +1688,7 @@ private struct SettingsAboutView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 32) {
+            VStack(alignment: .leading, spacing: 24) {
                 applicationInfo
                 settingsSection(L("通用"), subtitle: L("管理语言和配置目录。")) {
                     generalSettings
@@ -1698,10 +1698,15 @@ private struct SettingsAboutView: View {
                 }
                 settingsSection(L("独立 CLI"), subtitle: L("管理独立安装的命令行工具。")) {
                     UpdatesView(model: model, cliOnly: true)
-                    DesktopPanel(L("运行环境")) {
-                        Text(L("准备独立 CLI 与 AI 接入"))
-                            .foregroundStyle(.secondary)
-                        Button(L("准备运行环境…")) { showEnvironment = true }
+                    DesktopPanel(L("运行环境"), compact: true) {
+                        HStack(spacing: 16) {
+                            Text(L("准备独立 CLI 与 AI 接入"))
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            Button(L("准备运行环境…")) { showEnvironment = true }
+                                .fixedSize()
+                        }
                     }
                 }
                 settingsSection(L("高级"), subtitle: L("配置连接参数和内置 CLI。")) {
@@ -1709,7 +1714,7 @@ private struct SettingsAboutView: View {
                 }
             }
             .frame(maxWidth: 800, alignment: .leading)
-            .padding(28)
+            .padding(24)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .background(DesktopAppearance.contentBackground)
@@ -1725,8 +1730,8 @@ private struct SettingsAboutView: View {
 
     private func settingsSection<Content: View>(_ title: String, subtitle: String,
                                                 @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.title2.weight(.semibold))
                 Text(subtitle).foregroundStyle(.secondary)
             }
@@ -1735,11 +1740,11 @@ private struct SettingsAboutView: View {
     }
 
     private var applicationInfo: some View {
-        DesktopPanel {
-            HStack(spacing: 16) {
-                Image(nsImage: AppBranding.icon).resizable().frame(width: 56, height: 56)
+        DesktopPanel(compact: true) {
+            HStack(spacing: 12) {
+                Image(nsImage: AppBranding.icon).resizable().frame(width: 48, height: 48)
                     .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Smart Search").font(.title2.weight(.semibold))
                     Text(L("版本 {0}", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? L("尚未读取")))
                         .foregroundStyle(.secondary)
@@ -1756,9 +1761,9 @@ private struct SettingsAboutView: View {
     }
 
     private var generalSettings: some View {
-        DesktopPanel {
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
+        DesktopPanel(compact: true) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(L("界面语言")).fontWeight(.medium)
                     Text(L("App 与独立 CLI 分别保存语言选择。环境写入期间请等待操作完成。"))
                         .font(.callout).foregroundStyle(.secondary)
@@ -1775,10 +1780,9 @@ private struct SettingsAboutView: View {
                 .labelsHidden().frame(width: 168, alignment: .trailing)
                 .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("language"))
             }
-            .padding(.vertical, 4)
             Divider()
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(L("当前配置目录")).fontWeight(.medium)
                     Text(model.state?.configDirectory ?? L("后端尚未提供"))
                         .font(.system(.callout, design: .monospaced))
@@ -1791,16 +1795,15 @@ private struct SettingsAboutView: View {
                     .frame(width: 168, alignment: .trailing)
                     .disabled(model.connection != .ready || model.configOperationBusy)
             }
-            .padding(.vertical, 4)
         }
     }
 
     private var advancedSettings: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            DesktopPanel(L("后端连接")) {
-                VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
+            DesktopPanel(L("后端连接"), compact: true) {
+                VStack(alignment: .leading, spacing: 8) {
                     DisclosureGroup(L("开发选项")) {
-                        VStack(alignment: .leading, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 8) {
                             TextField(L("开发环境后端路径（可选）"), text: $model.backendPathOverride)
                             HStack {
                                 Button(L("选择…"), action: model.chooseBackendExecutable)
@@ -1822,7 +1825,7 @@ private struct SettingsAboutView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            DesktopPanel(L("App 内置 CLI")) {
+            DesktopPanel(L("App 内置 CLI"), compact: true) {
                 KeyValueLine(label: L("内置路径"), value: model.cliStatus?["bundled_path"]?.displayString ?? L("尚未读取"))
                 KeyValueLine(label: L("外部路径"), value: model.cliStatus?["external_path"]?.displayString ?? L("未发现或尚未读取"))
                 KeyValueLine(label: L("内置版本"), value: model.cliStatus?["version"]?.displayString ?? L("尚未读取"))
@@ -1870,7 +1873,7 @@ private struct UpdatesView: View {
     var body: some View {
         Group {
             if cliOnly {
-                DesktopPanel(L("版本与更新")) {
+                DesktopPanel(L("版本与更新"), compact: true) {
                     HStack {
                         Button { Task { await model.checkForUpdates() } } label: {
                             BusyLabel(text: L("检查更新"), busyText: L("检查中…"), busy: checking)
@@ -1885,12 +1888,18 @@ private struct UpdatesView: View {
                     cliCard
                 }
             } else {
-                DesktopPanel(L("版本与更新")) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Toggle(L("自动检查，每 24 小时一次，点击才下载"), isOn: Binding(
-                            get: { model.updateResult?["auto_check"]?.boolValue ?? true },
-                            set: { value in Task { await model.updateAction("updates.auto", params: .object(["enabled": .bool(value)])) } }))
-                            .frame(maxWidth: .infinity)
+                DesktopPanel(L("版本与更新"), compact: true) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 16) {
+                            Text(L("自动检查，每 24 小时一次，点击才下载"))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Toggle(L("自动检查，每 24 小时一次，点击才下载"), isOn: Binding(
+                                get: { model.updateResult?["auto_check"]?.boolValue ?? true },
+                                set: { value in Task { await model.updateAction("updates.auto", params: .object(["enabled": .bool(value)])) } }))
+                                .labelsHidden()
+                                .fixedSize()
+                        }
                         HStack {
                             Button { Task { await model.checkForUpdates() } } label: {
                                 BusyLabel(text: L("检查更新"), busyText: L("检查中…"), busy: checking)
@@ -1911,7 +1920,7 @@ private struct UpdatesView: View {
     }
 
     private var appCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             KeyValueLine(label: "App", value: app?["current_version"]?.displayString ?? L("尚未读取"))
             KeyValueLine(label: L("内置引擎"), value: model.state?.version ?? L("尚未读取"))
             KeyValueLine(label: L("可安装稳定版"), value: app?["latest_version"]?.displayString ?? L("尚未检查"))
@@ -1941,7 +1950,7 @@ private struct UpdatesView: View {
     }
 
     private var cliCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             KeyValueLine(label: L("实际版本"), value: model.cliStatus?["external_version"]?.displayString ?? L("未安装或未知"))
             KeyValueLine(label: L("npm 稳定版"), value: cli?["latest_version"]?.displayString ?? L("尚未检查"))
             KeyValueLine(label: L("来源"), value: model.cliStatus?["manager_label"]?.displayString ?? L("未确认"))

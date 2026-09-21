@@ -55,19 +55,21 @@ struct DesktopPage<Content: View>: View {
 
 struct DesktopPanel<Content: View>: View {
     let title: String?
+    let compact: Bool
     let content: Content
 
-    init(_ title: String? = nil, @ViewBuilder content: () -> Content) {
+    init(_ title: String? = nil, compact: Bool = false, @ViewBuilder content: () -> Content) {
         self.title = title
+        self.compact = compact
         self.content = content()
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: compact ? 8 : 12) {
             if let title { Text(title).font(.headline) }
             content
         }
-        .desktopPanel()
+        .desktopPanel(verticalPadding: compact ? 12 : DesktopMetrics.cardPadding)
     }
 }
 
@@ -139,8 +141,9 @@ struct DetailSheet<Content: View>: View {
 }
 
 extension View {
-    func desktopPanel() -> some View {
-        padding(DesktopMetrics.cardPadding)
+    func desktopPanel(verticalPadding: CGFloat = DesktopMetrics.cardPadding) -> some View {
+        padding(.horizontal, DesktopMetrics.cardPadding)
+            .padding(.vertical, verticalPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(DesktopAppearance.contentBackground)
             .clipShape(RoundedRectangle(cornerRadius: DesktopMetrics.cardRadius, style: .continuous))

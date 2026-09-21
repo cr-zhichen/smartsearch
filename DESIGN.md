@@ -13,7 +13,7 @@ description: 任务优先的原生 macOS 搜索工作台。
 
 **Key Characteristics:** 原生、清楚、克制；真实状态；稳定留白。
 
-范围为 `desktop/macos`，依据 `DesktopLayout.swift`、`DesktopSplitView.swift`、`ContentView.swift`、`SmartSearchDesktopApp.swift`。原生令牌保存在 sidecar 的 `extensions.native`。搜索、服务商和活动的部分实机分栏检查已完成；最终设置页、语言和主题切换的视觉验收仍待完成。
+范围为 `desktop/macos`，依据 `DesktopLayout.swift`、`DesktopSplitView.swift`、`ContentView.swift`、`SmartSearchDesktopApp.swift`。原生令牌保存在 sidecar 的 `extensions.native`。搜索、服务商、活动的分栏及设置页紧凑布局已完成部分实机检查；英文、主题切换与宽窗口的视觉验收仍待完成。
 
 ## Colors
 
@@ -29,7 +29,7 @@ description: 任务优先的原生 macOS 搜索工作台。
 
 ## Layout
 
-几何单位均为 macOS pt。`DesktopMetrics`：内容最大宽度 920、页面留白 24、章节间距 24、面板留白 16、圆角 12。服务商编辑区留白 16，搜索输入 20、结果 24；分栏外不叠加页面留白。设置采用单一滚动内容区，最大宽度 800、页面留白 28、章节间距 32、组内间距 16。
+几何单位均为 macOS pt。`DesktopMetrics`：内容最大宽度 920、页面留白 24、章节间距 24、面板留白 16、圆角 12。服务商编辑区留白 16，搜索输入 20、结果 24；分栏外不叠加页面留白。设置采用单一滚动内容区，最大宽度 800、页面留白 24、章节间距 24、标题与内容间距 12；紧凑面板使用水平留白 16、垂直留白 12、内容间距 8，标签与辅助说明间距 4。
 
 窗口默认 1080 × 760，最小 920 × 620。主侧栏固定 220，可用原生工具栏按钮隐藏，保留 SwiftUI Scene 管理的标题栏和工具栏。内部分栏通过 `NSSplitViewController` 明确初始位置，并按页面保存调整后的宽度；内容切换只更新 hosting controller 内部视图。左侧 holding priority 为 251，右侧 250，均低于原生分隔条拖动优先级 490。窗口缩小时临时收窄，不覆盖用户偏好。
 
@@ -59,6 +59,7 @@ description: 任务优先的原生 macOS 搜索工作台。
 ## Components
 
 - **Buttons:** 当前主要动作使用 `.borderedProminent`；运行中显示进度与文字，冲突时禁用。危险动作声明对应 role。
+- **Settings rows:** 设置面板使用 `DesktopPanel(compact: true)`；说明靠左、控件靠右。自动更新开关保持原生尺寸，长说明允许换行；运行环境的说明和准备按钮位于同一行。
 - **Inputs:** 字段按 metadata 使用 TextField／SecureField 或 Picker；现有 Toggle 使用 `.switch`。保留系统焦点与键盘交互，字段来源等详情进入 popover。
 - **Secrets:** 已有 Key 显示固定圆点掩码，未配置时显示输入提示。掩码仅是 SecureField prompt，不进入草稿；有效值是否存在由后端布尔状态提供，空值和短 Key 不再靠掩码字符串判断。
 - **Navigation:** `NavigationSplitView` 与 sidebar；记录筛选使用 segmented Picker；服务商、搜索及活动共用 `DesktopSplitView` 原生分栏。设置不增加第二套导航。配置和 Skills 底部保留操作区。

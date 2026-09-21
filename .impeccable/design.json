@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-21T07:00:53Z",
+  "generatedAt": "2026-09-21T07:17:45Z",
   "title": "Design System: Smart Search for macOS",
   "extensions": {
     "native": {
@@ -98,9 +98,9 @@
       "settings": {
         "navigation": "single scrolling page",
         "contentWidth": 800,
-        "pagePadding": 28,
-        "sectionSpacing": 32,
-        "groupSpacing": 16,
+        "pagePadding": 24,
+        "sectionSpacing": 24,
+        "groupSpacing": 12,
         "sections": [
           "project identity",
           "general",
@@ -108,7 +108,15 @@
           "independent CLI",
           "advanced"
         ],
-        "panels": "DesktopPanel including every CLI group"
+        "panels": "DesktopPanel(compact: true), including every CLI group",
+        "compactPanel": {
+          "horizontalPadding": 16,
+          "verticalPadding": 12,
+          "contentSpacing": 8,
+          "labelSpacing": 4
+        },
+        "automaticUpdateRow": "leading wrapping description with trailing fixed-size native switch",
+        "visualAcceptance": "observed at 920 pt in a settings-start preview: update switch alignment, App and CLI updates, runtime and advanced panels; English, dark appearance and wider windows pending"
       },
       "routingEditor": {
         "placement": "plain text first row in the shared scrolling provider list, below the search field",
