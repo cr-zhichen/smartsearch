@@ -161,6 +161,28 @@ def smoke_backend(executable: Path, run_directory: Path, expected_version: str) 
         raise RuntimeError("packaged backend reported a different version from the build source")
 
 
+def write_windows_version_info(path: Path, version: str) -> None:
+    from PyInstaller.utils.win32.versioninfo import (
+        FixedFileInfo, StringFileInfo, StringStruct, StringTable, VarFileInfo, VarStruct, VSVersionInfo,
+    )
+
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:$|[-+])", version)
+    if not match or any(int(part) > 65535 for part in match.groups()):
+        raise RuntimeError("Project version cannot be represented in Windows version resources")
+    numbers = (*map(int, match.groups()), 0)
+    strings = {
+        "CompanyName": "Smart Search", "ProductName": "Smart Search",
+        "FileDescription": "Smart Search desktop backend", "FileVersion": version,
+        "ProductVersion": version, "InternalName": "smart-search", "OriginalFilename": "smart-search.exe",
+    }
+    resource = VSVersionInfo(
+        ffi=FixedFileInfo(filevers=numbers, prodvers=numbers, mask=0x3F, flags=0, OS=0x40004, fileType=1, subtype=0, date=(0, 0)),
+        kids=[StringFileInfo([StringTable("040904B0", [StringStruct(k, v) for k, v in strings.items()])]),
+              VarFileInfo([VarStruct("Translation", [1033, 1200])])],
+    )
+    path.write_text(str(resource), encoding="utf-8")
+
+
 def main() -> int:
     args = parse_args()
     project_version = re.search(r'^version = "([^"]+)"',
@@ -202,6 +224,10 @@ def main() -> int:
         str(spec_directory),
         str(entry),
     ]
+    if os.name == "nt":
+        version_file = run_directory / "windows-version.txt"
+        write_windows_version_info(version_file, project_version)
+        command[-1:-1] = ["--version-file", str(version_file)]
     subprocess.run(command, cwd=REPOSITORY_ROOT, check=True)
 
     bundle_directory = dist_directory / PACKAGE_NAME

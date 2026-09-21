@@ -1,4 +1,4 @@
-name: Desktop test packages
+name: Desktop packages
 
 on:
   pull_request:
@@ -9,6 +9,11 @@ on:
       - "src/smart_search/**"
   workflow_dispatch:
     inputs:
+      sign_windows:
+        description: "Build self-signed Windows candidates without publishing (release_tag always requires signing)"
+        type: boolean
+        required: false
+        default: false
       release_tag:
         description: "Optional existing stable vX.Y.Z tag: build all packages and attach them with SHA256SUMS to that release"
         required: false
@@ -70,7 +75,7 @@ jobs:
         run: |
           git fetch --no-tags --depth=1 origin "$env:WORKFLOW_SHA"
           if ($LASTEXITCODE -ne 0) { throw "Unable to fetch the workflow revision" }
-          git restore --source="$env:WORKFLOW_SHA" -- desktop/tests/BackendLifecycleCheck desktop/scripts/build_backend.py
+          git restore --source="$env:WORKFLOW_SHA" -- desktop/tests/BackendLifecycleCheck desktop/scripts desktop/packaging/windows
           if ($LASTEXITCODE -ne 0) { throw "Unable to load the release tooling" }
 
       - name: Verify backend stop and reconnect without a window
@@ -81,8 +86,24 @@ jobs:
           "$env:RUNNER_TEMP/smartsearch-client-lifecycle"
 
       - name: Install Inno Setup on the disposable release runner
-        if: inputs.release_tag != ''
+        if: inputs.sign_windows || inputs.release_tag != ''
         run: choco install innosetup --yes --no-progress
+
+      - name: Import pinned Windows signing identity
+        if: github.event_name == 'workflow_dispatch' && (inputs.sign_windows || inputs.release_tag != '')
+        shell: pwsh
+        env:
+          SMART_SEARCH_WINDOWS_PFX_BASE64: ${{ secrets.SMART_SEARCH_WINDOWS_PFX_BASE64 }}
+          SMART_SEARCH_WINDOWS_PFX_PASSWORD: ${{ secrets.SMART_SEARCH_WINDOWS_PFX_PASSWORD }}
+        run: ./desktop/scripts/Import-WindowsSigningIdentity.ps1
+
+      - name: Check signing failures and tamper rejection
+        if: github.event_name == 'workflow_dispatch' && (inputs.sign_windows || inputs.release_tag != '')
+        shell: pwsh
+        env:
+          SMART_SEARCH_WINDOWS_PFX_BASE64: ${{ secrets.SMART_SEARCH_WINDOWS_PFX_BASE64 }}
+          SMART_SEARCH_WINDOWS_PFX_PASSWORD: ${{ secrets.SMART_SEARCH_WINDOWS_PFX_PASSWORD }}
+        run: ./desktop/scripts/Test-WindowsSigning.ps1
 
       - name: Build self-contained test package
         shell: pwsh
@@ -90,7 +111,41 @@ jobs:
           .\desktop\scripts\Build-Windows.ps1
           -Architecture ${{ matrix.architecture }}
           -PythonPath "${{ steps.python.outputs.python-path }}"
-          -InstallerMode ${{ inputs.release_tag && 'Required' || 'Skip' }}
+          -InstallerMode ${{ (inputs.sign_windows || inputs.release_tag != '') && 'Required' || 'Skip' }}
+          -SigningMode ${{ (inputs.sign_windows || inputs.release_tag != '') && 'Required' || 'Skip' }}
+
+      - name: Remove the runner signing key
+        if: always() && github.event_name == 'workflow_dispatch' && (inputs.sign_windows || inputs.release_tag != '')
+        shell: pwsh
+        run: |
+          $public = [Security.Cryptography.X509Certificates.X509Certificate2]::new(
+            [IO.File]::ReadAllBytes((Join-Path $PWD 'desktop/packaging/windows/smart-search.cer')))
+          $identity = "Cert:/CurrentUser/My/$($public.Thumbprint)"
+          if (Test-Path -LiteralPath $identity) { Remove-Item -LiteralPath $identity -DeleteKey }
+          $public.Dispose()
+
+      - name: Verify installed programs and uninstaller on the disposable runner
+        if: success() && (inputs.sign_windows || inputs.release_tag != '')
+        shell: pwsh
+        env:
+          TARGET_ARCH: ${{ matrix.architecture }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./desktop/scripts/Windows-Signing.ps1
+          $results = @(Get-ChildItem ".desktop-artifacts/windows-$env:TARGET_ARCH-*/result.json")
+          if ($results.Count -ne 1) { throw 'Expected one fresh Windows build result' }
+          $build = Get-Content -Raw -LiteralPath $results[0].FullName | ConvertFrom-Json
+          $install = Join-Path $env:RUNNER_TEMP 'SmartSearch-signing-install'
+          if (Test-Path -LiteralPath $install) { throw 'Refusing to reuse an installation directory' }
+          $process = Start-Process -FilePath $build.installer.path -WindowStyle Hidden -Wait -PassThru -ArgumentList @(
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-', '/NOICONS', ('/DIR="{0}"' -f $install))
+          if ($process.ExitCode -ne 0) { throw 'Silent candidate installation failed' }
+          $certificate = Get-ExpectedSigningCertificate ./desktop/packaging/windows/smart-search.cer
+          $verified = foreach ($relative in @('SmartSearch.Desktop.exe', 'SmartSearch.Desktop.dll', 'backend/smart-search.exe', 'unins000.exe')) {
+            Test-WindowsSignature (Join-Path $install $relative) $certificate
+          }
+          $certificate.Dispose()
+          $verified | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $build.run_directory 'installed-signatures.json') -Encoding utf8
 
       - name: Stage release installer
         if: inputs.release_tag != ''
@@ -102,11 +157,28 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-      - name: Upload unsigned test package
+      - name: Upload Windows package
         uses: actions/upload-artifact@v4
         with:
-          name: smart-search-windows-${{ matrix.architecture }}-unsigned-test
+          name: smart-search-windows-${{ matrix.architecture }}-${{ (inputs.sign_windows || inputs.release_tag != '') && 'self-signed' || 'unsigned-test' }}
           path: .desktop-artifacts/windows-${{ matrix.architecture }}-*/publish/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload signing evidence and candidate installer
+        if: inputs.sign_windows || inputs.release_tag != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-search-windows-${{ matrix.architecture }}-signing-evidence
+          path: |
+            .desktop-artifacts/windows-${{ matrix.architecture }}-*/result.json
+            .desktop-artifacts/windows-${{ matrix.architecture }}-*/installed-signatures.json
+            .desktop-artifacts/windows-${{ matrix.architecture }}-*/installer/*.exe
+            .desktop-artifacts/windows-${{ matrix.architecture }}-*/signed-uninstaller/*
+            .desktop-artifacts/signing-check-*/result.json
+            desktop/packaging/windows/smart-search.cer
+            desktop/packaging/windows/smart-search.json
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
@@ -205,7 +277,7 @@ jobs:
           assert re.fullmatch(r'v\d+\.\d+\.\d+', tag), 'Only stable version tags are accepted'
           version = json.loads(pathlib.Path('package.json').read_text())['version']
           assert tag == 'v' + version, 'Tag and source package version differ'
-          expected = {f'SmartSearch-{version}-win-{a}-Setup-unsigned-test.exe' for a in ('x64', 'arm64')}
+          expected = {f'SmartSearch-{version}-win-{a}-Setup-signed.exe' for a in ('x64', 'arm64')}
           expected |= {f'SmartSearch-{version}-macos-{a}-unsigned-test.dmg' for a in ('x86_64', 'arm64')}
           root = pathlib.Path('release-packages')
           files = sorted(p for p in root.rglob('*') if p.is_file())
@@ -217,7 +289,7 @@ jobs:
           rows = [hashlib.file_digest(p.open('rb'), 'sha256').hexdigest() + '  ' + p.name for p in files]
           (root / 'SHA256SUMS.txt').write_text('\n'.join(rows) + '\n')
           PY
-      - name: Attach complete unsigned packages to the existing release
+      - name: Attach complete packages to the existing release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.release_tag }}
