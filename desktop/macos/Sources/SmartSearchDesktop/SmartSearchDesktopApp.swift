@@ -7,14 +7,22 @@ struct SmartSearchDesktopApp: App {
     @StateObject private var model = AppModel()
 
     var body: some Scene {
-        WindowGroup(id: "main") {
+        Window("Smart Search", id: "main") {
             ContentView(model: model)
                 .frame(minWidth: 920, minHeight: 620)
                 .background(WindowConfigurator { window in
                     applicationDelegate.configure(window: window, model: model)
                 })
         }
+        .defaultSize(width: 1080, height: 760)
+        .windowToolbarStyle(.unified)
         .commands {
+            CommandGroup(replacing: .appSettings) {
+                Button(L("设置与关于")) {
+                    model.selectedDestination = .settings
+                    applicationDelegate.showMainWindow()
+                }.keyboardShortcut(",", modifiers: .command)
+            }
             CommandMenu(L("导航")) {
                 Button(L("概览")) { model.selectedDestination = .overview }.keyboardShortcut("1", modifiers: .command)
                 Button(L("服务商")) { model.selectedDestination = .providers }.keyboardShortcut("2", modifiers: .command)
@@ -28,17 +36,13 @@ struct SmartSearchDesktopApp: App {
             }
         }
 
-        MenuBarExtra {
+        MenuBarExtra("Smart Search", systemImage: "magnifyingglass") {
             Button(L("显示 Smart Search")) { applicationDelegate.showMainWindow() }
             if model.hasOwnedActiveRuns {
                 Text(L("有 App 任务正在后台运行"))
             }
             Divider()
             Button(L("退出")) { NSApp.terminate(nil) }
-        } label: {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable().scaledToFit().frame(width: 18, height: 18)
-                .accessibilityLabel("Smart Search")
         }
         .menuBarExtraStyle(.menu)
     }
@@ -48,9 +52,17 @@ struct SmartSearchDesktopApp: App {
 final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     private let mainWindowDelegate = MainWindowDelegate()
     private weak var model: AppModel?
+    private weak var mainWindow: NSWindow?
+
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        // SwiftPM executables can initially receive the generic process icon.
+        // Load the packaged brand resource explicitly before Dock registration.
+        NSApp.applicationIconImage = AppBranding.icon
+    }
 
     func configure(window: NSWindow, model: AppModel) {
         self.model = model
+        mainWindow = window
         mainWindowDelegate.model = model
         window.delegate = mainWindowDelegate
     }
@@ -83,8 +95,12 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func showMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        let window = NSApp.windows.first { $0.isVisible || $0.canBecomeKey }
-        window?.makeKeyAndOrderFront(nil)
+        if mainWindow?.isMiniaturized == true { mainWindow?.deminiaturize(nil) }
+        mainWindow?.makeKeyAndOrderFront(nil)
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
     }
 }
 
@@ -97,10 +113,23 @@ private final class MainWindowDelegate: NSObject, NSWindowDelegate {
             model.noticeMessage = L("环境操作或 CLI 更新正在进行，请等待完成；可以最小化窗口。")
             return false
         }
-        guard let model, model.hasOwnedActiveRuns else { return true }
+        guard let model, model.hasOwnedActiveRuns else {
+            sender.orderOut(nil)
+            return false
+        }
         model.presentWindowCloseChoice(for: sender)
         return false
     }
+}
+
+enum AppBranding {
+    static let icon: NSImage = {
+        if let url = Bundle.main.url(forResource: "SmartSearch", withExtension: "icns"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        return NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: "Smart Search")!
+    }()
 }
 
 private struct WindowConfigurator: NSViewRepresentable {

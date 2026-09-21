@@ -15502,5 +15502,9 @@
   "独立 CLI 已就绪。可返回上方检查并更新 Skills。": [
     "独立 CLI 已就绪。可返回上方检查并更新 Skills。",
     "The independent CLI is ready. Check and update Skills above."
+  ],
+  "连接后会读取当前配置、工具目录和活动记录。": [
+    "连接后会读取当前配置、工具目录和活动记录。",
+    "Your configuration, tools and activity will appear once connected."
   ]
 }

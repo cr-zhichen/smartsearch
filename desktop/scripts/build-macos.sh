@@ -144,6 +144,7 @@ fi
 # This is an ad-hoc test signature, not Developer ID signing or notarization.
 codesign --force --deep --sign - "$app_directory"
 codesign --verify --deep --strict --verbose=2 "$app_directory"
+bash "$repository_root/desktop/scripts/check-macos-backend.sh" "$app_directory/Contents/Resources/backend/smart-search"
 
 dmg="$run_directory/SmartSearch-$version-macos-$architecture-unsigned-test.dmg"
 "${DMGBUILD:-dmgbuild}" -s "$repository_root/desktop/packaging/macos/dmg-settings.py" \

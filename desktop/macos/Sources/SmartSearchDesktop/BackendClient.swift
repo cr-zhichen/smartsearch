@@ -56,6 +56,8 @@ actor BackendClient {
     private var processToken: UUID?
     private var generation: String?
     private var stdoutBuffer = Data()
+    private var outputTask: Task<Void, Never>?
+    private var outputContinuation: AsyncStream<Data>.Continuation?
     private var nextID = 1
     private var timeoutSeconds: TimeInterval = 30
     private var pending: [Int: PendingRequest] = [:]
@@ -115,10 +117,25 @@ actor BackendClient {
         stdoutBuffer.removeAll(keepingCapacity: true)
         nextID = 1
 
-        output.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            Task { await self?.consumeStdout(data, token: token) }
+        // Pipe callbacks arrive in order; separate Tasks do not. Feed one
+        // consumer so a large JSON response cannot have its chunks reordered.
+        let chunks = AsyncStream<Data> { continuation in
+            outputContinuation = continuation
+            output.fileHandleForReading.readabilityHandler = { handle in
+                let data = handle.availableData
+                if data.isEmpty {
+                    handle.readabilityHandler = nil
+                    continuation.finish()
+                } else {
+                    continuation.yield(data)
+                }
+            }
+        }
+        outputTask = Task { [weak self] in
+            for await data in chunks {
+                guard !Task.isCancelled else { break }
+                await self?.consumeStdout(data, token: token)
+            }
         }
         // stderr can contain diagnostics but must not become protocol or UI content.
         error.fileHandleForReading.readabilityHandler = { handle in
@@ -166,7 +183,9 @@ actor BackendClient {
             pending[id] = PendingRequest(token: token, continuation: continuation)
             let requestTimeout = timeout ?? timeoutSeconds
             timeoutTasks[id] = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: UInt64(requestTimeout * 1_000_000_000))
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(requestTimeout * 1_000_000_000))
+                } catch { return }
                 await self?.expireRequest(id, token: token)
             }
             inputHandle.write(line)
@@ -277,6 +296,10 @@ actor BackendClient {
         inputHandle?.closeFile()
         outputHandle?.readabilityHandler = nil
         errorHandle?.readabilityHandler = nil
+        outputContinuation?.finish()
+        outputContinuation = nil
+        outputTask?.cancel()
+        outputTask = nil
         outputHandle = nil
         errorHandle = nil
     }

@@ -1,9 +1,11 @@
 import AppKit
 import Foundation
+import OSLog
 import SwiftUI
 
 @MainActor
 final class AppModel: ObservableObject {
+    private let connectionLog = Logger(subsystem: "com.smartsearch.desktop", category: "BackendConnection")
     enum ExitChoice {
         case background
         case stopAndQuit
@@ -129,6 +131,7 @@ final class AppModel: ObservableObject {
         intentionalShutdown = false
         connection = .connecting
         errorMessage = nil
+        let started = Date()
         do {
             let backendURL = try BackendLocator.resolvedURL(overridePath: backendPathOverride)
             await backend.setTimeout(seconds: requestTimeoutSeconds)
@@ -137,10 +140,12 @@ final class AppModel: ObservableObject {
             let snapshot = try await backend.initialize(enableUpdateChecks: backendPathOverride.isEmpty, language: Localization.language)
             applyState(snapshot)
             connection = .ready
+            connectionLog.info("Backend initialized in \(Int(Date().timeIntervalSince(started) * 1000), privacy: .public) ms")
             await refreshActivity()
             await refreshCLIStatus()
         } catch {
             connection = .failed
+            connectionLog.error("Backend initialization failed")
             present(error)
         }
         end("connect")

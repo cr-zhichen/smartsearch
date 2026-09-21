@@ -6,35 +6,37 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            List {
-                HStack(spacing: 10) {
-                    Image(nsImage: NSApp.applicationIconImage)
-                        .resizable().scaledToFit().frame(width: 36, height: 36)
-                        .padding(3)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
-                        .accessibilityLabel(L("Smart Search 图标"))
-                    Text("Smart Search").font(.headline)
-                }
-                Section("Smart Search") {
-                    ForEach(Destination.allCases) { destination in
-                        Button {
-                            model.selectedDestination = destination
-                        } label: {
-                            HStack {
-                                Label(destination.title, systemImage: destination.symbol)
-                                Spacer()
-                                if model.selectedDestination == destination {
-                                    Image(systemName: "checkmark")
-                                        .foregroundStyle(.tint)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
+            List(selection: Binding<Destination?>(
+                get: { model.selectedDestination },
+                set: { if let destination = $0 { model.selectedDestination = destination } }
+            )) {
+                ForEach(Destination.allCases) { destination in
+                    Label(destination.title, systemImage: destination.symbol)
+                        .padding(.vertical, 3)
+                        .tag(destination)
                 }
             }
             .listStyle(.sidebar)
             .navigationTitle("Smart Search")
+            .navigationSplitViewColumnWidth(min: 190, ideal: 220, max: 270)
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                HStack {
+                    ConnectionIndicator(state: model.connection)
+                        .font(.caption)
+                    Spacer()
+                    if model.connection == .failed || model.connection == .disconnected {
+                        Button {
+                            Task { await model.reconnect() }
+                        } label: {
+                            Label(L("重新连接"), systemImage: "arrow.clockwise")
+                                .labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(L("重新连接"))
+                    }
+                }
+                .padding(16)
+            }
         } detail: {
             VStack(spacing: 0) {
                 if let error = model.errorMessage {
@@ -49,17 +51,20 @@ struct ContentView: View {
                 }
                 destinationView
             }
+            .navigationTitle(model.selectedDestination.title)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await model.refreshState() }
                     } label: {
-                        BusyLabel(text: L("刷新状态"), busyText: L("刷新中…"), busy: model.isBusy.contains("state"))
+                        if model.isBusy.contains("state") {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Label(L("刷新状态"), systemImage: "arrow.clockwise")
+                        }
                     }
+                    .help(L("刷新状态"))
                     .disabled(model.connection != .ready || model.configOperationBusy)
-                }
-                ToolbarItem(placement: .automatic) {
-                    ConnectionIndicator(state: model.connection)
                 }
             }
         }
@@ -109,8 +114,11 @@ private struct ConnectionIndicator: View {
     let state: AppModel.ConnectionState
 
     var body: some View {
-        Label(state.title, systemImage: state.symbol)
-            .foregroundStyle(tint)
+        Label {
+            Text(state.title).foregroundStyle(.secondary)
+        } icon: {
+            Image(systemName: state.symbol).foregroundStyle(tint)
+        }
             .accessibilityLabel(L("后端状态：{0}", "\(state.title)"))
     }
 
@@ -129,16 +137,23 @@ private struct BackendUnavailableView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            Image(systemName: model.connection == .failed ? "bolt.horizontal.circle" : "desktopcomputer")
-                .font(.system(size: 42))
-                .foregroundStyle(.secondary)
+            if model.connection == .connecting {
+                ProgressView().controlSize(.large)
+            } else {
+                Image(systemName: "bolt.horizontal.circle")
+                    .font(.system(size: 42))
+                    .foregroundStyle(.secondary)
+            }
             Text(model.connection == .failed ? L("后端目前不可用") : L("正在连接本机后端"))
                 .font(.title2.weight(.semibold))
-            Text(L("页面没有显示模拟数据。连接后会读取当前配置、工具目录和活动记录。"))
+            Text(L("连接后会读取当前配置、工具目录和活动记录。"))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
-            Button(L("重新连接")) { Task { await model.reconnect() } }
-                .buttonStyle(.borderedProminent)
+            if model.connection != .connecting {
+                Button(L("重新连接")) { Task { await model.reconnect() } }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.isBusy.contains("connect"))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
