@@ -110,9 +110,17 @@ description = "Compile the native Windows interface on Windows"
 raw_args = true
 run = 'dotnet build desktop/windows/SmartSearch.Desktop.csproj --configuration Release -p:Platform=x64 -p:RuntimeIdentifier=win-x64'
 
+[tasks."desktop:windows:publish"]
+description = "Publish the Windows interface for a selected runtime and output directory"
+raw_args = true
+run = 'dotnet publish desktop/windows/SmartSearch.Desktop.csproj --configuration Release --self-contained true'
+
 [tasks."desktop:windows:install"]
 description = "Install Windows backend packaging dependencies"
-run = '"{{vars.python}}" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"'
+run = [
+  '"{{vars.python}}" -m ensurepip --upgrade',
+  '"{{vars.python}}" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"',
+]
 
 [tasks."desktop:windows:build"]
 description = "Build the Windows app and an installer when Inno Setup is available"

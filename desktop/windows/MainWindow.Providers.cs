@@ -24,10 +24,11 @@ public sealed partial class MainWindow
     {
         _fieldEditors.Clear();
         if (_state is null) return Scroll(Section(L("服务商"), [OfflineHint()]));
-        var filter = new TextBox { PlaceholderText = L("查找服务商"), Text = _providerFilter, Margin = new Thickness(12) };
+        var filter = new TextBox { PlaceholderText = L("查找服务商"), Text = _providerFilter, Margin = new Thickness(24, 12, 24, 8) };
         AutomationProperties.SetName(filter, L("查找服务商"));
         filter.TextChanged += (_, _) => { _providerFilter = filter.Text; RenderProviderList(); };
-        _providerList = new ListView { SelectionMode = ListViewSelectionMode.Single, HorizontalContentAlignment = HorizontalAlignment.Stretch };
+        _providerList = new ListView { SelectionMode = ListViewSelectionMode.Single,
+            Padding = new Thickness(12, 0, 12, 12), HorizontalContentAlignment = HorizontalAlignment.Stretch };
         AutomationProperties.SetName(_providerList, L("服务商"));
         _providerList.SelectionChanged += (_, _) =>
         {
@@ -51,7 +52,7 @@ public sealed partial class MainWindow
             ActionButton(L("放弃修改"), DiscardProviderDraftAsync, operationKey: "config-discard"),
             ActionButton(L("检查配置"), PreviewDraftAsync, operationKey: "config-preview", busyText: L("检查中…")),
             ActionButton(L("保存更改"), SaveDraftAsync, primary: true, operationKey: "config-save", busyText: L("保存中…")));
-        var footer = new StackPanel { Spacing = 8, Padding = new Thickness(20, 12, 20, 12), Children = { _saveSummary, actions } };
+        var footer = WorkspaceFooter(_saveSummary, actions);
         var layout = new Grid();
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -327,9 +328,10 @@ public sealed partial class MainWindow
         if (!secret) details.Children.Add(KeyValue(L("当前生效"), initialValue));
         if (clear is not null) details.Children.Add(SettingRow(secret ? L("清除已保存的密钥") : L("恢复默认值"), L("保存更改后生效。"), clear));
         if (locked) details.Children.Add(Secondary(L("由环境变量提供，在此处只读。")));
-        var info = new Button { Content = new SymbolIcon(Symbol.Help), Padding = new Thickness(4),
+        var info = new Button { Content = new FontIcon { Glyph = "\uE946", FontSize = 14 }, Style = UiStyle("FieldHelpButtonStyle"),
             Flyout = new Flyout { Content = new ScrollViewer { Content = details, MaxHeight = 360, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } } };
         AutomationProperties.SetName(info, L("字段说明：{0}", Label(field)));
+        ToolTipService.SetToolTip(info, L("字段说明：{0}", Label(field)));
         var title = new Grid { ColumnSpacing = 12 };
         title.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         title.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

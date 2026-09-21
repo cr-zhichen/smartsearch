@@ -82,7 +82,7 @@ public sealed partial class MainWindow
         cli.Children.Add(_cliUpdateSummary);
         cli.Children.Add(ActionRow(ActionButton(L("更新 CLI"), UpdateCliAsync, primary: true, operationKey: "updates-cli", busyText: L("更新中…")),
             ActionButton(L("复制更新命令"), () => { CopyText(Text(Property(_updates, "cli"), "command")); return Task.CompletedTask; }, operationKey: "updates-copy"),
-            ActionButton(L("更新日志与命令"), () => ShowDetailsAsync(L("更新日志与命令"), DataText(_cliUpdateLog.Text)))));
+            DetailsButton(L("更新日志与命令"), () => ShowDetailsAsync(L("更新日志与命令"), DataText(_cliUpdateLog.Text)))));
         var runtime = BuildRuntimePanel();
         if (_settingsAnchor == "runtime") runtime.Loaded += (_, _) => { runtime.StartBringIntoView(); _settingsAnchor = null; };
         panel.Children.Add(SettingsSection(L("独立 CLI"), L("管理独立安装的命令行工具。"), Card(cli), runtime));
@@ -96,7 +96,7 @@ public sealed partial class MainWindow
             ActionButton(L("启用内置命令"), EnableBundledCliAsync, operationKey: "cli-enable", busyText: L("启用中…"))));
         var diagnostics = new StackPanel { Spacing = 8 };
         diagnostics.Children.Add(SectionHeading(L("引擎与诊断")));
-        diagnostics.Children.Add(ActionRow(ActionButton(L("查看诊断信息"), () => ShowDetailsAsync(L("本地引擎"), Section(L("本地引擎"),
+        diagnostics.Children.Add(ActionRow(DetailsButton(L("查看诊断信息"), () => ShowDetailsAsync(L("本地引擎"), Section(L("本地引擎"),
             [KeyValue(L("协议"), Text(_state, "protocol_version", "1")), KeyValue(L("路径"), _backend.BackendPath ?? L("未启动"))]))),
             ActionButton(L("重置服务商健康记录"), ResetProvidersAsync, busyText: L("重置中…"))));
         panel.Children.Add(SettingsSection(L("高级"), string.Empty, Card(bundled), Card(diagnostics)));
@@ -158,7 +158,7 @@ public sealed partial class MainWindow
             ActionButton(L("安装缺少的组件"), PrepareEnvironmentAsync, primary: true, operationKey: "environment-install", busyText: L("准备中…"), label: EnvironmentActionLabel),
             ActionButton(L("验证可用性"), () => EnvironmentRequestAsync("environment.verify"), operationKey: "environment-verify", busyText: L("验证中…")),
             ActionButton(L("取消下载"), () => EnvironmentRequestAsync("environment.cancel"), operationKey: "environment-cancel")));
-        content.Children.Add(ActionRow(ActionButton(L("安装位置与检查详情"), () =>
+        content.Children.Add(ActionRow(DetailsButton(L("安装位置与检查详情"), () =>
         {
             var details = new StackPanel { Spacing = 12 };
             foreach (var step in Items(Property(_environment, "steps")))

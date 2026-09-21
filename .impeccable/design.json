@@ -165,7 +165,49 @@
         "value": "SwiftUI .easeInOut(duration: 0.18)",
         "purpose": "整行展开；accessibilityReduceMotion 开启时使用 nil animation。"
       }
-    ]
+    ],
+    "windows": {
+      "framework": "WinUI",
+      "sourceFiles": [
+        "desktop/windows/MainWindow.xaml",
+        "desktop/windows/MainWindow.Layout.cs",
+        "desktop/windows/ActionPanel.cs",
+        "desktop/windows/App.xaml"
+      ],
+      "navigation": {
+        "openWidth": 216,
+        "expandedThreshold": 900,
+        "compactThreshold": 0
+      },
+      "workspace": {
+        "toolbarHeight": 52,
+        "pagePadding": 24,
+        "sectionSpacing": 24,
+        "maximumReadingWidth": 840,
+        "scrollContent": "Width bounded by the viewport; leading aligned",
+        "sectionHeaderSpacing": 4,
+        "sectionContentSpacing": 12
+      },
+      "actions": "Native buttons wrap at their measured widths; shared footer has a top divider and trailing actions",
+      "mascot": {
+        "source": "assets/branding/source.png",
+        "packagedAsset": "desktop/windows/Assets/mascot.png",
+        "width": 168,
+        "placement": "bottom edge of expanded sidebar, no frame; hidden with collapsed navigation",
+        "horizontalOffset": -12
+      },
+      "verification": "Native Windows x64 publish and packaged backend startup passed. Preview 20260921T101447Z launched; overview alignment, compact toolbar and shifted bottom mascot observed. Final details/settings interactions and dark/English/narrow visual checks remain pending; not upstream acceptance.",
+      "toolbarIcons": {
+        "buttonSize": 36,
+        "symbolSize": 16,
+        "style": "native Button with centered system icon"
+      },
+      "controls": {
+        "minimumHeight": 36,
+        "fieldHelpButton": 28,
+        "fieldHelpSymbol": 14
+      }
+    }
   },
   "components": [
     {

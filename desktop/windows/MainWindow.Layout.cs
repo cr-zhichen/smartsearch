@@ -13,25 +13,59 @@ public sealed partial class MainWindow
     private readonly Dictionary<string, double> _splitWidths = [];
     private string _noticeTitle = string.Empty;
     private bool _hasNotice;
-    private bool _detailsOpen;
+    private bool _dialogOpen;
+    private bool _navigationArtworkInitialized;
 
     private static StackPanel PagePanel() => new()
     {
-        Spacing = 24, MaxWidth = 840, HorizontalAlignment = HorizontalAlignment.Stretch
+        Spacing = 24, MaxWidth = 840, HorizontalAlignment = HorizontalAlignment.Left
     };
+
+    private void OnNavigationDisplayModeChanged(NavigationView sender, NavigationViewDisplayModeChangedEventArgs args)
+        => UpdateNavigationArtwork();
+
+    private void OnNavigationLoaded(object sender, RoutedEventArgs args)
+    {
+        if (!_navigationArtworkInitialized)
+        {
+            RootNavigation.RegisterPropertyChangedCallback(NavigationView.IsPaneOpenProperty, (_, _) => UpdateNavigationArtwork());
+            _navigationArtworkInitialized = true;
+        }
+        UpdateNavigationArtwork();
+    }
+
+    private void UpdateNavigationArtwork()
+    {
+        if (MascotFooter is null || MascotSpacer is null) return;
+        var visibility = RootNavigation.DisplayMode == NavigationViewDisplayMode.Expanded && RootNavigation.IsPaneOpen
+            ? Visibility.Visible : Visibility.Collapsed;
+        MascotFooter.Visibility = MascotSpacer.Visibility = visibility;
+    }
 
     private ScrollViewer Scroll(UIElement content) => PaneScroll(content, _currentPage, 24);
 
-    private ScrollViewer PaneScroll(UIElement content, string key, double padding = 20)
+    private ScrollViewer PaneScroll(UIElement content, string key, double padding = 24)
     {
         var scroll = new ScrollViewer
         {
             Content = content, Padding = new Thickness(padding),
-            HorizontalContentAlignment = HorizontalAlignment.Stretch,
+            HorizontalContentAlignment = HorizontalAlignment.Left,
+            VerticalContentAlignment = VerticalAlignment.Top,
+            HorizontalScrollMode = ScrollMode.Disabled,
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto
         };
-        scroll.Loaded += (_, _) => scroll.ChangeView(null, _pageOffsets.GetValueOrDefault(key), null, true);
+        void FitContent()
+        {
+            if (content is FrameworkElement element && scroll.ActualWidth > 0)
+                element.Width = Math.Min(element.MaxWidth, Math.Max(0, scroll.ActualWidth - padding * 2));
+        }
+        scroll.SizeChanged += (_, _) => FitContent();
+        scroll.Loaded += (_, _) =>
+        {
+            FitContent();
+            scroll.ChangeView(null, _pageOffsets.GetValueOrDefault(key), null, true);
+        };
         scroll.ViewChanged += (_, _) => _pageOffsets[key] = scroll.VerticalOffset;
         return scroll;
     }
@@ -95,6 +129,26 @@ public sealed partial class MainWindow
 
     private static Border Divider() => new() { Style = UiStyle("SectionDividerStyle") };
 
+    private static Border WorkspaceFooter(TextBlock summary, FrameworkElement actions)
+    {
+        var row = new Grid { ColumnSpacing = 24, RowSpacing = 8 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        summary.VerticalAlignment = VerticalAlignment.Center;
+        row.Children.Add(summary);
+        row.Children.Add(actions);
+        row.SizeChanged += (_, args) =>
+        {
+            var stacked = args.NewSize.Width < 640;
+            Grid.SetColumn(actions, stacked ? 0 : 1);
+            Grid.SetRow(actions, stacked ? 1 : 0);
+            actions.HorizontalAlignment = stacked ? HorizontalAlignment.Left : HorizontalAlignment.Right;
+        };
+        return new Border { Style = UiStyle("WorkspaceFooterStyle"), Child = row };
+    }
+
     private static UIElement SettingRow(string title, string description, UIElement control)
     {
         var label = new StackPanel { Spacing = 4 };
@@ -132,15 +186,27 @@ public sealed partial class MainWindow
     private static StackPanel SettingsSection(string title, string subtitle, params UIElement[] content)
     {
         var section = new StackPanel { Spacing = 12 };
-        section.Children.Add(SectionHeading(title));
-        if (subtitle.Length > 0) section.Children.Add(Secondary(subtitle));
+        var heading = new StackPanel { Spacing = 4, Children = { SectionHeading(title) } };
+        if (subtitle.Length > 0) heading.Children.Add(Secondary(subtitle));
+        section.Children.Add(heading);
         foreach (var child in content) section.Children.Add(child);
         return section;
     }
 
+    private Button DetailsButton(string text, Func<Task> action)
+    {
+        var button = new Button { Content = text, MinHeight = 36, HorizontalAlignment = HorizontalAlignment.Left };
+        button.Click += async (_, _) =>
+        {
+            try { await action(); }
+            catch (Exception error) { ShowNotice(L("操作未完成"), SafeMessage(error), InfoBarSeverity.Error); }
+        };
+        return button;
+    }
+
     private async Task ShowDetailsAsync(string title, UIElement content)
     {
-        if (_detailsOpen) return;
+        if (_dialogOpen) return;
         var dialog = new ContentDialog
         {
             XamlRoot = DialogRoot, RequestedTheme = ((FrameworkElement)Content).ActualTheme,
@@ -148,13 +214,13 @@ public sealed partial class MainWindow
             Content = new ScrollViewer { Content = content, MaxHeight = 540, HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }
         };
-        _detailsOpen = true;
+        _dialogOpen = true;
         try { await dialog.ShowAsync(); }
         finally
         {
             if (dialog.Content is ScrollViewer scroll) scroll.Content = null;
             dialog.Content = null;
-            _detailsOpen = false;
+            _dialogOpen = false;
         }
     }
 
