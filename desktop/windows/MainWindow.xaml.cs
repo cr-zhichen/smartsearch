@@ -1180,7 +1180,7 @@ public sealed partial class MainWindow : Window
 
     private static UIElement FieldRow(UIElement label, UIElement input)
     {
-        var row = new Grid { ColumnSpacing = 20, RowSpacing = 8 };
+        var row = new Grid { ColumnSpacing = 20 };
         row.ColumnDefinitions.Add(new ColumnDefinition());
         row.ColumnDefinitions.Add(new ColumnDefinition());
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -1190,6 +1190,7 @@ public sealed partial class MainWindow : Window
         row.SizeChanged += (_, args) =>
         {
             var wide = args.NewSize.Width >= 640;
+            row.RowSpacing = wide ? 0 : 8;
             row.ColumnDefinitions[0].Width = wide ? new GridLength(220) : new GridLength(1, GridUnitType.Star);
             row.ColumnDefinitions[1].Width = wide ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
             Grid.SetColumn((FrameworkElement)input, wide ? 1 : 0);

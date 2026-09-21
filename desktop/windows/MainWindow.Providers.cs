@@ -177,7 +177,7 @@ public sealed partial class MainWindow
         {
             var entries = selected.ToList();
             if (entries.Count == 0) return;
-            var form = new StackPanel { Spacing = 12 };
+            var form = new StackPanel { Spacing = 8 };
             foreach (var field in entries)
             {
                 if (form.Children.Count > 0) form.Children.Add(Divider());

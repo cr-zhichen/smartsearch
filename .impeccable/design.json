@@ -207,7 +207,9 @@
         "scrollContent": "fills viewport width minus the shared page inset; remeasured on size changes",
         "sectionHeaderSpacing": 4,
         "sectionContentSpacing": 12,
-        "pageInsetPolicy": "24 px outer padding for scrolling pages, split panes and activity toolbar; provider search field uses the same top inset."
+        "pageInsetPolicy": "24 px outer padding for scrolling pages, split panes and activity toolbar; provider search field uses the same top inset.",
+        "cardPadding": 16,
+        "cardContentPolicy": "The shared card owns all four insets. Rows add no outer padding; adaptive grids add an 8 px row gap only when stacked; separators have no extra margins and appear only between list items."
       },
       "actions": "Native buttons wrap at their measured widths; shared footer has a top divider and trailing actions",
       "mascot": {
@@ -219,7 +221,7 @@
         "verticalOffset": 16,
         "imageRegionHeight": 160
       },
-      "verification": "Native Windows x64 publish and packaged backend startup passed. Preview 20260921T105910Z launched; overview alignment, compact toolbar and centered, lowered mascot with bottom clipping observed. Final details/settings interactions and dark/English/narrow visual checks remain pending; not upstream acceptance.",
+      "verification": "Windows x64 publish 20260921T135442Z passed and the running preview path was verified. Overview and provider cards, rounded native inputs, ComboBox, toolbar and footer buttons were observed in UTM. Settings, Skills and activity cards use the same repaired container and row primitives; dark, English and narrow visual checks were not repeated in this pass.",
       "toolbarIcons": {
         "buttonSize": 36,
         "symbolSize": 16,
@@ -227,8 +229,10 @@
       },
       "controls": {
         "minimumHeight": 36,
-        "fieldHelpButton": 28,
-        "fieldHelpSymbol": 14
+        "fieldHelpButton": 24,
+        "fieldHelpSymbol": 14,
+        "styleInheritance": "Button, TextBox, PasswordBox and ComboBox extend the corresponding WinUI Default*Style; icon buttons also preserve the native base style.",
+        "compactSwitch": "Keep the native switch template; cancel its unused 12 px trailing On/Off label gap when both labels are hidden."
       },
       "activityToolbar": "native SelectorBar with zero outer padding and 36 px minimum item height on the leading side; vertically centered refresh and more trailing; full-width divider above split view",
       "connectionIndicator": {
@@ -240,7 +244,8 @@
         "states": "ready green, connecting amber, failed red, disconnected secondary",
         "description": "localized tooltip and automation name; no visible text",
         "visibleEdgeGap": 8
-      }
+      },
+      "sdk": "Microsoft.WindowsAppSDK 2.5.1 (stable, released 2026-09-16); the loaded package includes WinUI 2.3.9. The Windows 10 target framework is not a control-style version."
     }
   },
   "components": [

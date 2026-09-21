@@ -133,17 +133,19 @@ public sealed partial class MainWindow
 
     private static Border WorkspaceFooter(TextBlock summary, FrameworkElement actions)
     {
-        var row = new Grid { ColumnSpacing = 24, RowSpacing = 8 };
+        var row = new Grid { ColumnSpacing = 24 };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         summary.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(actions, 1);
         row.Children.Add(summary);
         row.Children.Add(actions);
         row.SizeChanged += (_, args) =>
         {
             var stacked = args.NewSize.Width < 640;
+            row.RowSpacing = stacked ? 8 : 0;
             Grid.SetColumn(actions, stacked ? 0 : 1);
             Grid.SetRow(actions, stacked ? 1 : 0);
             actions.HorizontalAlignment = stacked ? HorizontalAlignment.Left : HorizontalAlignment.Right;
@@ -153,10 +155,10 @@ public sealed partial class MainWindow
 
     private static UIElement SettingRow(string title, string description, UIElement control)
     {
-        var label = new StackPanel { Spacing = 4 };
+        var label = new StackPanel { Spacing = 4, VerticalAlignment = VerticalAlignment.Center };
         label.Children.Add(new TextBlock { Text = title, FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
         if (description.Length > 0) label.Children.Add(Secondary(description));
-        var row = new Grid { ColumnSpacing = 20, RowSpacing = 8, Padding = new Thickness(0, 4, 0, 4) };
+        var row = new Grid { ColumnSpacing = 20 };
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -165,11 +167,13 @@ public sealed partial class MainWindow
         row.Children.Add(control);
         if (control is FrameworkElement input)
         {
+            Grid.SetColumn(input, 1);
             input.VerticalAlignment = VerticalAlignment.Center;
             AutomationProperties.SetName(input, title);
             row.SizeChanged += (_, args) =>
             {
                 var stacked = args.NewSize.Width < 460 && control is not ToggleSwitch;
+                row.RowSpacing = stacked ? 8 : 0;
                 Grid.SetColumn(input, stacked ? 0 : 1);
                 Grid.SetRow(input, stacked ? 1 : 0);
                 input.HorizontalAlignment = stacked ? HorizontalAlignment.Left : HorizontalAlignment.Right;
@@ -180,7 +184,13 @@ public sealed partial class MainWindow
 
     private static ToggleSwitch CompactSwitch(string label, bool value)
     {
-        var toggle = new ToggleSwitch { IsOn = value, OnContent = string.Empty, OffContent = string.Empty, MinWidth = 0 };
+        // WinUI reserves a 12 px gap for the On/Off label even when both labels are empty.
+        // Cancel that trailing gap so the visible switch meets the card's content edge.
+        var toggle = new ToggleSwitch
+        {
+            IsOn = value, OnContent = string.Empty, OffContent = string.Empty,
+            MinWidth = 0, Margin = new Thickness(0, 0, -12, 0)
+        };
         AutomationProperties.SetName(toggle, label);
         return toggle;
     }

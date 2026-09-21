@@ -101,6 +101,7 @@ public sealed partial class MainWindow
                 _skillTargetRows[id] = row;
                 _skillRows.Children.Add(row.Container);
             }
+            row.Separator.Visibility = _skillRows.Children.IndexOf(row.Container) == 0 ? Visibility.Collapsed : Visibility.Visible;
             row.Update(target);
         }
         _updatingSkillRows = false;
@@ -161,8 +162,9 @@ public sealed partial class MainWindow
         line.Children.Add(details);
         Grid.SetColumn(toggle, 2);
         line.Children.Add(toggle);
-        var container = new StackPanel { Spacing = 8, Children = { line, Divider() } };
-        return new SkillTargetRow(container, target =>
+        var separator = Divider();
+        var container = new StackPanel { Spacing = 8, Children = { separator, line } };
+        return new SkillTargetRow(container, separator, target =>
         {
             current = target.Clone();
             name.Text = Text(target, "label", id);
@@ -178,5 +180,5 @@ public sealed partial class MainWindow
         if (_skillSelectionSummary is not null) _skillSelectionSummary.Text = L("已选择 {0} 个 Agent", _selectedSkillTargets.Count);
     }
 
-    private sealed record SkillTargetRow(StackPanel Container, Action<JsonElement> Update);
+    private sealed record SkillTargetRow(StackPanel Container, Border Separator, Action<JsonElement> Update);
 }
