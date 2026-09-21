@@ -15814,5 +15814,81 @@
   "配置连接参数和内置 CLI。": [
     "配置连接参数和内置 CLI。",
     "Configure backend connections and the bundled CLI."
+  ],
+  "研究数据源": [
+    "研究数据源",
+    "Research sources"
+  ],
+  "先选择路由方式，再填写该模式使用的参数。": [
+    "先选择路由方式，再填写该模式使用的参数。",
+    "Choose a routing mode, then configure the parameters it uses."
+  ],
+  "请求设置": [
+    "请求设置",
+    "Request settings"
+  ],
+  "JEV 连接": [
+    "JEV 连接",
+    "JEV connection"
+  ],
+  "检索与判断": [
+    "检索与判断",
+    "Retrieval and judgments"
+  ],
+  "结果处理": [
+    "结果处理",
+    "Result processing"
+  ],
+  "以规则为基础，可按需配置向量模型和分类模型增强判断。未配置的模型不会被调用。": [
+    "以规则为基础，可按需配置向量模型和分类模型增强判断。未配置的模型不会被调用。",
+    "Start with rules and optionally add an embedding model and a classifier. Only configured models are used."
+  ],
+  "使用 JEV 选择检索渠道并判断证据是否充分，需要单独配置 TypeSafe 凭据。": [
+    "使用 JEV 选择检索渠道并判断证据是否充分，需要单独配置 TypeSafe 凭据。",
+    "Use JEV to select search channels and judge evidence sufficiency. Separate TypeSafe credentials are required."
+  ],
+  "仅使用本地规则判断意图，无需填写模型接口或密钥。": [
+    "仅使用本地规则判断意图，无需填写模型接口或密钥。",
+    "Use local rules to identify intent. No model endpoints or keys are needed."
+  ],
+  "关闭自动意图路由，无需填写路由参数。": [
+    "关闭自动意图路由，无需填写路由参数。",
+    "Automatic intent routing is off. No routing parameters are needed."
+  ],
+  "请选择一种路由模式。": [
+    "请选择一种路由模式。",
+    "Choose a routing mode."
+  ],
+  "混合路由": [
+    "混合路由",
+    "Hybrid routing"
+  ],
+  "JEV 语义路由": [
+    "JEV 语义路由",
+    "JEV semantic routing"
+  ],
+  "规则路由": [
+    "规则路由",
+    "Rule-based routing"
+  ],
+  "关闭路由": [
+    "关闭路由",
+    "Routing off"
+  ],
+  "直接返回证据": [
+    "直接返回证据",
+    "Return evidence directly"
+  ],
+  "按需汇总": [
+    "按需汇总",
+    "Summarize when needed"
+  ],
+  "始终汇总": [
+    "始终汇总",
+    "Always summarize"
+  ],
+  "输入 API Key": [
+    "输入 API Key",
+    "Enter an API key"
   ]
 }

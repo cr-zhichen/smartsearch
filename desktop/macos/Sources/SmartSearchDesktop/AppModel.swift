@@ -381,7 +381,10 @@ final class AppModel: ObservableObject {
         if configDraft[field.key]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             return field.isSecret ? L("将在保存时替换") : L("将在保存时更新")
         }
-        return field.isSecret ? L("保持当前密钥") : L("未修改")
+        if field.isSecret {
+            return state?.hasSecretValue(for: field) == true ? L("保持当前密钥") : L("未配置")
+        }
+        return L("未修改")
     }
 
     func resetConfigDraft() {

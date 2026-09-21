@@ -278,6 +278,7 @@ private struct OverviewView: View {
 private enum ConfigurationRoute: Hashable {
     case provider(String)
     case section(String)
+    case researchSources
     case routing
 }
 
@@ -291,6 +292,18 @@ private struct ProvidersView: View {
             VStack(spacing: 0) {
                 DesktopSplitView("providers") {
                     VStack(spacing: 0) {
+                        if state.fields.contains(where: { $0.key == "SMART_SEARCH_INTENT_ROUTER" }) {
+                            List(selection: $selection) {
+                                Text(L("意图路由"))
+                                    .fontWeight(.medium)
+                                    .tag(ConfigurationRoute.section("routing"))
+                                    .listRowSeparator(.hidden)
+                            }
+                            .listStyle(.inset)
+                            .scrollContentBackground(.hidden)
+                            .scrollDisabled(true)
+                            .frame(height: 44)
+                        }
                         TextField(L("查找服务商"), text: $filter)
                             .textFieldStyle(.roundedBorder).padding(12)
                         List(selection: $selection) {
@@ -301,6 +314,10 @@ private struct ProvidersView: View {
                                 }
                             }
                             Section(L("高级配置")) {
+                                if !researchSourceFields(state).isEmpty && matches(L("研究数据源")) {
+                                    Text(L("研究数据源")).padding(.vertical, 5)
+                                        .tag(ConfigurationRoute.researchSources)
+                                }
                                 ForEach(advancedSectionIDs(state), id: \.self) { id in
                                     Text(state.sections.first { $0.id == id }?.label ?? id)
                                         .padding(.vertical, 5)
@@ -358,9 +375,17 @@ private struct ProvidersView: View {
                     .id(ConfigurationRoute.provider(id))
             }
         case .section(let id):
-            ConfigurationEditor(model: model, title: state.sections.first { $0.id == id }?.label ?? id,
-                                fields: state.fields.filter { $0.provider?.isEmpty != false && $0.section == id }, section: id)
-                .id(ConfigurationRoute.section(id))
+            if id == "routing" {
+                IntentRoutingEditor(model: model, state: state)
+            } else {
+                ConfigurationEditor(model: model, title: state.sections.first { $0.id == id }?.label ?? id,
+                                    fields: state.fields.filter { $0.provider?.isEmpty != false && $0.section == id }, section: id)
+                    .id(ConfigurationRoute.section(id))
+            }
+        case .researchSources:
+            ConfigurationEditor(model: model, title: L("研究数据源"),
+                                fields: researchSourceFields(state), section: "routing")
+                .id(ConfigurationRoute.researchSources)
         case .routing:
             DesktopPage(L("冷却与路由详情"), subtitle: L("查看路由顺序和最近请求状态。"), padding: 16) {
                 ProviderHealthView(health: state.providerHealth)
@@ -375,13 +400,18 @@ private struct ProvidersView: View {
     }
 
     private func availableRoutes(_ state: DesktopState) -> [ConfigurationRoute] {
-        state.providerGroups.map { .provider($0.id) } + sectionIDs(state).map { .section($0) } + [.routing]
+        state.providerGroups.map { .provider($0.id) } + sectionIDs(state).map { .section($0) }
+            + (researchSourceFields(state).isEmpty ? [] : [.researchSources]) + [.routing]
     }
 
     private func reconcileSelection(_ state: DesktopState) {
         if let selection, availableRoutes(state).contains(selection) { return }
         // Filtering does not switch away from the field currently being edited.
-        selection = groups(state).first.map { .provider($0.id) }
+        if state.fields.contains(where: { $0.key == "SMART_SEARCH_INTENT_ROUTER" }) {
+            selection = .section("routing")
+        } else {
+            selection = groups(state).first.map { .provider($0.id) }
+        }
     }
 
     private func sectionIDs(_ state: DesktopState) -> [String] {
@@ -391,8 +421,12 @@ private struct ProvidersView: View {
 
     private func advancedSectionIDs(_ state: DesktopState) -> [String] {
         sectionIDs(state).filter { id in
-            matches(id) || matches(state.sections.first { $0.id == id }?.label ?? id)
+            id != "routing" && (matches(id) || matches(state.sections.first { $0.id == id }?.label ?? id))
         }
+    }
+
+    private func researchSourceFields(_ state: DesktopState) -> [ConfigField] {
+        state.fields.filter { $0.section == "routing" && $0.key.hasPrefix("SMART_SEARCH_RESEARCH_") }
     }
 
     private func groups(_ state: DesktopState) -> [ProviderFieldGroup] {
@@ -407,6 +441,102 @@ private struct ProvidersView: View {
     private func matches(_ text: String) -> Bool {
         filter.isEmpty || text.localizedCaseInsensitiveContains(filter)
     }
+}
+
+private struct IntentRoutingEditor: View {
+    @ObservedObject var model: AppModel
+    let state: DesktopState
+
+    private var fields: [ConfigField] { state.fields.filter { $0.section == "routing" } }
+    private var modeField: ConfigField? { fields.first { $0.key == "SMART_SEARCH_INTENT_ROUTER" } }
+    private var mode: String { modeField.map(selectedValue) ?? "" }
+    private let resultProcessingKeys: Set<String> = [
+        "SMART_SEARCH_JEV_FILTER_RESULTS", "SMART_SEARCH_JEV_FILTER_THRESHOLD", "SMART_SEARCH_JEV_SYNTHESIZE",
+    ]
+    private var filteringEnabled: Bool {
+        guard let field = fields.first(where: { $0.key == "SMART_SEARCH_JEV_FILTER_RESULTS" }) else { return false }
+        return configurationBooleanValue(selectedValue(field))
+    }
+
+    var body: some View {
+        DesktopPage(L("意图路由"), subtitle: L("先选择路由方式，再填写该模式使用的参数。"), padding: 20) {
+            if let modeField {
+                DesktopPanel {
+                    ConfigFieldEditor(model: model, state: state, field: modeField)
+                    Text(modeDescription).font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            switch mode {
+            case "hybrid":
+                fieldPanel(L("向量模型"), fields: fields.filter { $0.key.hasPrefix("INTENT_EMBEDDING_") })
+                fieldPanel(L("分类模型"), fields: fields.filter { $0.key.hasPrefix("INTENT_CLASSIFIER_") })
+                fieldPanel(L("请求设置"), fields: fields.filter { $0.key == "INTENT_ROUTER_TIMEOUT_SECONDS" })
+            case "jev":
+                fieldPanel(L("JEV 连接"), fields: fields.filter { $0.key.hasPrefix("TYPESAFE_") })
+                fieldPanel(L("检索与判断"), fields: fields.filter {
+                    $0.key.hasPrefix("SMART_SEARCH_JEV_") && !resultProcessingKeys.contains($0.key)
+                })
+                fieldPanel(L("结果处理"), fields: fields.filter {
+                    resultProcessingKeys.contains($0.key)
+                        && ($0.key != "SMART_SEARCH_JEV_FILTER_THRESHOLD" || filteringEnabled)
+                })
+            default: EmptyView()
+            }
+        }
+    }
+
+    private var modeDescription: String {
+        switch mode {
+        case "hybrid": return L("以规则为基础，可按需配置向量模型和分类模型增强判断。未配置的模型不会被调用。")
+        case "jev": return L("使用 JEV 选择检索渠道并判断证据是否充分，需要单独配置 TypeSafe 凭据。")
+        case "rules": return L("仅使用本地规则判断意图，无需填写模型接口或密钥。")
+        case "off": return L("关闭自动意图路由，无需填写路由参数。")
+        default: return L("请选择一种路由模式。")
+        }
+    }
+
+    private func selectedValue(_ field: ConfigField) -> String {
+        (model.configDraft[field.key] ?? state.effectiveValue(for: field))
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+
+    @ViewBuilder
+    private func fieldPanel(_ title: String, fields: [ConfigField]) -> some View {
+        if !fields.isEmpty {
+            DesktopPanel(title) {
+                ForEach(fields) { field in
+                    ConfigFieldEditor(model: model, state: state, field: field)
+                    if field.id != fields.last?.id { Divider() }
+                }
+            }
+        }
+    }
+}
+
+private func configurationBooleanValue(_ value: String) -> Bool {
+    ["true", "1", "yes", "on"].contains(value.lowercased())
+}
+
+private func configurationChoiceLabel(_ choice: String, for field: ConfigField) -> String {
+    if field.key == "SMART_SEARCH_INTENT_ROUTER" {
+        switch choice {
+        case "hybrid": return L("混合路由")
+        case "jev": return L("JEV 语义路由")
+        case "rules": return L("规则路由")
+        case "off": return L("关闭路由")
+        default: return choice
+        }
+    }
+    if field.key == "SMART_SEARCH_JEV_SYNTHESIZE" {
+        switch choice {
+        case "false": return L("直接返回证据")
+        case "auto": return L("按需汇总")
+        case "true": return L("始终汇总")
+        default: return choice
+        }
+    }
+    return choice
 }
 
 private struct ConfigActions: View {
@@ -716,7 +846,7 @@ private struct ProviderDraftCheckRow: View {
 }
 
 private func providerIsConfigured(_ group: ProviderFieldGroup, state: DesktopState) -> Bool {
-    group.fields.contains { $0.isSecret && !state.effectiveValue(for: $0).isEmpty }
+    group.fields.contains { $0.isSecret && state.hasSecretValue(for: $0) }
 }
 
 private struct ProviderSection: View {
@@ -783,6 +913,18 @@ private struct ConfigFieldEditor: View {
     let field: ConfigField
     @State private var showingInfo = false
 
+    private var secretPrompt: String {
+        state.hasSecretValue(for: field) && !model.clearSecretKeys.contains(field.key)
+            ? "••••••••" : L("输入 API Key")
+    }
+
+    private var readOnlyValue: String {
+        let value = state.effectiveValue(for: field)
+        if field.isSecret { return state.hasSecretValue(for: field) ? "••••••••" : L("未配置") }
+        if value.isEmpty { return L("后端未提供有效值") }
+        return configurationChoiceLabel(value, for: field)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(alignment: .firstTextBaseline) {
@@ -795,12 +937,14 @@ private struct ConfigFieldEditor: View {
             Text(model.draftStatus(for: field)).font(.caption).foregroundStyle(.secondary)
 
             if model.isEnvironmentReadOnly(field) {
-                Text(state.effectiveValue(for: field).isEmpty ? L("后端未提供有效值") : state.effectiveValue(for: field))
+                Text(readOnlyValue)
                     .textSelection(.enabled)
             } else if field.isSecret {
                 HStack {
-                    SecureField(L("输入新值以替换；留空表示保持"), text: model.draftBinding(for: field))
+                    // The mask is a prompt, never a draft value that could overwrite the key.
+                    SecureField(field.label, text: model.draftBinding(for: field), prompt: Text(secretPrompt))
                         .accessibilityLabel(field.label)
+                        .help(L("输入新值以替换；留空表示保持"))
                     if model.clearSecretKeys.contains(field.key) {
                         Button(L("保留")) { model.keepSecret(field) }
                     } else {
@@ -808,11 +952,23 @@ private struct ConfigFieldEditor: View {
                     }
                 }
             } else if !field.choices.isEmpty {
-                Picker(field.label, selection: model.draftBinding(for: field)) {
-                    Text(L("当前：{0}", state.effectiveValue(for: field).isEmpty ? L("未设置") : state.effectiveValue(for: field))).tag("")
-                    ForEach(field.choices, id: \.self) { choice in Text(choice).tag(choice) }
+                Picker(field.label, selection: Binding(
+                    get: { model.configDraft[field.key] ?? state.effectiveValue(for: field) },
+                    set: { model.setDraft($0, for: field) })) {
+                    if !field.choices.contains(state.effectiveValue(for: field)) {
+                        Text(L("当前：{0}", state.effectiveValue(for: field).isEmpty ? L("未设置") : configurationChoiceLabel(state.effectiveValue(for: field), for: field)))
+                            .tag(state.effectiveValue(for: field))
+                    }
+                    ForEach(field.choices, id: \.self) { choice in
+                        Text(configurationChoiceLabel(choice, for: field)).tag(choice)
+                    }
                 }
                 .labelsHidden()
+            } else if field.kind == "bool" {
+                Toggle(field.label, isOn: Binding(
+                    get: { configurationBooleanValue(model.configDraft[field.key] ?? state.effectiveValue(for: field)) },
+                    set: { model.setDraft($0 ? "true" : "false", for: field) }))
+                    .labelsHidden()
             } else {
                 TextField(state.effectiveValue(for: field).isEmpty ? field.placeholder : state.effectiveValue(for: field), text: model.draftBinding(for: field))
                     .accessibilityLabel(field.label)

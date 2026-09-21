@@ -465,6 +465,10 @@ struct DesktopState {
         values[field.key]?.displayString ?? field.defaultValue
     }
 
+    func hasSecretValue(for field: ConfigField) -> Bool {
+        raw["secret_presence"]?[field.key]?.boolValue ?? !effectiveValue(for: field).isEmpty
+    }
+
     func savedValue(for field: ConfigField) -> String {
         savedValues[field.key]?.displayString ?? ""
     }

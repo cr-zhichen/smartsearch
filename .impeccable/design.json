@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-21T06:12:58Z",
+  "generatedAt": "2026-09-21T06:33:38Z",
   "title": "Design System: Smart Search for macOS",
   "extensions": {
     "native": {
@@ -109,6 +109,23 @@
           "advanced"
         ],
         "panels": "DesktopPanel including every CLI group"
+      },
+      "routingEditor": {
+        "placement": "plain text native row pinned above provider search and the scrolling list",
+        "modes": {
+          "hybrid": "embedding and classifier configuration with shared timeout",
+          "jev": "TypeSafe credentials, retrieval judgments and result processing",
+          "rules": "no model parameters",
+          "off": "no routing parameters"
+        },
+        "researchSourcePreferences": "separate advanced navigation item",
+        "conditionalFields": "JEV filtering threshold only while filtering is enabled",
+        "choiceLabels": "localized display labels; raw backend values are preserved"
+      },
+      "secretFields": {
+        "existingValue": "fixed mask shown as SecureField prompt, never as a draft value",
+        "presence": "backend Boolean secret_presence distinguishes empty and configured keys",
+        "clear": "explicit clear action; typing a replacement removes the pending clear"
       }
     },
     "motion": [
