@@ -1,5 +1,5 @@
 ---
-generated_from_state_version: 27
+generated_from_state_version: 37
 ---
 
 # 验证
@@ -8,63 +8,59 @@ generated_from_state_version: 27
 
 - 结果: **已阻塞**
 - 验证情况: **解决报告中的阻塞项后恢复验证**
-- 目标周期: 4
-- 迭代: 2
+- 目标周期: 6
+- 迭代: 1
 - 验证器尝试次数: 1
-- 完成时间: 2026-09-21T18:32:13.155Z
-- 摘要: 无确定新增产品缺陷：当前735b48a保留PR51基线并以实际四架构CI、Windows签名负例/安装升级、Sparkle真实delta-fallback-wrong-key、冻结CLI/Skills回执证明核心实现。A2、A3、A5因当前整合GUI和真实旧安装迁移未实测而blocked，故总体blocked。
+- 完成时间: 2026-09-21T19:57:04.314Z
+- 摘要: 候选 484e03c 的 Runtime 两项正式检查、CI 35645655049 三项任务、Desktop CI 35645656245 四架构正式密钥任务、36 项聚焦回归、草稿 Release 13 附件及签名/架构验证均与当前候选对应。12 项通过；A2/A3/A5 因已明确但未执行的 GUI/真实旧安装迁移验收而 blocked。未发现需要修复的确定产品缺陷。
 
 ## 验收
 
 | 编号 | 结果 | 来源 | 验收项 | 原因 |
 | --- | --- | --- | --- | --- |
-| A1 | passed | specs/desktop-native-updaters/spec.md | Native frameworks own App updates WHEN 安装当前候选并检查 App 更新，THEN Windows 实际进入 Velopack、macOS 实际进入 Sparkle，SDK 使用正确平台架构和稳定源；App 与内置后端版本一致，旧 Python App 下载/安装动作不再与框架同时执行，开发散包明确报告未安装或测试模式。 | 当前HEAD仍为735b48a23f06f62fc1375e60359340a6b991b277。Windows在早于单实例/后端启动处进入Velopack（desktop/windows/Program.cs:15-17），按进程架构选择稳定频道（desktop/windows/AppUpdater.cs:27-42）；macOS实际使用Sparkle且禁止自动下载（desktop/macos/Sources/SmartSearchDesktop/AppUpdater.swift:27-45）。远端CI35636177494的四个原生架构job均success且绑定该SHA（.desktop-artifacts/integrated-ci-35636177494.json:1）；Sparkle两架构实际SDK回执均升级至0.1.23（.desktop-artifacts/ci-35636177494-macos-arm64/sparkle-check-6bf8cf0bb85949de8926c3e0b8dc3815/receipt.json:1；ci-35636177494-macos-x86_64/sparkle-check-f969860ada2f4e3a87f746b331e5dbb1/receipt.json:1）。 |
-| A2 | blocked | specs/desktop-native-updaters/spec.md | Background checks and explicit consent WHEN 自动检查到期、用户关闭自动检查、手动重试或发现新版，THEN 检查频率和提示正确；未点击更新不下载或安装，稍后不会循环弹窗，关闭开关及退出 App 能停止后续自动检查，检查失败不显示已最新。 | 静态实现具备24小时节流、关闭自动检查及“现在更新/稍后”分支（desktop/windows/MainWindow.xaml.cs:713-727；desktop/macos/Sources/SmartSearchDesktop/AppUpdater.swift:35-45,75-91），但当前两份实际Sparkle回执均明确gui_tested=false（对应receipt.json:1）。没有当前整合候选的真实GUI自动检查、关闭开关、稍后提示不循环和失败文案端到端证据。 |
-| A3 | blocked | specs/desktop-native-updaters/spec.md | Update and restart preserve active work WHEN 存在草稿、自有任务或不可取消写入时请求安装，THEN 门禁生效且业务工作保留；解除门禁后 SDK 安装并重启，实际 App 和引擎均为目标版本；失败/取消不被记成成功，不终止外部 CLI。 | Windows在下载前后检查门禁、字段变更即时捕获并在准备后再次防护（desktop/windows/MainWindow.xaml.cs:786-831；desktop/windows/MainWindow.Providers.cs:305-325）；后端拒绝忙环境/任务/CLI并在准备后锁住其他写入（src/smart_search/desktop_backend.py:476-478,629-641）；macOS也有同等草稿/任务门禁和受控关闭（desktop/macos/Sources/SmartSearchDesktop/AppModel.swift:98-100,788-852）。未发现确定缺陷，但未实跑当前GUI中的草稿、自有任务、不可取消写入、取消/失败后的重启路径；SDK回执也标记gui_tested=false。 |
-| A4 | passed | specs/desktop-native-updaters/spec.md | Real delta update and full fallback WHEN 为隔离的 A/B 两个版本打包并更新，THEN 两个平台各有真实差分包产出和 SDK 升级证据；结果版本/内容正确。移除或破坏差分后的完整包回退仍通过同等校验；缺失首版基线与基线下载失败分别记录，不把完整下载称为差分成功。 | Windows真实隔离Velopack检查要求先取delta、破坏delta后取full并校验落盘文件/后端版本（desktop/scripts/test_windows_updates.py:100-119）；Sparkle官方CLI对delta、full-fallback和错误公钥分别实跑（desktop/scripts/test_sparkle_updates.py:99-142）。macOS arm64/x86_64回执均记录delta仅请求.delta、fallback随后请求.zip且版本为0.1.23（两份sparkle receipt.json:1）；四个平台CI job均success。 |
-| A5 | blocked | specs/desktop-native-updaters/spec.md | First migration preserves user data WHEN 从旧 Inno 安装或旧 macOS App 转入第一版框架安装，THEN 操作路径清楚、安装身份和启动入口准确，能继续使用原配置和结果；CLI/Skills/SmartSearchTools 保留，未确认时不卸载旧程序；完成一次完整安装后下一版可走框架更新。 | 当前实现提供旧Inno检测和非破坏性迁移说明（desktop/windows/MainWindow.xaml.cs:730-735；docs/guide/en/app.md:81），并明确共享数据保留；但没有从真实旧Inno安装或旧macOS App迁移当前候选、读回原配置/结果/快捷方式的证据。现有升级检查使用合成0.0.1框架基线，不能等同旧安装迁移。 |
-| A6 | passed | specs/desktop-native-updaters/spec.md | Signatures and trust fail closed WHEN 公钥不匹配、缺少正式密钥、下载包篡改或签名失败，THEN 正式发布或安装被阻止，不能降级到未签名正式更新。测试身份不能进入正式 feed，Secrets 不泄露，报告区分更新签名、Windows 自签名、Apple 代码签名、公证和系统信任。 | Windows签名核验固定公开身份、PE内容、CMS、RFC3161时间戳和不受信任自签名根状态（desktop/scripts/Windows-Signing.ps1:79-142）；两Windows CI日志记录14项负例通过（.desktop-artifacts/integrated-windows-x64-35636177494.log:371-394）。Sparkle实际错误公钥保持0.0.1并非零退出，且断言固定Sparkle2.9.6的“improperly signed”（desktop/scripts/test_sparkle_updates.py:122-141；两份Sparkle receipt.json:1）。正式密钥缺失时构建脚本拒绝发布更新（desktop/scripts/build-macos.sh:60-69），测试身份仅用于隔离回执。 |
-| A7 | passed | specs/desktop-native-updaters/spec.md | Architecture and bundle integrity WHEN 构建和选择任一受支持架构的更新，THEN 包内前后端/helper/资源完整且架构匹配，错误架构、旧版本或不适用的更新不允许安装；真实原生构建和协议 smoke 分平台记录，不能把配置矩阵存在当作已经运行通过。 | Windows按ProcessArchitecture分频道（desktop/windows/AppUpdater.cs:27-30），macOS构建拒绝host/Python与请求架构不匹配（desktop/scripts/build-macos.sh:99-103）。远端35636177494的Windows x64/arm64及macOS arm64/x86_64原生job均success；macOS日志确认安装布局、架构、SDK和已安装后端启动（.desktop-artifacts/integrated-macos-arm64-35636177494.log:818-821；integrated-macos-x86_64-35636177494.log:825-828）。 |
-| A8 | passed | specs/desktop-native-updaters/spec.md | Release pipeline publishes complete updates WHEN 执行测试或受信发布流程，THEN PR 无发布 Secrets；必要检查失败时停止发布；成功候选包含所需安装器、完整包、适用差分、feed 及校验信息，feed 引用均可解析且不跨架构。只改 workflow 未运行时报告为未运行。 | PR触发路径只有contents:read（.github/workflows/desktop-build.yml:3-33），Windows私钥仅workflow_dispatch且显式签名/发布输入时读取（.github/workflows/desktop-build.yml:98-111），发布资产job仅非空release_tag才执行并先验证所有引用（.github/workflows/desktop-build.yml:279-323）。当前测试CI在四架构构建、签名/更新验证后成功，release-assets按预期skipped；未将其写成正式发布。 |
-| A9 | passed | specs/desktop-native-updaters/spec.md | Independent CLI and Skills stay healthy WHEN 带入修复并完成 App 框架升级，THEN 原 CLI/Skills 回归继续通过，实际隔离 mise 升级无需用户手动运行版本命令触发修复；App 关闭后独立 CLI 可运行，测试不改真实全局安装或个人 Skills。 | Runtime回执核对当前六个后端源文件及MainWindow与真实冻结build逐字节一致（.desktop-artifacts/check_integrated_cli_receipt.py:5-14；.comet/runtime/native/changes/desktop-native-updaters/logs/checks/07e89c26-77c8-4cc4-9aa7-a270e4dad5a5-integrated-frozen-cli.log:1）。隔离实际mise从0.1.22升至0.1.23、自动初始化Python、同步旧CLI Skills，且personal_installs_modified=false、provider_calls=0（.desktop-artifacts/isolated-cli-upgrade-0a37539a1af14e9095f5497fd483daed/receipt.json:1）。 |
-| A10 | passed | specs/desktop-native-updaters/spec.md | Delivery claims match actual evidence WHEN 交付本次候选，THEN 当前代码、打包程序、测试日志和新只读复核可对应；报告单列本机 Windows、macOS/ARM64、GUI、真实用户安装、CI 与发布状态，任何未运行项保留未运行/受阻，不宣称正式已上线；用户数据和原工作区保持不变。 | Runtime的当前绑定检查明确记录两次CI均为735b48a、stable_release=not-published、gui_acceptance=pending（.comet/runtime/native/changes/desktop-native-updaters/logs/checks/07e89c26-77c8-4cc4-9aa7-a270e4dad5a5-integrated-platform-ci.log:1）。交付文档也明确隔离安装/验签不能代替GUI、干净机器和SmartScreen验收（desktop/README.md:58-66）；未发现把测试或ad-hoc产物冒充正式上线的当前声明。 |
-| A11 | passed | specs/desktop-windows-signing/spec.md | A1 持续身份与秘密隔离 首次准备产生可复用的 Windows 签名身份，公开证书确认没有私钥，PFX 受随机密码保护并置于仓库外的受限目录；仓库只出现公开证书和其公开元数据。GitHub Secrets 的设置只打印名称/操作状态。后续构建核对并复用该身份；证书指纹不匹配、用途错误、到期、缺少私钥或密码错误均不能用于发布。 | 仓库公钥加载后显式拒绝带私钥的证书，并核对指纹、有效期和代码签名EKU（desktop/scripts/Windows-Signing.ps1:4-28）；已追踪Windows packaging文件仅含smart-search.cer和公开元数据。两架构CI实际导入固定身份并通过缺密钥、错误密码、无私钥、错误证书、用途/到期负例（.desktop-artifacts/integrated-windows-x64-35636177494.log:371-394）。 |
-| A12 | passed | specs/desktop-windows-signing/spec.md | A2 Windows 发布物完整签名 为 x64 和 ARM64 生成签名发布物后，App EXE/DLL、冻结后端和自有安装器均带期望证书的 Authenticode 签名和时间戳，且内容完整性检查通过；框架更新/卸载 helper 的来源和签名按打包来源独立核对。产品名称和版本资源与构建版本一致。第三方库的签名前后摘要相同。证据必须区分本机实际构建、CI 实际构建、静态审查和未运行项目，不能以一种架构代替另一种架构。 | 构建先签署App EXE/DLL和冻结后端，再打Velopack包；随后复验安装器和包内Update/helper（desktop/scripts/Build-Windows.ps1:163-210；desktop/scripts/Package-Windows.ps1:67-107；desktop/scripts/Test-WindowsUpdateInstall.ps1:8-12）。CI35636177494的Windows x64/arm64均完成“Build self-contained App and Velopack packages”及“Verify real delta update, full fallback and installed signatures”成功步骤。 |
-| A13 | passed | specs/desktop-windows-signing/spec.md | A3 异常和不受信任状态不会冒充成功 可运行检查覆盖：缺失签名秘密、错误密码、错误证书、内容被篡改、缺失时间戳、签名工具失败。对应发布操作失败并阻止上传；秘密不出现在错误信息中。正确自签名文件在未导入信任的环境仍明确报告不受系统默认信任，不能将其写成公开可信。构建与验收不永久修改本机信任库。 | 签名负例覆盖缺Secrets、错误密码、无私钥、错误证书、用途/到期、PE/CMS/时间戳篡改和签名工具失败（desktop/scripts/Test-WindowsSigning.ps1:35-80；.desktop-artifacts/integrated-windows-x64-35636177494.log:371-394）。验证器把未导入根时的状态明确标为untrusted-self-signed-root而非公开可信（desktop/scripts/Windows-Signing.ps1:94-131），且CI随后删除runner身份（.github/workflows/desktop-build.yml:134-141）。 |
-| A14 | passed | specs/desktop-windows-signing/spec.md | A4 流水线失败阻断且更新器能识别签名资产 现有 release 文件名校验接受两种 Windows signed 安装器，并继续校验现有 macOS 资产与版本。旧版迁移入口能识别新 Windows 安装器；Velopack feed 与包校验拒绝平台不符、身份不符或冲突资产，不以历史未签名资产作为正式更新回退。PR 测试不访问发布 Secrets。至少以真实 Windows 签名构建和可运行的发布/资产检查验证；只有实际成功运行 GitHub Actions 后，才报告线上 CI 已通过。 | 工作流对release_tag执行版本/提交一致性检查、真实Windows签名和升级验证，并只在所有平台完成后进入发布资产步骤（.github/workflows/desktop-build.yml:67-164,279-323）。资产验证测试对未签名、损坏、错架构、路径穿越、重复、缺full/签名和外部URL均失败关闭（tests/test_native_update_artifacts.py:80-118）；当前线上CI成功事实已由远端gh读取并与本地结构化回执一致。 |
-| A15 | passed | specs/desktop-windows-signing/spec.md | A5 说明与证据保持一致 中英文下载/发布文档明确自签名、Windows 默认不信任、可能出现的首次运行提示、官方来源和证书指纹；不出现已获得 CA/SignPath 信任或 macOS 已签名等错误声明。报告列出实际验签文件、测试结果、CI 状态以及 GUI/干净机器/ARM64 实机等未运行边界。生成候选产物不自动发布新版本、覆盖旧发行附件或替换本机正式 App。 | 中英文文档明确Windows自签名默认不受信、macOS仅ad-hoc且未公证、正式Sparkle密钥未配置、GUI/干净机仍需人工验收（desktop/README.md:50-66；docs/guide/en/app.md:7-13,77-83；docs/windows-signing.md:5-11,64-70）。当前Runtime回执和CI日志也保留stable-release未发布与GUI pending边界，未见错误CA/SignPath/Developer-ID声明。 |
+| A1 | passed | specs/desktop-native-updaters/spec.md | Native frameworks own App updates WHEN 安装当前候选并检查 App 更新，THEN Windows 实际进入 Velopack、macOS 实际进入 Sparkle，SDK 使用正确平台架构和稳定源；App 与内置后端版本一致，旧 Python App 下载/安装动作不再与框架同时执行，开发散包明确报告未安装或测试模式。 | Windows 使用 Velopack 的按架构稳定渠道，且只在已安装布局检查：desktop/windows/AppUpdater.cs:25、desktop/windows/AppUpdater.cs:32；macOS 使用 Sparkle：desktop/macos/Sources/SmartSearchDesktop/AppUpdater.swift:27。实际 SDK 升级检查验证目标 App/后端版本一致：desktop/tests/NativeUpdateCheck/Program.cs:14、desktop/tests/NativeUpdateCheck/Program.cs:47；四架构 CI 均绑定当前 HEAD：.desktop-artifacts/release-024-desktop-ci.json:1。 |
+| A2 | blocked | specs/desktop-native-updaters/spec.md | Background checks and explicit consent WHEN 自动检查到期、用户关闭自动检查、手动重试或发现新版，THEN 检查频率和提示正确；未点击更新不下载或安装，稍后不会循环弹窗，关闭开关及退出 App 能停止后续自动检查，检查失败不显示已最新。 | 实现具备 24 小时节流、关闭自动检查、显式更新/稍后与无自动下载：desktop/windows/MainWindow.xaml.cs:713、desktop/windows/MainWindow.xaml.cs:720、desktop/macos/Sources/SmartSearchDesktop/AppUpdater.swift:27、desktop/macos/Sources/SmartSearchDesktop/AppUpdater.swift:75。当前只有 Windows 测试版的概括性用户反馈；未实跑 macOS GUI 的开关、手动重试、稍后和失败提示全链路，不能把源码或 CI 替代该交互验收。 |
+| A3 | blocked | specs/desktop-native-updaters/spec.md | Update and restart preserve active work WHEN 存在草稿、自有任务或不可取消写入时请求安装，THEN 门禁生效且业务工作保留；解除门禁后 SDK 安装并重启，实际 App 和引擎均为目标版本；失败/取消不被记成成功，不终止外部 CLI。 | Windows 在下载前后复核草稿/任务/CLI 写入门禁，并由后端冻结后续操作：desktop/windows/MainWindow.xaml.cs:53、desktop/windows/MainWindow.xaml.cs:786、src/smart_search/desktop_backend.py:629；SDK 隔离检查覆盖取消不变成功与更新后版本一致：desktop/tests/NativeUpdateCheck/Program.cs:21、desktop/tests/NativeUpdateCheck/Program.cs:47。未在当前 macOS GUI 和真实草稿/自有任务/不可取消写入中完成安装重启验收。 |
+| A4 | passed | specs/desktop-native-updaters/spec.md | Real delta update and full fallback WHEN 为隔离的 A/B 两个版本打包并更新，THEN 两个平台各有真实差分包产出和 SDK 升级证据；结果版本/内容正确。移除或破坏差分后的完整包回退仍通过同等校验；缺失首版基线与基线下载失败分别记录，不把完整下载称为差分成功。 | Windows 隔离安装实际选择 delta、损坏 delta 时下载 full，并核对 App/后端内容和版本：desktop/scripts/test_windows_updates.py:100、desktop/scripts/test_windows_updates.py:108；macOS 实际 Sparkle CLI 覆盖 delta、full-fallback、wrong-public-key：desktop/scripts/test_sparkle_updates.py:99、desktop/scripts/test_sparkle_updates.py:129。四架构正式密钥 CI 已通过：.desktop-artifacts/release-024-desktop-ci.json:1。首个正式框架版本只含 full 包的边界已如实记录：.github/releases/v0.1.24.md:12。 |
+| A5 | blocked | specs/desktop-native-updaters/spec.md | First migration preserves user data WHEN 从旧 Inno 安装或旧 macOS App 转入第一版框架安装，THEN 操作路径清楚、安装身份和启动入口准确，能继续使用原配置和结果；CLI/Skills/SmartSearchTools 保留，未确认时不卸载旧程序；完成一次完整安装后下一版可走框架更新。 | 迁移提示和 Windows 安装器文案明确要求一次完整安装、不自动卸载并保留配置/CLI/Skills：desktop/windows/MainWindow.xaml.cs:730、desktop/packaging/windows/migration.txt:3、docs/guide/zh-CN/app.md:83。尚未从真实旧 Inno 安装或旧 macOS App 完成首次迁移，再完成下一版框架更新；当前 Windows 测试版反馈不覆盖该场景。 |
+| A6 | passed | specs/desktop-native-updaters/spec.md | Signatures and trust fail closed WHEN 公钥不匹配、缺少正式密钥、下载包篡改或签名失败，THEN 正式发布或安装被阻止，不能降级到未签名正式更新。测试身份不能进入正式 feed，Secrets 不泄露，报告区分更新签名、Windows 自签名、Apple 代码签名、公证和系统信任。 | 正式 Sparkle 公钥独立保存并明确非 Developer ID：desktop/packaging/macos/sparkle-public-key.json:2；发布构建要求私钥与固定公钥：desktop/scripts/build-macos.sh:60、desktop/scripts/build-macos.sh:184；实际 Sparkle 错误公钥拒绝检查：desktop/scripts/test_sparkle_updates.py:122。Windows 负例覆盖缺密钥、错误密码/证书、篡改、缺时间戳与工具失败：desktop/scripts/Test-WindowsSigning.ps1:35、desktop/scripts/Test-WindowsSigning.ps1:76；正式 CI 绑定当前 HEAD：.comet/runtime/native/changes/desktop-native-updaters/logs/checks/4b050680-d5ee-473c-b9e0-23438e406006-release024-platform-ci.log:1。 |
+| A7 | passed | specs/desktop-native-updaters/spec.md | Architecture and bundle integrity WHEN 构建和选择任一受支持架构的更新，THEN 包内前后端/helper/资源完整且架构匹配，错误架构、旧版本或不适用的更新不允许安装；真实原生构建和协议 smoke 分平台记录，不能把配置矩阵存在当作已经运行通过。 | 四平台包已核验包含当前 state_files 修复、macOS 内置固定公钥、Sparkle 签名和 Windows PE 架构：.desktop-artifacts/release-024-final-assets/asset-verification.json:2。Windows 包内前端、后端、helper 的架构检查逻辑见 .desktop-artifacts/verify-release-024-assets.py:35；四架构真实构建均成功：.desktop-artifacts/release-024-desktop-ci.json:1。 |
+| A8 | passed | specs/desktop-native-updaters/spec.md | Release pipeline publishes complete updates WHEN 执行测试或受信发布流程，THEN PR 无发布 Secrets；必要检查失败时停止发布；成功候选包含所需安装器、完整包、适用差分、feed 及校验信息，feed 引用均可解析且不跨架构。只改 workflow 未运行时报告为未运行。 | 发布工作流在受控发布时汇总嵌套资产、拒绝同名冲突、验证全部 feed 后才上传包再上传 feed：.github/workflows/desktop-build.yml:290、.github/workflows/desktop-build.yml:317、.github/workflows/desktop-build.yml:338。当前候选的 13 个草稿附件均已上传且 targetCommitish 为 484e03c：.desktop-artifacts/release-024-draft.json:1；本次四架构候选运行中 release-assets 按无 release_tag 预期 skipped：.desktop-artifacts/release-024-desktop-ci.json:1。公开发布尚未发生，未被表述为已上线。 |
+| A9 | passed | specs/desktop-native-updaters/spec.md | Independent CLI and Skills stay healthy WHEN 带入修复并完成 App 框架升级，THEN 原 CLI/Skills 回归继续通过，实际隔离 mise 升级无需用户手动运行版本命令触发修复；App 关闭后独立 CLI 可运行，测试不改真实全局安装或个人 Skills。 | 实际隔离 mise 升级回执证明私有 Python 运行时自动初始化、Skills 同步、未改个人安装且无 Provider 调用：.desktop-artifacts/isolated-cli-upgrade-0a37539a1af14e9095f5497fd483daed/receipt.json:1。该回执对应的 CLI/更新实现到 484e03c 的差异仅为版本文件和 state_files 锁修复，无 desktop_cli/desktop_updates/desktop_backend 行为差异；当前候选全套 npm 回归为 1004 passed/2 skipped：.desktop-artifacts/release-024-fixed-npm-test.log:104，正式 Windows CI 为 1005 passed/1 skipped：.desktop-artifacts/release-024-final-ci.log:356。 |
+| A10 | passed | specs/desktop-native-updaters/spec.md | Delivery claims match actual evidence WHEN 交付本次候选，THEN 当前代码、打包程序、测试日志和新只读复核可对应；报告单列本机 Windows、macOS/ARM64、GUI、真实用户安装、CI 与发布状态，任何未运行项保留未运行/受阻，不宣称正式已上线；用户数据和原工作区保持不变。 | 当前 HEAD 精确为 484e03c，Runtime 回执记录两项检查均成功并绑定同一工作区/候选：.comet/runtime/native/changes/desktop-native-updaters/state.json:4、.comet/runtime/native/changes/desktop-native-updaters/state.json:24、.comet/runtime/native/changes/desktop-native-updaters/state.json:44。四平台资产验证为 12 个产品资产且附 SHA256SUMS：.desktop-artifacts/release-024-final-assets/asset-verification.json:2；草稿 Release 仍 isDraft=true，未声称公开上线或本机已升级：.desktop-artifacts/release-024-draft.json:1。 |
+| A11 | passed | specs/desktop-windows-signing/spec.md | A1 持续身份与秘密隔离 首次准备产生可复用的 Windows 签名身份，公开证书确认没有私钥，PFX 受随机密码保护并置于仓库外的受限目录；仓库只出现公开证书和其公开元数据。GitHub Secrets 的设置只打印名称/操作状态。后续构建核对并复用该身份；证书指纹不匹配、用途错误、到期、缺少私钥或密码错误均不能用于发布。 | 仓库仅保存公开 Windows 证书元数据（固定指纹、到期、默认不受信任）：desktop/packaging/windows/smart-search.json:2；PFX 被 .gitignore 排除：.gitignore:12。导入脚本先以 EphemeralKeySet 核验固定身份，再导入 CurrentUser/My，并清除子进程环境秘密：desktop/scripts/Import-WindowsSigningIdentity.ps1:16、desktop/scripts/Import-WindowsSigningIdentity.ps1:41。 |
+| A12 | passed | specs/desktop-windows-signing/spec.md | A2 Windows 发布物完整签名 为 x64 和 ARM64 生成签名发布物后，App EXE/DLL、冻结后端和自有安装器均带期望证书的 Authenticode 签名和时间戳，且内容完整性检查通过；框架更新/卸载 helper 的来源和签名按打包来源独立核对。产品名称和版本资源与构建版本一致。第三方库的签名前后摘要相同。证据必须区分本机实际构建、CI 实际构建、静态审查和未运行项目，不能以一种架构代替另一种架构。 | x64 与 ARM64 的 App EXE/DLL、冻结后端、Squirrel、ExecutionStub、Setup 共 12 个文件均为 integrity=verified、固定证书指纹匹配且有 RFC3161 时间戳：.desktop-artifacts/release-024-final-assets/windows-signatures.json:3、.desktop-artifacts/release-024-final-assets/windows-signatures.json:51、.desktop-artifacts/release-024-final-assets/windows-signatures.json:91。构建脚本对自有文件签名并检查第三方文件摘要不变：desktop/scripts/Build-Windows.ps1:163、desktop/scripts/Build-Windows.ps1:188。 |
+| A13 | passed | specs/desktop-windows-signing/spec.md | A3 异常和不受信任状态不会冒充成功 可运行检查覆盖：缺失签名秘密、错误密码、错误证书、内容被篡改、缺失时间戳、签名工具失败。对应发布操作失败并阻止上传；秘密不出现在错误信息中。正确自签名文件在未导入信任的环境仍明确报告不受系统默认信任，不能将其写成公开可信。构建与验收不永久修改本机信任库。 | 可运行负例检查覆盖缺秘密、错误密码、无私钥、错误/过期证书、篡改内容/CMS/时间戳、缺时间戳、签名工具失败及信任库不变：desktop/scripts/Test-WindowsSigning.ps1:35、desktop/scripts/Test-WindowsSigning.ps1:76、desktop/scripts/Test-WindowsSigning.ps1:98。正式签名验证将自签名根不受信任单列为 untrusted-self-signed-root，而非成功信任：desktop/scripts/Windows-Signing.ps1:94、.desktop-artifacts/release-024-final-assets/windows-signatures.json:8。 |
+| A14 | passed | specs/desktop-windows-signing/spec.md | A4 流水线失败阻断且更新器能识别签名资产 现有 release 文件名校验接受两种 Windows signed 安装器，并继续校验现有 macOS 资产与版本。旧版迁移入口能识别新 Windows 安装器；Velopack feed 与包校验拒绝平台不符、身份不符或冲突资产，不以历史未签名资产作为正式更新回退。PR 测试不访问发布 Secrets。至少以真实 Windows 签名构建和可运行的发布/资产检查验证；只有实际成功运行 GitHub Actions 后，才报告线上 CI 已通过。 | Windows 产物命名、每架构完整包/可选 delta、helper 重验签及同架构 feed 约束由打包脚本执行：desktop/scripts/Package-Windows.ps1:61、desktop/scripts/Package-Windows.ps1:80、desktop/scripts/Package-Windows.ps1:90。工作流 PR 仅 contents:read，发布写权限只在受控 release-assets job：.github/workflows/desktop-build.yml:36、.github/workflows/desktop-build.yml:290；当前两架构正式签名包和 feeds 已在草稿附件逐个 SHA-256/size 匹配：.desktop-artifacts/release-024-draft.json:1。 |
+| A15 | passed | specs/desktop-windows-signing/spec.md | A5 说明与证据保持一致 中英文下载/发布文档明确自签名、Windows 默认不信任、可能出现的首次运行提示、官方来源和证书指纹；不出现已获得 CA/SignPath 信任或 macOS 已签名等错误声明。报告列出实际验签文件、测试结果、CI 状态以及 GUI/干净机器/ARM64 实机等未运行边界。生成候选产物不自动发布新版本、覆盖旧发行附件或替换本机正式 App。 | 中英文文档明确 Windows 自签名默认不受信任、SmartScreen 边界、macOS 无 Developer ID/公证和 Sparkle 独立签名：docs/windows-signing.md:5、docs/windows-signing.md:7、docs/guide/en/app.md:79、docs/guide/zh-CN/app.md:85。v0.1.24 说明明确 GUI/真实迁移仍需单独验收且不以 CI 替代：.github/releases/v0.1.24.md:25。 |
 
 ## 检查
 
 | 检查 | 命令 | 工作目录 | 状态 | 退出码 | 耗时 |
 | --- | --- | --- | --- | ---: | ---: |
-| Exact candidate three-job CI and four-platform signed SDK upgrade checks | .desktop-artifacts/check_integrated_ci.py | . | passed | 0 | 146605 ms |
-| Verify real isolated CLI upgrade and Skills receipt against current frozen source | .desktop-artifacts/check_integrated_cli_receipt.py | . | passed | 0 | 77 ms |
-| Verify 34 engineer-tested interface branding and platform validation files are unchanged | .desktop-artifacts/check_pr51_preservation.py | . | passed | 0 | 2043 ms |
-| Public and packaged Skills stay identical | npm/scripts/check-skill-parity.js | . | passed | 0 | 69 ms |
-| Check full integrated committed diff whitespace | diff --check 65e7365 HEAD | . | passed | 0 | 76 ms |
+| Exact candidate CI and four formal-key native packages | .desktop-artifacts/check-release-024-ci.py | . | passed | 0 | 5127 ms |
+| Lock race, nested release files and signed workflow regressions | -m pytest -q tests/test_desktop_config.py tests/test_native_update_artifacts.py tests/test_release_workflow.py | . | passed | 0 | 2099 ms |
 
 ### Builder 报告的证据
 
 以下为 Builder 报告，不等同于 Runtime 检查凭据或独立验收结果。
 
-- local-regression: passed — 整合后998通过2跳过；Mac包装相关26项通过。本机Windows完整构建、SDK差分/取消/完整回退通过。
-- real-frozen-cli-and-skills: passed — 当前整合冻结后端实际隔离mise0.1.22→0.1.23升级、自动Python初始化、Skills备份和内容状态通过；receipt isolated-cli-upgrade-0a37539a1af14e9095f5497fd483daed，与当前六个后端文件/主窗口源码一致。
-- preserved-engineer-baseline: passed — 34个关键文件与92224fb相同；先前整合生命周期只读预审无确定新增缺陷。
-- current-ci: not-run — 当前735b48a的CI35636183383全部成功；Desktop35636177494两Windows及MacARM64成功，MacIntel进入最后SDK测试。正式Runtime检查将读取最终结果和SHA。
-- 已知限制: PR51原Mac实机与用户Windows测试保留；新增整合GUI、真实旧Inno/旧Mac迁移及最终Mac实机仍待用户/工程师测试。
-- 已知限制: Sparkle正式EdDSA身份未配置；CI仅隔离临时身份验证，MacApp仍adhoc，未公证。稳定发布和真实用户安装未执行。
+- local-npm-test: passed — 1004 passed / 2 skipped；含 wrapper repair 与 pack dry-run，见 .desktop-artifacts/release-024-fixed-npm-test.log
+- focused-release-regression: passed — 36 passed；旧实现可确定失败的新空锁回归转绿，附件嵌套及同名拒绝均覆盖
+- workflow-and-skills: passed — actionlint 两条 workflow 与 9 文件 skill parity 通过
+- 已知限制: 正式候选尚未公开发布，本机正式 App/CLI 升级将在发布后执行。
+- 已知限制: 用户负责 GUI 测试，反馈当前 Windows 测试版无问题；不外推 macOS 最终 GUI 或首次旧安装迁移全部完成。
+- 已知限制: Windows 自签名默认不受系统信任；macOS ad-hoc，无 Developer ID/公证。
 
 ## 阻塞项
 
-- **user**: 无确定新增产品缺陷：当前735b48a保留PR51基线并以实际四架构CI、Windows签名负例/安装升级、Sparkle真实delta-fallback-wrong-key、冻结CLI/Skills回执证明核心实现。A2、A3、A5因当前整合GUI和真实旧安装迁移未实测而blocked，故总体blocked。 (acceptance: A2, A3, A5) — next: `resolve-verifier-blocker`
+- **user**: 候选 484e03c 的 Runtime 两项正式检查、CI 35645655049 三项任务、Desktop CI 35645656245 四架构正式密钥任务、36 项聚焦回归、草稿 Release 13 附件及签名/架构验证均与当前候选对应。12 项通过；A2/A3/A5 因已明确但未执行的 GUI/真实旧安装迁移验收而 blocked。未发现需要修复的确定产品缺陷。 (acceptance: A2, A3, A5) — next: `resolve-verifier-blocker`
 
 ## 风险与跳过的工作
 
-- A2、A3缺少当前整合候选的真实GUI端到端验收；这不是已发现产品缺陷，仍不能以CI/源码替代。
-- A5缺少真实旧Inno与旧macOS App迁移、原配置/结果/入口保留的实测证据。
-- 正式Sparkle EdDSA身份尚未配置；macOS当前仅ad-hoc、未Developer ID签名或公证。正式稳定发布、真实用户安装和干净机器信任验收均未执行，不能作为已上线或公开可信声明。
-- 当前工作树除候选提交外有Runtime管理的comet-state.yaml修改和未跟踪handoff文件；最终核验时HEAD仍为735b48a，二者未改变候选代码提交。
+- A2、A3、A5 缺少 macOS GUI 的交互验证，以及真实旧 Inno/macOS 首次迁移后下一版更新的证据；这是未运行边界，未发现确定产品缺陷。
+- 当前 v0.1.24 Release 仍为 draft，tag 尚未公开；草稿附件 13/13 已逐项匹配远端 digest/size/state，但正式 feed 可访问性与本机 App/CLI 升级需在公开发布后实际核对。
+- .desktop-artifacts/release-024-final-assets/windows-signatures.json:8 记录 Windows 自签名根不受默认信任；macOS 包为 ad-hoc、未公证，均已在文档中如实标注。
 
 ## 之前的迭代
 
@@ -80,9 +76,13 @@ generated_from_state_version: 27
 | 3 | 2 | 0 | recovery | — | Native Shape artifacts changed | 2026-09-21T17:58:59.493Z |
 | 4 | 1 | 0 | recovery | — | Mac实际SDK已正确拒绝错误公钥，保持旧版本。验证脚本却要求错误文本包含signatur，实际固定Sparkle2.9.6输出为improperly signed，需要修正这一错误文本断言后重验。产品签名验证不变。 | 2026-09-21T18:05:11.695Z |
 | 4 | 2 | 1 | blocked | A2, A3, A5 | 无确定新增产品缺陷：当前735b48a保留PR51基线并以实际四架构CI、Windows签名负例/安装升级、Sparkle真实delta-fallback-wrong-key、冻结CLI/Skills回执证明核心实现。A2、A3、A5因当前整合GUI和真实旧安装迁移未实测而blocked，故总体blocked。 | 2026-09-21T18:32:13.155Z |
+| 4 | 2 | 1 | recovery | — | 用户明确要求一直推进到正式发布，授权准备并发布下一稳定版0.1.24，包括必要的正式Sparkle更新身份与Secrets、公钥和不发布的签名预检、版本/说明、tag/GitHub/npm正式发布。GUI仍按用户此前安排由用户操作，已提供测试步骤；未收到结果的A2/A3/A5保持未验收，不冒充通过或自动改真实安装。 | 2026-09-21T18:57:41.812Z |
+| 4 | 3 | 0 | recovery | — | Native Shape artifacts changed | 2026-09-21T18:57:43.124Z |
+| 5 | 1 | 0 | recovery | — | Native Shape artifacts changed | 2026-09-21T19:10:20.828Z |
+| 6 | 1 | 1 | blocked | A2, A3, A5 | 候选 484e03c 的 Runtime 两项正式检查、CI 35645655049 三项任务、Desktop CI 35645656245 四架构正式密钥任务、36 项聚焦回归、草稿 Release 13 附件及签名/架构验证均与当前候选对应。12 项通过；A2/A3/A5 因已明确但未执行的 GUI/真实旧安装迁移验收而 blocked。未发现需要修复的确定产品缺陷。 | 2026-09-21T19:57:04.314Z |
 
 
 
 ## 结论
 
-无确定新增产品缺陷：当前735b48a保留PR51基线并以实际四架构CI、Windows签名负例/安装升级、Sparkle真实delta-fallback-wrong-key、冻结CLI/Skills回执证明核心实现。A2、A3、A5因当前整合GUI和真实旧安装迁移未实测而blocked，故总体blocked。
+候选 484e03c 的 Runtime 两项正式检查、CI 35645655049 三项任务、Desktop CI 35645656245 四架构正式密钥任务、36 项聚焦回归、草稿 Release 13 附件及签名/架构验证均与当前候选对应。12 项通过；A2/A3/A5 因已明确但未执行的 GUI/真实旧安装迁移验收而 blocked。未发现需要修复的确定产品缺陷。

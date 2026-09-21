@@ -48,14 +48,19 @@ jobs:
           cache: npm
 
       - name: Set up Python
+        id: python
         uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
 
       - name: Install npm package
+        env:
+          SMART_SEARCH_PYTHON: ${{ steps.python.outputs.python-path }}
         run: npm ci
 
       - name: Test package
+        env:
+          SMART_SEARCH_PYTHON: ${{ steps.python.outputs.python-path }}
         run: npm test
 
       - name: Run source regression
@@ -71,6 +76,8 @@ jobs:
         run: npm run pack:dry
 
       - name: Smoke test packed install
+        env:
+          SMART_SEARCH_PYTHON: ${{ steps.python.outputs.python-path }}
         run: npm run smoke:tarball
 
       - name: Check committed diff whitespace
