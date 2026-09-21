@@ -96,7 +96,11 @@ def find_package_metadata(bundle_directory: Path) -> Path:
 
 
 def verify_asset_inventory(source_assets: Path, packaged_assets: Path) -> int:
-    source_files = [path for path in source_assets.rglob("*") if path.is_file()]
+    # Finder metadata is not an application asset and PyInstaller excludes it.
+    source_files = [
+        path for path in source_assets.rglob("*")
+        if path.is_file() and path.name != ".DS_Store"
+    ]
     missing = [
         path.relative_to(source_assets)
         for path in source_files

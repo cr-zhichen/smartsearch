@@ -64,6 +64,7 @@ class ConfigField:
     # so neither can drift or be invented.
     key_url: str = ""
     docs_url: str = ""
+    provider_toggle: bool = False
 
 
 SECTIONS: tuple[Section, ...] = (
@@ -303,10 +304,10 @@ CONFIG_FIELDS: tuple[ConfigField, ...] = (
        label_zh="Tavily 地址", label_en="Tavily API URL", default="https://api.tavily.com",
        provider="tavily", capabilities=("web_search", "web_fetch")),
     _f(key="TAVILY_ENABLED", section="providers", tier="advanced", kind="bool",
-       label_zh="启用 Tavily", label_en="Tavily enabled",
-       help_zh="关掉之后即使填了 key 也不会被使用。",
-       help_en="Turning this off makes Tavily unused even with a key saved.",
-       default="true", provider="tavily", capabilities=("web_search", "web_fetch")),
+       label_zh="启用服务商", label_en="Enable provider",
+       help_zh="禁用后保留配置，不再发起请求。保存更改后生效。",
+       help_en="Disabling keeps the configuration and stops requests. Takes effect after saving changes.",
+       default="true", provider="tavily", capabilities=("web_search", "web_fetch"), provider_toggle=True),
     _f(key="TAVILY_TIMEOUT_SECONDS", section="providers", tier="advanced", kind="float",
        label_zh="Tavily 超时（秒）", label_en="Tavily timeout (seconds)", default="30",
        provider="tavily", capabilities=("web_search", "web_fetch")),
@@ -495,6 +496,25 @@ CONFIG_FIELDS: tuple[ConfigField, ...] = (
        default="true"),
 )
 
+def _provider_toggle_fields() -> tuple[ConfigField, ...]:
+    existing_keys = {item.key for item in CONFIG_FIELDS}
+    toggles = []
+    for provider, key in Config.PROVIDER_ENABLED_KEYS.items():
+        if key in existing_keys:
+            continue
+        fields = [item for item in CONFIG_FIELDS if item.provider == provider]
+        toggles.append(_f(
+            key=key, section=fields[0].section, tier="essential", kind="bool", default="true",
+            provider=provider, provider_toggle=True,
+            capabilities=tuple(dict.fromkeys(capability for item in fields for capability in item.capabilities)),
+            label_zh="启用服务商", label_en="Enable provider",
+            help_zh="禁用后保留配置，不再发起请求。保存更改后生效。",
+            help_en="Disabling keeps the configuration and stops requests. Takes effect after saving changes.",
+        ))
+    return tuple(toggles)
+
+
+CONFIG_FIELDS += _provider_toggle_fields()
 FIELDS_BY_KEY: dict[str, ConfigField] = {item.key: item for item in CONFIG_FIELDS}
 
 
@@ -591,6 +611,7 @@ def metadata_payload() -> dict[str, Any]:
                 "placeholder": item.placeholder,
                 "key_url": item.key_url,
                 "docs_url": item.docs_url,
+                "provider_toggle": item.provider_toggle,
             }
             for item in CONFIG_FIELDS
         ],

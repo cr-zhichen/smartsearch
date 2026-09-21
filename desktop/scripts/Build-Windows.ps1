@@ -18,11 +18,11 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $repositoryRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
-. (Join-Path $PSScriptRoot 'Windows-Signing.ps1')
 $signingEnabled = $SigningMode -eq 'Required'
 $signatures = @()
 $signingCertificate = $null
 if ($signingEnabled) {
+    . (Join-Path $PSScriptRoot 'Windows-Signing.ps1')
     $signingCertificate = Get-ExpectedSigningCertificate (Join-Path $PSScriptRoot '../packaging/windows/smart-search.cer')
     Assert-SigningCertificate $signingCertificate $signingCertificate
     $identityPath = "Cert:/CurrentUser/My/$($signingCertificate.Thumbprint)"
@@ -47,15 +47,15 @@ function Resolve-RepositoryPath([string] $Candidate) {
 }
 
 function Get-PythonArchitecture([string] $PythonExecutable) {
-    $reported = [string] (& $PythonExecutable -c "import platform; print(platform.machine())")
+    # The interpreter target controls PyInstaller output, including x64 Python
+    # running under Windows on ARM emulation.
+    $reported = [string] (& $PythonExecutable -c "import sysconfig; print(sysconfig.get_platform())")
     if ($LASTEXITCODE -ne 0) {
         throw "Could not determine the selected Python architecture."
     }
     switch ($reported.Trim().ToLowerInvariant()) {
-        "amd64" { return "x64" }
-        "x86_64" { return "x64" }
-        "arm64" { return "arm64" }
-        "aarch64" { return "arm64" }
+        "win-amd64" { return "x64" }
+        "win-arm64" { return "arm64" }
         default { throw "Unsupported Python architecture for PyInstaller: $reported" }
     }
 }
@@ -79,8 +79,9 @@ function Copy-WindowsProjectSource([string] $SourceDirectory, [string] $Destinat
         throw "Refusing to reuse staged project directory: $DestinationDirectory"
     }
     New-Item -ItemType Directory -Path $DestinationDirectory | Out-Null
+    $sourcePrefix = [System.IO.Path]::GetFullPath($SourceDirectory).TrimEnd('\', '/') + [System.IO.Path]::DirectorySeparatorChar
     Get-ChildItem -LiteralPath $SourceDirectory -Recurse -File -Force | ForEach-Object {
-        $relativePath = [System.IO.Path]::GetRelativePath($SourceDirectory, $_.FullName)
+        $relativePath = $_.FullName.Substring($sourcePrefix.Length)
         if ($relativePath -match '(^|[\\/])(bin|obj|\.desktop-artifacts)([\\/]|$)') {
             return
         }
@@ -162,7 +163,7 @@ $desktopExecutable = Join-Path $publishDirectory "SmartSearch.Desktop.exe"
 if (-not (Test-Path -LiteralPath $desktopExecutable -PathType Leaf)) {
     throw "dotnet publish did not create the expected desktop executable: $desktopExecutable"
 }
-foreach ($resource in @("App.xbf", "MainWindow.xbf", "SmartSearch.Desktop.pri", "Assets/smart-search.ico", "Assets/smart-search.png")) {
+foreach ($resource in @("App.xbf", "MainWindow.xbf", "SmartSearch.Desktop.pri", "Assets/smart-search.ico", "Assets/smart-search.png", "Assets/mascot.png")) {
     if (-not (Test-Path -LiteralPath (Join-Path $publishDirectory $resource) -PathType Leaf)) {
         throw "Published Windows app is missing its compiled UI resource: $resource"
     }

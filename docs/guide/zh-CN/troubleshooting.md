@@ -33,6 +33,26 @@ Windows npm/mise 安装后建议验证中文 JSON 管道：
 smart-search deep "深度搜索一下最近的比特币行情" --format json | ConvertFrom-Json
 ```
 
+## macOS 提示“已损坏”或“无法验证开发者”
+
+先确认下载自本项目发行页，按该版本的 `SHA256SUMS.txt` 核对 DMG；打开 DMG 后，将 **Smart Search** 拖入 **Applications**，再从“应用程序”启动。安装包仍为未公证测试包。
+
+“已损坏”不一定是下载失败。修复前 v0.1.22 的 `.app` 未在资源组装完成后重新签名，完整性校验会报 `code has no resources but signature indicates they must be present`。可在终端检查已安装的副本：
+
+```bash
+codesign --verify --deep --strict --verbose=2 "/Applications/Smart Search.app"
+```
+
+校验失败时，使用包含打包修复的新构建；不要仅清除隔离属性来掩盖签名错误。SHA-256 一致只证明下载与发行附件一致，不代表附件本身的签名正确。
+
+校验通过但仍被 macOS 拦截时，按 Apple 的[安全打开应用说明](https://support.apple.com/zh-cn/102445)，在“系统设置 → 隐私与安全性”中选择“仍要打开”。如果未公证测试包仍提示“已损坏”，仅在已核对官方来源、校验和及上述签名，且决定信任此测试包时，可清除这个应用的下载隔离标记后重新打开：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Smart Search.app"
+```
+
+这只针对该应用，不需要关闭全局 Gatekeeper。ad-hoc 签名不验证开发者身份，也不等于 Apple 公证。
+
 ## 界面语言没有变化
 
 App 在“设置与关于”选择语言，独立 CLI 用 `smart-search config set SMART_SEARCH_LANGUAGE zh` 保存偏好。如果 CLI 仍是另一种语言，检查单次 `--lang` 和 `SMART_SEARCH_LANGUAGE` 环境变量覆盖。`auto` 跟随 CLI 的 locale，可能与图形会话不同。可用 `smart-search --lang zh --help` 检查，不会改变设置。偏好无法读取时会提示并回退；修复该配置文件时保留服务商 Key。网页原文和第三方日志不随界面翻译。

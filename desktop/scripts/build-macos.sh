@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: bash desktop/scripts/build-macos.sh --architecture arm64|x86_64 [--python PATH] [--output-root PATH]
 
-Builds a fresh unsigned test .app and DMG. The Python interpreter and host must
+Builds a fresh ad-hoc signed, unnotarized test .app and DMG. The Python interpreter and host must
 match the requested architecture because PyInstaller does not cross-compile.
 EOF
 }
@@ -61,6 +61,10 @@ if ! command -v swift >/dev/null 2>&1 || ! command -v hdiutil >/dev/null 2>&1; t
   echo "Swift and hdiutil are required on macOS to build the desktop test package." >&2
   exit 1
 fi
+if ! command -v "${DMGBUILD:-dmgbuild}" >/dev/null 2>&1; then
+  echo "dmgbuild is required. Run mise install, then mise run desktop:macos:build." >&2
+  exit 1
+fi
 
 normalize_architecture() {
   case "$1" in
@@ -99,8 +103,8 @@ if [[ ! -f "$macos_directory/Package.swift" ]]; then
   exit 1
 fi
 scratch_directory="$run_directory/swift-build"
-swift build --package-path "$macos_directory" --configuration release --product SmartSearchDesktop --arch "$architecture" --scratch-path "$scratch_directory"
-bin_directory="$(swift build --package-path "$macos_directory" --configuration release --arch "$architecture" --scratch-path "$scratch_directory" --show-bin-path)"
+bash "$repository_root/desktop/scripts/compile-macos.sh" --product SmartSearchDesktop --arch "$architecture" --scratch-path "$scratch_directory"
+bin_directory="$(bash "$repository_root/desktop/scripts/compile-macos.sh" --arch "$architecture" --scratch-path "$scratch_directory" --show-bin-path)"
 desktop_binary="$bin_directory/SmartSearchDesktop"
 if [[ ! -f "$desktop_binary" ]]; then
   echo "SwiftPM did not create the expected desktop executable: $desktop_binary" >&2
@@ -122,7 +126,11 @@ app_directory="$run_directory/Smart Search.app"
 mkdir -p "$app_directory/Contents/MacOS" "$app_directory/Contents/Resources"
 cp "$desktop_binary" "$app_directory/Contents/MacOS/SmartSearchDesktop"
 cp "$repository_root/desktop/packaging/macos/Info.plist" "$app_directory/Contents/Info.plist"
-cp "$repository_root/desktop/packaging/macos/SmartSearch.icns" "$app_directory/Contents/Resources/SmartSearch.icns"
+icon_directory="$run_directory/icon"
+bash "$repository_root/desktop/scripts/compile-macos-icon.sh" "$icon_directory"
+cp "$icon_directory/Assets.car" "$icon_directory/SmartSearch.icns" "$app_directory/Contents/Resources/"
+cp "$repository_root/assets/branding/smart-search.png" "$app_directory/Contents/Resources/smart-search.png"
+cp "$repository_root/assets/branding/source.png" "$app_directory/Contents/Resources/mascot.png"
 cp "$repository_root/src/smart_search/assets/i18n/messages.json" "$app_directory/Contents/Resources/Localization.json"
 cmp "$repository_root/src/smart_search/assets/i18n/messages.json" "$app_directory/Contents/Resources/Localization.json"
 plutil -replace CFBundleShortVersionString -string "$version" "$app_directory/Contents/Info.plist"
@@ -135,6 +143,16 @@ if [[ ! -x "$app_directory/Contents/Resources/backend/smart-search" ]]; then
   exit 1
 fi
 
+# The linker only signs the Mach-O executable. Seal the completed bundle after
+# copying every resource, or Gatekeeper reports a damaged app (missing resources).
+# This is an ad-hoc test signature, not Developer ID signing or notarization.
+codesign --force --deep --sign - "$app_directory"
+codesign --verify --deep --strict --verbose=2 "$app_directory"
+bash "$repository_root/desktop/scripts/check-macos-backend.sh" "$app_directory/Contents/Resources/backend/smart-search"
+
 dmg="$run_directory/SmartSearch-$version-macos-$architecture-unsigned-test.dmg"
-hdiutil create -volname "Smart Search" -srcfolder "$app_directory" -format UDZO "$dmg"
-echo "macOS unsigned, unnotarized test artifact: $dmg"
+"${DMGBUILD:-dmgbuild}" -s "$repository_root/desktop/packaging/macos/dmg-settings.py" \
+  -D "app=$app_directory" -D "assets=$repository_root/desktop/packaging/macos" "Smart Search" "$dmg"
+"$python_bin" "$repository_root/desktop/scripts/verify_macos_dmg.py" "$dmg" \
+  --architecture "$architecture" --version "$version" --sdk-version "$(xcrun --sdk macosx --show-sdk-version)"
+echo "macOS ad-hoc signed, unnotarized test artifact: $dmg"

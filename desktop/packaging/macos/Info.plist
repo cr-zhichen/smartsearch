@@ -12,6 +12,8 @@
   <string>com.smartsearch.desktop</string>
   <key>CFBundleIconFile</key>
   <string>SmartSearch.icns</string>
+  <key>CFBundleIconName</key>
+  <string>SmartSearch</string>
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleName</key>
