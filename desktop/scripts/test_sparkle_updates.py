@@ -131,7 +131,7 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
             installed = plistlib.loads((apps[0] / "Contents/Info.plist").read_bytes())["CFBundleVersion"]
             if case == "wrong-public-key":
                 assert result.returncode != 0 and installed == "0.0.1", "Untrusted update was applied"
-                assert "signatur" in (result.stdout + result.stderr).lower(), "Failure was not a signature rejection"
+                assert "improperly signed" in (result.stdout + result.stderr).lower(), "Failure was not a signature rejection"
             else:
                 assert result.returncode == 0 and installed == version, f"{case}: update failed"
                 assert any(p.endswith(".delta") for p in requests), requests
