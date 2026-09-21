@@ -50,7 +50,11 @@ struct ContentView: View {
                 }
                 destinationView
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(DesktopAppearance.contentBackground.ignoresSafeArea(.container, edges: .top))
             .navigationTitle(model.selectedDestination.title)
+            .toolbarBackground(DesktopAppearance.contentBackground, for: .windowToolbar)
+            .toolbarBackground(.visible, for: .windowToolbar)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -69,6 +73,7 @@ struct ContentView: View {
         }
         .navigationSplitViewStyle(.balanced)
         .groupBoxStyle(DesktopGroupBoxStyle())
+        .toggleStyle(.switch)
         .onChange(of: model.selectedDestination) { destination in
             Task { await model.enter(destination) }
         }
@@ -317,7 +322,8 @@ private struct ProvidersView: View {
             .padding(.vertical, 12)
             .frame(maxWidth: DesktopMetrics.contentWidth + DesktopMetrics.pagePadding * 2, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.bar)
+            .background(DesktopAppearance.contentBackground)
+            .overlay(alignment: .top) { Divider() }
         })
     }
 }
@@ -1335,12 +1341,17 @@ private struct AgentSkillsView: View {
                         let id = target["target"]?.stringValue ?? ""
                         VStack(alignment: .leading, spacing: 7) {
                             HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(target["label"]?.displayString ?? id).fontWeight(.medium)
+                                    Text(status(target)).font(.callout).foregroundStyle(.secondary)
+                                }
+                                Spacer()
                                 Toggle(target["label"]?.displayString ?? id, isOn: Binding(
                                     get: { model.selectedSkillTargets.contains(id) },
                                     set: { if $0 { model.selectedSkillTargets.insert(id) } else { model.selectedSkillTargets.remove(id) } }))
+                                    .labelsHidden()
+                                    .accessibilityLabel(target["label"]?.displayString ?? id)
                                     .disabled(model.skillsBusy)
-                                Spacer()
-                                Text(status(target)).font(.callout).foregroundStyle(.secondary)
                             }
                             DisclosureGroup(L("文件详情")) {
                                 VStack(alignment: .leading, spacing: 7) {

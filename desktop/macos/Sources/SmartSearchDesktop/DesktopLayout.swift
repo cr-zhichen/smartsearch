@@ -11,6 +11,11 @@ enum DesktopMetrics {
     static let cardRadius: CGFloat = 14
 }
 
+enum DesktopAppearance {
+    // White in light appearance; use the matching native surface in dark appearance.
+    static let contentBackground = Color(nsColor: .textBackgroundColor)
+}
+
 struct DesktopPage<Content: View>: View {
     let title: String
     let subtitle: String
@@ -39,7 +44,7 @@ struct DesktopPage<Content: View>: View {
             .padding(DesktopMetrics.pagePadding)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
-        .background(Color(nsColor: .windowBackgroundColor))
+        .background(DesktopAppearance.contentBackground)
         .scrollIndicators(.visible)
         .textFieldStyle(.roundedBorder)
     }
@@ -100,7 +105,7 @@ extension View {
     func desktopPanel() -> some View {
         padding(DesktopMetrics.cardPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .controlBackgroundColor))
+            .background(DesktopAppearance.contentBackground)
             .clipShape(RoundedRectangle(cornerRadius: DesktopMetrics.cardRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: DesktopMetrics.cardRadius, style: .continuous)
