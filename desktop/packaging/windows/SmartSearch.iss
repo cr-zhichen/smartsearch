@@ -22,6 +22,9 @@ AppId={{BE6BC4C8-605B-48DD-A4FE-11975FD7D4DD}
 AppName=Smart Search
 AppVersion={#MyAppVersion}
 AppPublisher=Smart Search
+VersionInfoVersion={#MyAppVersion}
+VersionInfoProductName=Smart Search
+VersionInfoProductVersion={#MyAppVersion}
 DefaultDirName={localappdata}\Programs\Smart Search
 DefaultGroupName=Smart Search
 DisableProgramGroupPage=yes
@@ -32,7 +35,14 @@ RestartApplications=no
 ArchitecturesAllowed={#AllowedArchitectures}
 ArchitecturesInstallIn64BitMode={#InstallModeArchitectures}
 OutputDir={#OutputDir}
+#ifdef SignedBuild
+OutputBaseFilename=SmartSearch-{#MyAppVersion}-win-{#MyAppArch}-Setup-signed
+SignTool=smartsearch
+SignedUninstaller=yes
+SignedUninstallerDir={#SignedUninstallerDirectory}
+#else
 OutputBaseFilename=SmartSearch-{#MyAppVersion}-win-{#MyAppArch}-Setup-unsigned-test
+#endif
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern

@@ -40,7 +40,7 @@ Smart Search 把搜索和网页读取服务接到 Codex、Claude Code 等 AI 工
 
 服务商测试和搜索可能消耗相应服务的付费额度。打开 App 或检查本机环境不会发起付费搜索。
 
-v0.1.22 新增独立的 Skills 下载与更新页面。每天自动检查只提示，点击后才更新所选 Agent；App、CLI 和 Skills 分别维护。桌面安装包目前未签名，macOS 与 Windows ARM64 实机验证仍待完成。
+v0.1.22 新增独立的 Skills 下载与更新页面。每天自动检查只提示，点击后才更新所选 Agent；App、CLI 和 Skills 分别维护。文件名以 `-signed.exe` 结尾的 Windows 包使用**自签名证书**，仍可能出现 SmartScreen 提示；旧 `-unsigned-test.exe` 包仍未签名，详见 [Windows 签名与首次启动](docs/windows-signing.md)。macOS 仍未签名、未公证；macOS 与 Windows ARM64 实机验证仍待完成。
 
 [查看 App 配置步骤、支持平台和排障说明 →](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/zh-CN/app.md)
 

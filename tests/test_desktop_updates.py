@@ -37,6 +37,22 @@ def test_versions(remote, current, expected):
     assert updates.newer(remote, current) is expected
 
 
+def test_self_signed_assets_keep_legacy_compatibility_and_reject_ambiguity():
+    for architecture in ("x64", "arm64"):
+        data = release(arch=architecture)
+        assert updates.asset_for(data, "windows", architecture)
+        asset = data["assets"][0]
+        signed = {**asset, "name": asset["name"].replace("unsigned-test", "signed"),
+                  "browser_download_url": asset["browser_download_url"].replace("unsigned-test", "signed")}
+        data["assets"] = [signed]
+        selected = updates.asset_for(data, "windows", architecture)
+        assert selected["name"].endswith("-signed.exe")
+        assert selected["signature_verified"] is False  # filename is not local signature verification
+        assert updates.asset_for(data, "windows", "arm64" if architecture == "x64" else "x64") is None
+        data["assets"].append(asset)
+        assert updates.asset_for(data, "windows", architecture) is None
+
+
 @pytest.mark.asyncio
 async def test_release_assets_and_cli_are_independent_and_failed_check_preserves_success(tmp_path, monkeypatch):
     state = {"fail": False, "count": 0}
