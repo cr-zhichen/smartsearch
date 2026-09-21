@@ -15518,5 +15518,57 @@
   "开发选项": [
     "开发选项",
     "Developer options"
+  ],
+  "偏好设置": [
+    "偏好设置",
+    "Preferences"
+  ],
+  "安装位置": [
+    "安装位置",
+    "Installation paths"
+  ],
+  "工具说明": [
+    "工具说明",
+    "Tool details"
+  ],
+  "已选择 {0} 个 Agent": [
+    "已选择 {0} 个 Agent",
+    "{0} agents selected"
+  ],
+  "文件详情": [
+    "文件详情",
+    "File details"
+  ],
+  "更多能力": [
+    "更多能力",
+    "More capabilities"
+  ],
+  "最近记录": [
+    "最近记录",
+    "Recent activity"
+  ],
+  "检查详情与偏好": [
+    "检查详情与偏好",
+    "Check details and preferences"
+  ],
+  "管理记录": [
+    "管理记录",
+    "Manage activity"
+  ],
+  "管理语言、配置目录和软件更新。": [
+    "管理语言、配置目录和软件更新。",
+    "Manage language, configuration folders and software updates."
+  ],
+  "进行中的任务": [
+    "进行中的任务",
+    "Running tasks"
+  ],
+  "选择工具，输入问题或链接，查看结果与来源。": [
+    "选择工具，输入问题或链接，查看结果与来源。",
+    "Choose a tool, enter a question or URL, and read the results and sources."
+  ],
+  "项目主页": [
+    "项目主页",
+    "Project website"
   ]
 }
