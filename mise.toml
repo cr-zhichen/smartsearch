@@ -2,10 +2,14 @@
 #
 # Both versions satisfy the declared ranges (Python >=3.10, Node >=18).
 # CI independently covers Python 3.10/3.12 and Node 18/22/24.
-# This is an optional developer entry point; npm and CI remain unchanged.
+# macOS packaging also uses this toolchain; npm and the general CI matrix are independent.
 [tools]
 python = "3.13.14"
 node = "24.16.0"
+"pipx:dmgbuild" = { version = "1.6.7", os = ["macos"] }
+uv = "0.11.23"
+shellcheck = "0.11.0"
+actionlint = "1.7.12"
 
 # Invoke the project interpreter explicitly: shell profiles may prepend a
 # different Python to PATH after mise activates the venv.
@@ -55,3 +59,29 @@ run = "npm run check:skill-parity"
 [tasks.check]
 description = "Check Python syntax and patch whitespace"
 run = ['"{{vars.python}}" -m compileall -q src tests', "git diff --check"]
+
+[tasks."desktop:macos:install"]
+description = "Install the macOS backend packaging dependencies"
+run = '"{{vars.python}}" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"'
+
+[tasks."desktop:macos:build"]
+description = "Build and verify the macOS app and drag-to-install DMG"
+raw_args = true
+run = 'DMGBUILD="$(mise which dmgbuild)" bash desktop/scripts/build-macos.sh --python "{{vars.python}}"'
+
+[tasks."desktop:macos:background"]
+description = "Render the DMG background at standard and Retina resolutions"
+run = "bash desktop/scripts/render-dmg-background.sh"
+
+[tasks."desktop:macos:verify"]
+description = "Verify a packaged DMG, its app signature and isolated backend startup"
+raw_args = true
+run = '"{{vars.python}}" desktop/scripts/verify_macos_dmg.py'
+
+[tasks."desktop:packaging:lint"]
+description = "Check the desktop workflow and macOS packaging scripts"
+run = [
+  "shellcheck desktop/scripts/build-macos.sh desktop/scripts/render-dmg-background.sh",
+  "actionlint .github/workflows/desktop-build.yml",
+  "git diff --check",
+]

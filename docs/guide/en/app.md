@@ -10,6 +10,8 @@ Environment preparation and full App/CLI language switching are available from v
 
 Open **Smart Search** from the Start menu or Applications. Existing configuration is reused. Overview shows whether you have providers for main search, documentation lookup, and page reading.
 
+On macOS, open the DMG, drag Smart Search to Applications, then launch it from Applications. If macOS says it is damaged or the developer cannot be verified, follow the [macOS troubleshooting steps](troubleshooting.md#macos-says-the-app-is-damaged-or-the-developer-cannot-be-verified) to check integrity and first-launch restrictions.
+
 ## Configure services
 
 1. Open **Providers** and select a service for each missing capability. The page links to the provider's documentation and key registration page. See [Providers and configuration](configuration.md) for the choices.

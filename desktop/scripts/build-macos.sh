@@ -5,7 +5,7 @@ usage() {
   cat <<'EOF'
 Usage: bash desktop/scripts/build-macos.sh --architecture arm64|x86_64 [--python PATH] [--output-root PATH]
 
-Builds a fresh unsigned test .app and DMG. The Python interpreter and host must
+Builds a fresh ad-hoc signed, unnotarized test .app and DMG. The Python interpreter and host must
 match the requested architecture because PyInstaller does not cross-compile.
 EOF
 }
@@ -59,6 +59,10 @@ if [[ ! -x "$python_bin" ]]; then
 fi
 if ! command -v swift >/dev/null 2>&1 || ! command -v hdiutil >/dev/null 2>&1; then
   echo "Swift and hdiutil are required on macOS to build the desktop test package." >&2
+  exit 1
+fi
+if ! command -v "${DMGBUILD:-dmgbuild}" >/dev/null 2>&1; then
+  echo "dmgbuild is required. Run mise install, then mise run desktop:macos:build." >&2
   exit 1
 fi
 
@@ -135,6 +139,14 @@ if [[ ! -x "$app_directory/Contents/Resources/backend/smart-search" ]]; then
   exit 1
 fi
 
+# The linker only signs the Mach-O executable. Seal the completed bundle after
+# copying every resource, or Gatekeeper reports a damaged app (missing resources).
+# This is an ad-hoc test signature, not Developer ID signing or notarization.
+codesign --force --deep --sign - "$app_directory"
+codesign --verify --deep --strict --verbose=2 "$app_directory"
+
 dmg="$run_directory/SmartSearch-$version-macos-$architecture-unsigned-test.dmg"
-hdiutil create -volname "Smart Search" -srcfolder "$app_directory" -format UDZO "$dmg"
-echo "macOS unsigned, unnotarized test artifact: $dmg"
+"${DMGBUILD:-dmgbuild}" -s "$repository_root/desktop/packaging/macos/dmg-settings.py" \
+  -D "app=$app_directory" -D "assets=$repository_root/desktop/packaging/macos" "Smart Search" "$dmg"
+"$python_bin" "$repository_root/desktop/scripts/verify_macos_dmg.py" "$dmg" --architecture "$architecture" --version "$version"
+echo "macOS ad-hoc signed, unnotarized test artifact: $dmg"

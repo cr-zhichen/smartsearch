@@ -5,6 +5,7 @@ on:
     paths:
       - ".github/workflows/desktop-build.yml"
       - "desktop/**"
+      - "mise.toml"
       - "pyproject.toml"
       - "src/smart_search/**"
   workflow_dispatch:
@@ -120,40 +121,31 @@ jobs:
         include:
           - architecture: x86_64
             runner: macos-15-intel
-            python_architecture: x64
           - architecture: arm64
             runner: macos-15
-            python_architecture: arm64
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.release_tag || github.ref }}
 
-      - name: Set up Python
-        id: python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-          architecture: ${{ matrix.python_architecture }}
-
-      - name: Install build dependencies
-        env:
-          PYTHON_BIN: ${{ steps.python.outputs.python-path }}
-        run: '"$PYTHON_BIN" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"'
-
-      - name: Load backend packaging from the workflow revision
+      - name: Load macOS packaging from the workflow revision
         if: inputs.release_tag != ''
         env:
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
           git fetch --no-tags --depth=1 origin "$WORKFLOW_SHA"
-          git restore --source="$WORKFLOW_SHA" -- desktop/scripts/build_backend.py
+          git restore --source="$WORKFLOW_SHA" -- mise.toml desktop/scripts/build_backend.py desktop/scripts/build-macos.sh desktop/scripts/verify_macos_dmg.py desktop/packaging/macos
+
+      - name: Set up packaging tools
+        uses: jdx/mise-action@v3
+
+      - name: Install build dependencies
+        run: mise run desktop:macos:install
 
       - name: Build unsigned test app and DMG
         run: >-
-          bash desktop/scripts/build-macos.sh
+          mise run desktop:macos:build
           --architecture ${{ matrix.architecture }}
-          --python "${{ steps.python.outputs.python-path }}"
 
       - name: Upload unsigned test package
         uses: actions/upload-artifact@v4
