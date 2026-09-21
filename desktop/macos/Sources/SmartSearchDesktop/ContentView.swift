@@ -164,93 +164,72 @@ private struct OverviewView: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
-        guard let state = model.state else { return AnyView(BackendUnavailableView(model: model)) }
-        return AnyView(ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L("概览")).font(.largeTitle.weight(.bold))
-                    Text(L("查看实际配置状态，决定下一步操作。打开此页不会发起服务商探针。"))
-                        .foregroundStyle(.secondary)
-                }
-
-                GroupBox(L("首次配置")) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(L("主搜索用于回答问题；文档检索用于查库文档；网页抓取用于读取链接。配好之后请自己点一次测试，App 不会自动发起计费探针。"))
-                            .foregroundStyle(.secondary)
+        if let state = model.state {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Label {
+                            Text(readinessTitle(state)).font(.title2.weight(.semibold))
+                        } icon: {
+                            Image(systemName: state.minimumProfileOK == true ? "checkmark.circle" : "slider.horizontal.3")
+                                .foregroundStyle(state.minimumProfileOK == true ? Color.green : Color.accentColor)
+                        }
                         if state.minimumProfileOK == true {
-                            Label(L("基础能力已配置"), systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            Text(L("这表示后端已根据当前配置计算出基础条件；它不代表刚刚进行了真实服务商测试。"))
-                                .foregroundStyle(.secondary)
-                        } else if state.minimumProfileOK == false {
-                            Label(L("还需要补齐配置"), systemImage: "exclamationmark.circle.fill")
-                                .foregroundStyle(.orange)
-                            if state.minimumMissing.isEmpty {
-                                Text(L("后端未列出缺失能力。请在服务商页查看当前字段。"))
-                                    .foregroundStyle(.secondary)
-                            } else {
-                                ForEach(state.minimumMissing, id: \.self) { item in
-                                    Label(item, systemImage: "circle")
-                                }
-                            }
-                            HStack {
-                                Button(L("打开服务商配置")) { model.selectedDestination = .providers }
-                                    .buttonStyle(.borderedProminent)
-                                Button(L("选择配置目录")) { model.selectedDestination = .settings }
-                            }
+                            Text(L("主搜索、文档检索和网页抓取已满足使用条件。"))
+                            Button(L("开始搜索")) { model.selectedDestination = .search }
+                                .buttonStyle(.borderedProminent)
                         } else {
-                            Text(L("后端尚未报告基础配置状态。"))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                GroupBox(L("当前环境")) {
-                    Grid(alignment: .leading, horizontalSpacing: 20, verticalSpacing: 10) {
-                        GridRow {
-                            Text(L("配置文件")).foregroundStyle(.secondary)
-                            Text(state.configPath ?? L("后端未提供"))
-                                .textSelection(.enabled)
-                        }
-                        GridRow {
-                            Text(L("配置目录")).foregroundStyle(.secondary)
-                            Text(state.configDirectory ?? L("后端未提供"))
-                                .textSelection(.enabled)
-                        }
-                        GridRow {
-                            Text(L("内置引擎")).foregroundStyle(.secondary)
-                            Text(state.version ?? L("后端未提供"))
-                        }
-                        GridRow {
-                            Text(L("协议 generation")).foregroundStyle(.secondary)
-                            Text(state.generation ?? L("后端未提供"))
-                                .textSelection(.enabled)
-                        }
-                        GridRow {
-                            Text(L("最后读取")).foregroundStyle(.secondary)
-                            Text(model.lastStateRefresh?.formatted(date: .abbreviated, time: .standard) ?? L("尚未读取"))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                if let capabilityStatus = state.capabilityStatus, let details = capabilityStatus.objectValue, !details.isEmpty {
-                    GroupBox(L("能力状态")) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(L("此处是当前配置是否满足路由条件，不是刚刚完成的联网验证。"))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            ForEach(details.keys.sorted(), id: \.self) { key in
-                                CapabilityStatusRow(capability: key, status: details[key] ?? .object([:]))
+                            if state.minimumProfileOK == nil {
+                                Text(L("后端尚未报告基础配置状态。"))
+                            } else if !state.minimumMissing.isEmpty {
+                                Text(L("还需要配置：{0}。每类任选一个服务商即可。",
+                                       state.minimumMissing.map(capabilityName).joined(separator: "、")))
+                            } else {
+                                Text(L("后端未列出缺失能力。请在服务商页查看当前字段。"))
                             }
+                            Button(L("打开服务商配置")) { model.selectedDestination = .providers }
+                                .buttonStyle(.borderedProminent)
                         }
+                    }
+                    .padding(.vertical, 8)
+                } footer: {
+                    Text(L("配置齐全表示可以发起请求；连接是否正常，以你主动测试的结果为准。"))
+                }
+
+                if let details = state.capabilityStatus?.objectValue, !details.isEmpty {
+                    Section(L("当前能力")) {
+                        ForEach(details.keys.sorted(), id: \.self) { key in
+                            CapabilityStatusRow(capability: key, status: details[key] ?? .object([:]))
+                        }
+                    }
+                }
+
+                Section {
+                    DisclosureGroup(L("配置与路由详情")) {
+                        KeyValueLine(label: L("配置文件"), value: state.configPath ?? L("后端未提供"))
+                        KeyValueLine(label: L("配置目录"), value: state.configDirectory ?? L("后端未提供"))
+                        KeyValueLine(label: L("内置引擎"), value: state.version ?? L("后端未提供"))
+                        KeyValueLine(label: L("协议 generation"), value: state.generation ?? L("后端未提供"))
+                        KeyValueLine(label: L("最后读取"), value: model.lastStateRefresh?.formatted(date: .abbreviated, time: .standard) ?? L("尚未读取"))
+                        ForEach(state.capabilityChains.keys.sorted(), id: \.self) { key in
+                            KeyValueLine(label: capabilityName(key), value: state.capabilityChains[key, default: []].joined(separator: " → "))
+                        }
+                        Button(L("选择配置目录")) { model.selectedDestination = .settings }
                     }
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 940, alignment: .leading)
-        })
+            .formStyle(.grouped)
+        } else {
+            BackendUnavailableView(model: model)
+        }
+    }
+
+    private func readinessTitle(_ state: DesktopState) -> String {
+        switch state.minimumProfileOK {
+        case true: return L("可以开始搜索了")
+        case false: return L("先完成基础配置")
+        case nil: return L("查看配置状态")
+        }
     }
 }
 
@@ -260,43 +239,36 @@ private struct ProvidersView: View {
     var body: some View {
         guard let state = model.state else { return AnyView(BackendUnavailableView(model: model)) }
         let sections = Dictionary(grouping: state.fields.filter { $0.provider == nil || $0.provider == "" }, by: \.section)
-        return AnyView(ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text(L("配置与服务商")).font(.largeTitle.weight(.bold))
-                Text(L("先配齐主搜索、文档检索和网页抓取，每类任选一个；其余按需展开。"))
-                    .foregroundStyle(.secondary)
-                if let preview = model.configPreview { ConfigPreviewView(preview: preview) }
-                ForEach(["main_search", "docs_search", "web_fetch"], id: \.self) { capability in
-                    Text(capabilityName(capability)).font(.title2.weight(.semibold))
+        return AnyView(Form {
+            Text(L("先配齐主搜索、文档检索和网页抓取，每类任选一个；其余按需展开。"))
+                .foregroundStyle(.secondary)
+            if let preview = model.configPreview { ConfigPreviewView(preview: preview) }
+            ForEach(["main_search", "docs_search", "web_fetch"], id: \.self) { capability in
+                Section(capabilityName(capability)) {
                     ForEach(state.providerGroups.filter { $0.primaryCapability == capability }) { group in
-                        ProviderSection(model: model, state: state, section: group.id, title: group.id,
-                                        blurb: "", fields: group.fields)
-                    }
-                }
-                ForEach(state.providerGroups.filter { $0.primaryCapability == nil }) { group in
-                    DisclosureGroup(L("更多服务商 · {0}", "\(group.id)")) {
-                        ProviderSection(model: model, state: state, section: group.id, title: group.id,
-                                        blurb: L("按需启用；测试可能产生计费请求。"), fields: group.fields)
-                    }
-                }
-                ForEach(orderedSectionIDs(state: state, present: Set(sections.keys)), id: \.self) { section in
-                    DisclosureGroup(state.sections.first { $0.id == section }?.label ?? section) {
-                        ProviderSection(model: model, state: state, section: section,
-                            title: state.sections.first { $0.id == section }?.label,
-                            blurb: state.sections.first { $0.id == section }?.blurb ?? "", fields: sections[section] ?? [])
-                    }
-                }
-                DisclosureGroup(L("冷却与路由详情")) {
-                    ProviderHealthView(health: state.providerHealth)
-                    ForEach(state.capabilityChains.keys.sorted(), id: \.self) { key in
-                        KeyValueLine(label: capabilityName(key), value: state.capabilityChains[key, default: []].joined(separator: " → "))
+                        ProviderDisclosure(model: model, state: state, group: group)
                     }
                 }
             }
-            .padding(24)
-            .frame(maxWidth: 980, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Section(L("更多服务商")) {
+                ForEach(state.providerGroups.filter { $0.primaryCapability == nil }) { group in
+                    ProviderDisclosure(model: model, state: state, group: group)
+                }
+            }
+            ForEach(orderedSectionIDs(state: state, present: Set(sections.keys)), id: \.self) { section in
+                DisclosureGroup(state.sections.first { $0.id == section }?.label ?? section) {
+                    ProviderSection(model: model, state: state, section: section,
+                        blurb: state.sections.first { $0.id == section }?.blurb ?? "", fields: sections[section] ?? [])
+                }
+            }
+            DisclosureGroup(L("冷却与路由详情")) {
+                ProviderHealthView(health: state.providerHealth)
+                ForEach(state.capabilityChains.keys.sorted(), id: \.self) { key in
+                    KeyValueLine(label: capabilityName(key), value: state.capabilityChains[key, default: []].joined(separator: " → "))
+                }
+            }
         }
+        .formStyle(.grouped)
         .safeAreaInset(edge: .bottom) {
             HStack(spacing: 12) {
                 Button { Task { await model.saveConfig() } } label: {
@@ -593,11 +565,40 @@ private struct ProviderDraftCheckRow: View {
     }
 }
 
+private struct ProviderDisclosure: View {
+    @ObservedObject var model: AppModel
+    let state: DesktopState
+    let group: ProviderFieldGroup
+    @State private var expanded: Bool
+
+    init(model: AppModel, state: DesktopState, group: ProviderFieldGroup) {
+        self.model = model
+        self.state = state
+        self.group = group
+        _expanded = State(initialValue: group.fields.contains { $0.isSecret && !state.effectiveValue(for: $0).isEmpty })
+    }
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $expanded) {
+            ProviderSection(model: model, state: state, section: group.id,
+                            blurb: "", fields: group.fields)
+                .padding(.vertical, 8)
+        } label: {
+            HStack {
+                Text(group.id).fontWeight(.medium)
+                Spacer()
+                if group.fields.contains(where: { model.configDraft[$0.key] != nil || model.clearSecretKeys.contains($0.key) }) {
+                    Text(L("有未保存修改")).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
 private struct ProviderSection: View {
     @ObservedObject var model: AppModel
     let state: DesktopState
     let section: String
-    let title: String?
     let blurb: String
     let fields: [ConfigField]
 
@@ -615,36 +616,30 @@ private struct ProviderSection: View {
     private var testKey: String { "test:" + (provider ?? section) }
 
     var body: some View {
-        GroupBox {
-            VStack(alignment: .leading, spacing: 14) {
-                if !blurb.isEmpty {
-                    Text(blurb).font(.caption).foregroundStyle(.secondary)
-                }
-                let visible = upfront
-                ForEach(visible) { field in
-                    ConfigFieldEditor(model: model, state: state, field: field)
-                    if field.id != visible.last?.id { Divider() }
-                }
-                if !advanced.isEmpty {
-                    DisclosureGroup(L("更多设置（{0}）", "\(advanced.count)")) {
-                        VStack(alignment: .leading, spacing: 14) {
-                            ForEach(advanced) { field in
-                                ConfigFieldEditor(model: model, state: state, field: field)
-                                if field.id != advanced.last?.id { Divider() }
-                            }
+        VStack(alignment: .leading, spacing: 14) {
+            if !blurb.isEmpty {
+                Text(blurb).font(.caption).foregroundStyle(.secondary)
+            }
+            let visible = upfront
+            ForEach(visible) { field in
+                ConfigFieldEditor(model: model, state: state, field: field)
+                if field.id != visible.last?.id { Divider() }
+            }
+            if !advanced.isEmpty {
+                DisclosureGroup(L("更多设置（{0}）", "\(advanced.count)")) {
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(advanced) { field in
+                            ConfigFieldEditor(model: model, state: state, field: field)
+                            if field.id != advanced.last?.id { Divider() }
                         }
-                        .padding(.top, 8)
                     }
-                }
-                if let provider, let check = state.providerChecks?[provider] {
-                    ProviderDraftCheckRow(provider: provider, check: check)
+                    .padding(.top, 8)
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        } label: {
+            if let provider, let check = state.providerChecks?[provider] {
+                ProviderDraftCheckRow(provider: provider, check: check)
+            }
             HStack {
-                Text(title ?? section)
-                Spacer()
                 if let provider {
                     Button {
                         Task { await model.testProvider(provider) }
@@ -660,8 +655,10 @@ private struct ProviderSection: View {
                     }
                     .disabled(model.connection != .ready || model.isBusy.contains(testKey))
                 }
+                Spacer()
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -687,6 +684,7 @@ private struct ConfigFieldEditor: View {
             } else if field.isSecret {
                 HStack {
                     SecureField(L("输入新值以替换；留空表示保持"), text: model.draftBinding(for: field))
+                        .accessibilityLabel(field.label)
                     if model.clearSecretKeys.contains(field.key) {
                         Button(L("保留")) { model.keepSecret(field) }
                     } else {
@@ -732,35 +730,26 @@ private struct SearchResearchView: View {
 
     var body: some View {
         guard let state = model.state else { return AnyView(BackendUnavailableView(model: model)) }
-        return AnyView(ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L("搜索与研究")).font(.largeTitle.weight(.bold))
-                    Text(L("工具目录和参数来自后端。实验性工具保持明确标注，结果先以可读内容和来源展示。"))
+        return AnyView(Form {
+            if state.commands.isEmpty {
+                Section(L("工具目录")) {
+                    Text(L("后端尚未提供可运行的工具目录。"))
                         .foregroundStyle(.secondary)
                 }
-
-                if state.commands.isEmpty {
-                    GroupBox(L("工具目录")) {
-                        Text(L("后端尚未提供可运行的工具目录。"))
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    CommandFormView(model: model, commands: state.commands)
-                }
-
-                if let result = model.currentResult {
-                    ReadableResultView(
-                        result: result,
-                        command: model.currentResultCommand,
-                        copy: model.copyCurrentResult,
-                        export: model.exportCurrentResult
-                    )
-                }
+            } else {
+                CommandFormView(model: model, commands: state.commands)
             }
-            .padding(24)
-            .frame(maxWidth: 980, alignment: .leading)
-        })
+
+            if let result = model.currentResult {
+                ReadableResultView(
+                    result: result,
+                    command: model.currentResultCommand,
+                    copy: model.copyCurrentResult,
+                    export: model.exportCurrentResult
+                )
+            }
+        }
+        .formStyle(.grouped))
     }
 }
 
@@ -769,7 +758,7 @@ private struct CommandFormView: View {
     let commands: [CommandCatalogEntry]
 
     var body: some View {
-        GroupBox(L("执行工具")) {
+        Section(L("执行工具")) {
             VStack(alignment: .leading, spacing: 14) {
                 Picker(L("工具"), selection: Binding(get: { model.selectedCommandID ?? "" }, set: { model.selectCommand($0) })) {
                     ForEach(commands) { command in
@@ -833,7 +822,11 @@ private struct CommandFieldEditor: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                TextField(field.label + (field.required ? L("（必填）") : ""), text: model.commandBinding(for: field))
+                Text(field.label + (field.required ? L("（必填）") : ""))
+                TextField(field.label, text: model.commandBinding(for: field), axis: .vertical)
+                    .labelsHidden()
+                    .lineLimit(1...6)
+                    .textFieldStyle(.roundedBorder)
             }
             if !field.help.isEmpty { Text(field.help).font(.caption).foregroundStyle(.secondary) }
         }
@@ -1323,62 +1316,57 @@ private struct SettingsAboutView: View {
     @ObservedObject var model: AppModel
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L("设置与关于")).font(.largeTitle.weight(.bold))
-                    Text(L("本页只调整 App 自身连接和观察范围；不会改写外部 npm 或 Python 安装。"))
-                        .foregroundStyle(.secondary)
-                }
-
-                GroupBox(L("语言")) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Picker(L("界面语言"), selection: Binding(
-                            get: { model.languagePreference },
-                            set: { value in Task { await model.setLanguage(value) } })) {
-                            Text(L("跟随系统")).tag("auto")
-                            Text(L("简体中文")).tag("zh")
-                            Text("English").tag("en")
-                        }
-                        .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("language"))
-                        Text(L("App 与独立 CLI 分别保存语言选择。环境写入期间请等待操作完成。"))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                GroupBox(L("当前配置目录")) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text(model.state?.configDirectory ?? L("后端尚未提供"))
-                            .textSelection(.enabled)
-                        Button(model.isBusy.contains("profile") ? L("切换中…") : L("选择配置目录…"), action: model.chooseConfigDirectory)
-                            .disabled(model.connection != .ready || model.configOperationBusy)
+        Form {
+            Section(L("语言")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Picker(L("界面语言"), selection: Binding(
+                        get: { model.languagePreference },
+                        set: { value in Task { await model.setLanguage(value) } })) {
+                        Text(L("跟随系统")).tag("auto")
+                        Text(L("简体中文")).tag("zh")
+                        Text("English").tag("en")
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                GroupBox(L("后端连接")) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            TextField(L("开发环境后端路径（可选）"), text: $model.backendPathOverride)
-                            Button(L("选择…"), action: model.chooseBackendExecutable)
-                            Button(L("使用内置后端")) { model.saveBackendOverride("") }
-                        }
-                        Text(L("发布包默认使用 Contents/Resources/backend/smart-search。仅显式选择时才会使用开发路径。"))
-                            .font(.caption).foregroundStyle(.secondary)
-                        HStack {
-                            Stepper(L("请求超时：{0} 秒", "\(Int(model.requestTimeoutSeconds))"), value: $model.requestTimeoutSeconds, in: 5...300, step: 5)
-                            Button(L("应用超时"), action: model.applyTimeout)
-                            Button(model.isBusy.contains("connect") ? L("连接中…") : L("重新连接")) { model.saveBackendOverride(model.backendPathOverride); Task { await model.reconnect() } }.disabled(model.isBusy.contains("connect"))
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-
-                UpdatesView(model: model)
+                    .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("language"))
+                    Text(L("App 与独立 CLI 分别保存语言选择。环境写入期间请等待操作完成。"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(24)
-            .frame(maxWidth: 900, alignment: .leading)
+
+            Section(L("当前配置目录")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(model.state?.configDirectory ?? L("后端尚未提供"))
+                        .textSelection(.enabled)
+                    Button(model.isBusy.contains("profile") ? L("切换中…") : L("选择配置目录…"), action: model.chooseConfigDirectory)
+                        .disabled(model.connection != .ready || model.configOperationBusy)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            Section(L("后端连接")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    DisclosureGroup(L("开发选项")) {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                TextField(L("开发环境后端路径（可选）"), text: $model.backendPathOverride)
+                                Button(L("选择…"), action: model.chooseBackendExecutable)
+                                Button(L("使用内置后端")) { model.saveBackendOverride("") }
+                            }
+                            Text(L("发布包默认使用 Contents/Resources/backend/smart-search。仅显式选择时才会使用开发路径。"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    HStack {
+                        Stepper(L("请求超时：{0} 秒", "\(Int(model.requestTimeoutSeconds))"), value: $model.requestTimeoutSeconds, in: 5...300, step: 5)
+                        Button(L("应用超时"), action: model.applyTimeout)
+                        Button(model.isBusy.contains("connect") ? L("连接中…") : L("重新连接")) { model.saveBackendOverride(model.backendPathOverride); Task { await model.reconnect() } }.disabled(model.isBusy.contains("connect"))
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            UpdatesView(model: model)
         }
+        .formStyle(.grouped)
     }
 }
 
@@ -1406,8 +1394,8 @@ private struct UpdatesView: View {
     private var ready: Bool { download?["status"]?.stringValue == "ready" }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            GroupBox(L("版本与更新")) {
+        Group {
+            Section(L("版本与更新")) {
                 VStack(alignment: .leading, spacing: 10) {
                     Toggle(L("自动检查，每 24 小时一次，点击才下载"), isOn: Binding(
                         get: { model.updateResult?["auto_check"]?.boolValue ?? true },
@@ -1431,7 +1419,7 @@ private struct UpdatesView: View {
     }
 
     private var appCard: some View {
-        GroupBox(L("App 与内置引擎")) {
+        Section(L("App 与内置引擎")) {
             VStack(alignment: .leading, spacing: 10) {
                 KeyValueLine(label: "App", value: app?["current_version"]?.displayString ?? L("尚未读取"))
                 KeyValueLine(label: L("内置引擎"), value: model.state?.version ?? L("尚未读取"))
@@ -1463,7 +1451,7 @@ private struct UpdatesView: View {
     }
 
     private var cliCard: some View {
-        GroupBox(L("独立 CLI")) {
+        Section(L("独立 CLI")) {
             VStack(alignment: .leading, spacing: 10) {
                 KeyValueLine(label: L("实际版本"), value: model.cliStatus?["external_version"]?.displayString ?? L("未安装或未知"))
                 KeyValueLine(label: L("npm 稳定版"), value: cli?["latest_version"]?.displayString ?? L("尚未检查"))

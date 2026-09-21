@@ -15506,5 +15506,17 @@
   "连接后会读取当前配置、工具目录和活动记录。": [
     "连接后会读取当前配置、工具目录和活动记录。",
     "Your configuration, tools and activity will appear once connected."
+  ],
+  "查看配置状态": [
+    "查看配置状态",
+    "Review configuration"
+  ],
+  "有未保存修改": [
+    "有未保存修改",
+    "Unsaved changes"
+  ],
+  "开发选项": [
+    "开发选项",
+    "Developer options"
   ]
 }

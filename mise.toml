@@ -73,6 +73,10 @@ run = 'DMGBUILD="$(mise which dmgbuild)" bash desktop/scripts/build-macos.sh --p
 description = "Render the DMG background at standard and Retina resolutions"
 run = "bash desktop/scripts/render-dmg-background.sh"
 
+[tasks."desktop:macos:compile"]
+description = "Compile the native macOS interface without launching the app"
+run = "swift build --package-path desktop/macos -c release"
+
 [tasks."desktop:macos:verify"]
 description = "Verify a packaged DMG, its app signature and isolated backend startup"
 raw_args = true
