@@ -318,3 +318,43 @@ def test_stdio_version_handshake_and_shutdown(tmp_path):
     assert responses[3]["result"]["protocol_version"] == 1
     assert responses[4]["result"]["ok"]
     assert not (tmp_path / "config.json").exists()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("default_exists", [False, True])
+async def test_restore_default_profile_reads_its_config_without_copying_or_overwriting(tmp_path, monkeypatch, default_exists):
+    custom = tmp_path / "custom"
+    custom.mkdir()
+    custom_file = custom / "config.json"
+    custom_contents = '{"OPENAI_COMPATIBLE_MODEL":"custom-model"}'
+    custom_file.write_text(custom_contents, encoding="utf-8")
+    default = tmp_path / "default"
+    default_file = default / "config.json"
+    default_contents = '{"OPENAI_COMPATIBLE_MODEL":"default-model"}'
+    if default_exists:
+        default.mkdir()
+        default_file.write_text(default_contents, encoding="utf-8")
+    monkeypatch.setattr(config, "_default_config_dir", lambda: default)
+    monkeypatch.setenv("SMART_SEARCH_CONFIG_DIR", str(custom))
+    monkeypatch.setattr("smart_search.desktop_backend.shutil.which", lambda _: None)
+    backend = Backend(lambda _: None)
+    try:
+        initial = await backend.handle("initialize", {"protocol_version": 1, "config_dir": str(custom)})
+        assert initial["default_config_dir"] == str(default)
+        assert not initial["is_default_config_dir"]
+        restored = await backend.handle("profile.select", {"config_dir": initial["default_config_dir"]})
+        assert restored["config_dir"] == str(default)
+        assert restored["is_default_config_dir"]
+        assert restored["values"].get("OPENAI_COMPATIBLE_MODEL", "") == ("default-model" if default_exists else "")
+        assert restored["environment"]["config_dir"] == str(default)
+        assert os.environ["SMART_SEARCH_CONFIG_DIR"] == str(custom)
+        assert custom_file.read_text(encoding="utf-8") == custom_contents
+        if default_exists:
+            assert default_file.read_text(encoding="utf-8") == default_contents
+        else:
+            assert not default_file.exists()
+        switched_back = await backend.handle("profile.select", {"config_dir": str(custom)})
+        assert not switched_back["is_default_config_dir"]
+        assert switched_back["values"]["OPENAI_COMPATIBLE_MODEL"] == "custom-model"
+    finally:
+        await backend.close()

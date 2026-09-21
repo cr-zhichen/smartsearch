@@ -423,6 +423,8 @@ struct DesktopState {
     let revision: JSONValue?
     let configPath: String?
     let configDirectory: String?
+    let defaultConfigDirectory: String?
+    let isDefaultConfigDirectory: Bool
     let generation: String?
     let version: String?
     let values: [String: JSONValue]
@@ -446,6 +448,8 @@ struct DesktopState {
         revision = raw["revision"]
         configPath = raw.string("config_path")
         configDirectory = raw.string("config_dir")
+        defaultConfigDirectory = raw.string("default_config_dir")
+        isDefaultConfigDirectory = raw.bool("is_default_config_dir") ?? false
         generation = raw.string("generation")
         version = raw.string("version")
         values = raw.object("values")

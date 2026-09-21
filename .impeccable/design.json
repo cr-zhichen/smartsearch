@@ -116,10 +116,11 @@
           "labelSpacing": 4
         },
         "automaticUpdateRow": "leading wrapping description with trailing fixed-size native switch",
-        "visualAcceptance": "observed at 920 pt in a settings-start preview: update switch alignment, App and CLI updates, runtime and advanced panels; English, dark appearance and wider windows pending"
+        "visualAcceptance": "observed at 920 pt in a settings-start preview: update switch alignment, App and CLI updates, runtime and advanced panels; English, dark appearance and wider windows pending",
+        "appearance": "system by default; persistent light/dark override applied through NSApp and SwiftUI"
       },
       "routingEditor": {
-        "placement": "plain text first row in the shared scrolling provider list, below the search field",
+        "placement": "first ordinary two-line row in the shared provider list; same row component, no icon or special container",
         "modes": {
           "hybrid": "embedding and classifier configuration with shared timeout",
           "jev": "TypeSafe credentials, retrieval judgments and result processing",
@@ -157,6 +158,22 @@
         "content": "complete selectable text; error heading with warning symbol, neutral ordinary messages",
         "lifecycle": "dismiss and reopen retained messages; explicit clear disables the entry; repeated foreground failures present again, unchanged background polling failures do not",
         "visualAcceptance": "observed in a 920 pt Chinese/light settings-start preview with explicit sample messages: long installation guidance, dismiss/reopen/clear, repeated errors and notices, 30-paragraph scrolling; no real install or configuration write triggered"
+      },
+      "sidebarFooter": {
+        "mascotWidth": 168,
+        "imageRegionHeight": 160,
+        "imageOffsetY": 16,
+        "alignment": "leading, flush to window edge",
+        "status": "bottom-trailing 8 pt status light in a 24 pt hover target, 16 pt trailing inset and 10 pt bottom inset; localized tooltip and accessibility label; no visible text"
+      },
+      "skills": {
+        "order": [
+          "source card",
+          "runtime card",
+          "Agent selection card"
+        ],
+        "footer": "selection count leading; refresh and update trailing",
+        "details": "read-only missing and changed file groups"
       }
     },
     "motion": [
@@ -193,9 +210,10 @@
         "source": "assets/branding/source.png",
         "packagedAsset": "desktop/windows/Assets/mascot.png",
         "width": 168,
-        "placement": "bottom edge of expanded sidebar, no frame; hidden with collapsed navigation",
+        "placement": "leading and bottom edges of expanded sidebar; connection light overlays the bottom-trailing corner; hidden with collapsed navigation",
         "horizontalOffset": 0,
-        "verticalOffset": 16
+        "verticalOffset": 16,
+        "imageRegionHeight": 160
       },
       "verification": "Native Windows x64 publish and packaged backend startup passed. Preview 20260921T105910Z launched; overview alignment, compact toolbar and centered, lowered mascot with bottom clipping observed. Final details/settings interactions and dark/English/narrow visual checks remain pending; not upstream acceptance.",
       "toolbarIcons": {
@@ -207,6 +225,15 @@
         "minimumHeight": 36,
         "fieldHelpButton": 28,
         "fieldHelpSymbol": 14
+      },
+      "activityToolbar": "native SelectorBar on the leading side, refresh and more trailing; full-width divider above split view",
+      "connectionIndicator": {
+        "diameter": 8,
+        "hoverTarget": 24,
+        "trailingInset": 16,
+        "bottomInset": 10,
+        "states": "ready green, connecting amber, failed red, disconnected secondary",
+        "description": "localized tooltip and automation name; no visible text"
       }
     }
   },

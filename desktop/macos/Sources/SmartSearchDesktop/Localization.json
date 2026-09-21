@@ -16162,5 +16162,37 @@
   "配置已保存，但暂未读回最新状态。请刷新后继续编辑。": [
     "配置已保存，但暂未读回最新状态。请刷新后继续编辑。",
     "Configuration was saved, but the latest state could not be read. Refresh before editing again."
+  ],
+  "恢复默认配置目录": [
+    "恢复默认配置目录",
+    "Restore Default Folder"
+  ],
+  "管理语言、外观和配置目录。": [
+    "管理语言、外观和配置目录。",
+    "Manage language, appearance, and configuration folders."
+  ],
+  "跟随系统外观，或单独选择浅色、深色模式。": [
+    "跟随系统外观，或单独选择浅色、深色模式。",
+    "Follow the system appearance, or choose light or dark mode for this app."
+  ],
+  "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。": [
+    "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。",
+    "All Agents share the independent CLI. Prepare it first, then choose the Agents whose Skills you want to update."
+  ],
+  "管理运行环境…": [
+    "管理运行环境…",
+    "Manage runtime…"
+  ],
+  "待安装的文件": [
+    "待安装的文件",
+    "Files to install"
+  ],
+  "内容不同的文件": [
+    "内容不同的文件",
+    "Files with different content"
+  ],
+  "这里只查看文件状态。点击“更新所选 Skills”后才会安装或更新文件。": [
+    "这里只查看文件状态。点击“更新所选 Skills”后才会安装或更新文件。",
+    "This view only shows file status. Files are installed or updated when you choose Update selected Skills."
   ]
 }

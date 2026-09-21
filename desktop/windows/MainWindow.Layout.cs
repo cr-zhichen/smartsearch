@@ -256,6 +256,7 @@ public sealed partial class MainWindow
     private void UpdateWorkspaceHeader()
     {
         if (WorkspaceTitle is null) return;
+        UpdateConnectionStatus();
         WorkspaceTitle.Text = _currentPage switch
         {
             "providers" => L("服务商"), "search" => L("搜索与研究"), "activity" => L("活动"),
@@ -267,5 +268,31 @@ public sealed partial class MainWindow
         ToolTipService.SetToolTip(FeedbackButton, L("查看操作提示"));
         AutomationProperties.SetName(RefreshWorkspaceButton, L("刷新本机状态"));
         ToolTipService.SetToolTip(RefreshWorkspaceButton, L("刷新本机状态"));
+    }
+
+    private void UpdateConnectionStatus()
+    {
+        if (_backend is null || ConnectionIndicator is null) return;
+        var connected = _backend.IsConnected && _state is not null;
+        var label = L("未连接");
+        var style = "ConnectionIdleStyle";
+        if (_connecting)
+        {
+            label = L("正在连接");
+            style = "ConnectionPendingStyle";
+        }
+        else if (connected)
+        {
+            label = L("已连接");
+            style = "ConnectionReadyStyle";
+        }
+        else if (_connectionFailed)
+        {
+            label = L("后端失联");
+            style = "ConnectionFailedStyle";
+        }
+        ConnectionDot.Style = UiStyle(style);
+        AutomationProperties.SetName(ConnectionIndicator, L("后端状态：{0}", label));
+        ToolTipService.SetToolTip(ConnectionIndicator, L("后端状态：{0}", label));
     }
 }

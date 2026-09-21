@@ -8,6 +8,7 @@ namespace SmartSearch.Desktop;
 public sealed partial class MainWindow
 {
     private StackPanel? _commandOptions;
+    private Button? _commandOptionsButton;
     private ContentControl? _searchResultHost;
     private ScrollViewer? _searchResultContent;
 
@@ -30,8 +31,16 @@ public sealed partial class MainWindow
         form.Children.Add(_commandPicker);
         _commandFieldPanel = new StackPanel { Spacing = 16 };
         form.Children.Add(_commandFieldPanel);
-        form.Children.Add(ActionButton(L("运行"), StartSelectedCommandAsync, primary: true, busyText: L("运行中…"),
-            dynamicKey: () => "run:" + _selectedCommandId, label: () => L("开始 {0}", _commandPicker.SelectedItem is CommandOption command ? command.Label : L("搜索"))));
+        _commandOptionsButton = DetailsButton(L("搜索选项…"), async () =>
+        {
+            if (_commandOptions is not null) await ShowDetailsAsync(L("搜索选项…"), _commandOptions);
+            CaptureCommandInputs();
+        });
+        _commandOptionsButton.Visibility = Visibility.Collapsed;
+        form.Children.Add(ActionRow(
+            ActionButton(L("运行"), StartSelectedCommandAsync, primary: true, busyText: L("运行中…"),
+                dynamicKey: () => "run:" + _selectedCommandId, label: () => L("开始 {0}", _commandPicker.SelectedItem is CommandOption command ? command.Label : L("搜索"))),
+            _commandOptionsButton));
 
         _searchResultHost = new ContentControl { HorizontalContentAlignment = HorizontalAlignment.Stretch, VerticalContentAlignment = VerticalAlignment.Stretch };
         _resultText = new TextBox

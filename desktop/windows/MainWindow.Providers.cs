@@ -89,7 +89,8 @@ public sealed partial class MainWindow
             Content = Secondary(title), IsEnabled = false, IsTabStop = false, Padding = new Thickness(12, 16, 12, 4)
         });
         bool Matches(string text) => string.IsNullOrWhiteSpace(_providerFilter) || text.Contains(_providerFilter.Trim(), StringComparison.CurrentCultureIgnoreCase);
-        if (fields.Any(field => Text(field, "section") == "routing")) AddItem("section:routing", L("意图路由"));
+        if (fields.Any(field => Text(field, "section") == "routing"))
+            AddItem("section:routing", L("意图路由"), ChoiceLabel("SMART_SEARCH_INTENT_ROUTER", EffectiveConfigurationValue("SMART_SEARCH_INTENT_ROUTER")));
         var providers = fields.Where(field => Text(field, "provider").Length > 0).GroupBy(field => Text(field, "provider"))
             .Where(group => Matches(group.Key + " " + ProviderPurpose(group.Key, group))).ToList();
         var categories = providers.Select(group => ProviderCapabilities(group.Key, group).FirstOrDefault() ?? "other").Distinct().ToList();

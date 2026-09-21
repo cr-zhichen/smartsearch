@@ -64,6 +64,7 @@ public sealed partial class MainWindow : Window
     private nint _windowHandle;
     private string _currentPage = "overview";
     private bool _started;
+    private bool _connectionFailed;
     private bool _preferenceReadFailed;
     private bool _activityRefreshing;
     private bool _settingActivityEnabled;
@@ -131,6 +132,7 @@ public sealed partial class MainWindow : Window
     {
         if (EnvironmentBusy || _operations.IsBusy("updates-cli") || Text(Property(_updates, "cli_update"), "status") == "running") return;
         _connecting = true;
+        _connectionFailed = false;
         RenderCurrentPage();
         try
         {
@@ -141,6 +143,7 @@ public sealed partial class MainWindow : Window
         }
         catch (Exception error)
         {
+            _connectionFailed = true;
             ShowNotice(L("后端不可用"), SafeMessage(error), InfoBarSeverity.Error);
         }
         _connecting = false;
@@ -400,12 +403,9 @@ public sealed partial class MainWindow : Window
         {
             _commandOptions = new StackPanel { Spacing = 16 };
             foreach (var field in advanced) AddCommandField(field, _commandOptions);
-            _commandFieldPanel.Children.Add(DetailsButton(L("搜索选项…"), async () =>
-            {
-                if (_commandOptions is not null) await ShowDetailsAsync(L("搜索选项…"), _commandOptions);
-                CaptureCommandInputs();
-            }));
         }
+        if (_commandOptionsButton is not null)
+            _commandOptionsButton.Visibility = advanced.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         RefreshActionButtons();
     }
 
@@ -660,10 +660,20 @@ public sealed partial class MainWindow : Window
     private async Task SelectConfigDirectoryAsync()
     {
         var folder = await PickFolderAsync();
-        if (folder is null)
-            return;
+        if (folder is not null) await SwitchConfigDirectoryAsync(folder.Path);
+    }
+
+    private Task RestoreDefaultConfigDirectoryAsync()
+    {
+        var directory = Text(_state, "default_config_dir");
+        return directory.Length > 0 && !Bool(_state, "is_default_config_dir")
+            ? SwitchConfigDirectoryAsync(directory) : Task.CompletedTask;
+    }
+
+    private async Task SwitchConfigDirectoryAsync(string directory)
+    {
         if (_providerDraft.Count > 0 && !await ConfirmAsync(L("切换配置目录"), L("当前还有未保存的修改。切换目录将放弃这些修改。"), L("放弃并切换"))) return;
-        var result = await RequestAsync("profile.select", new { config_dir = folder.Path }, L("无法切换配置目录。"));
+        var result = await RequestAsync("profile.select", new { config_dir = directory }, L("无法切换配置目录。"));
         if (result is not null)
         {
             _providerDraft.Clear();
@@ -868,6 +878,7 @@ public sealed partial class MainWindow : Window
     private void OnBackendDisconnected(object? sender, string message) =>
         DispatcherQueue.TryEnqueue(() =>
         {
+            _connectionFailed = true;
             _activityTimer.Stop();
             _operations.Clear();
             _environment = JsonSerializer.SerializeToElement(new { status = "failed", busy = false, can_cancel = false,
@@ -1205,13 +1216,13 @@ public sealed partial class MainWindow : Window
     private static TextBlock OfflineHint() => Secondary(L("本地引擎未连接。请先重新连接，再读取配置和运行任务。"));
 
     private Button ActionButton(string text, Func<Task> action, bool primary = false, string? operationKey = null,
-        string? busyText = null, Func<string>? label = null, Func<string>? dynamicKey = null)
+        string? busyText = null, Func<string>? label = null, Func<string>? dynamicKey = null, Func<bool>? enabled = null)
     {
         busyText ??= L("处理中…");
         var button = new Button { MinHeight = 36, HorizontalAlignment = HorizontalAlignment.Left };
         if (primary) button.Style = UiStyle("AccentButtonStyle");
         var actionKey = operationKey ?? "ui:" + Guid.NewGuid().ToString("N");
-        var binding = new ActionBinding(dynamicKey ?? (() => actionKey), label ?? (() => text), busyText);
+        var binding = new ActionBinding(dynamicKey ?? (() => actionKey), label ?? (() => text), busyText, enabled);
         _actionButtons[button] = binding;
         button.Loaded += (_, _) => { _actionButtons[button] = binding; UpdateActionButton(button, binding); };
         button.Unloaded += (_, _) => _actionButtons.Remove(button);
@@ -1244,6 +1255,7 @@ public sealed partial class MainWindow : Window
             Bool(_environment, "busy") && key == "environment-" + Text(_environment, "operation");
         var allowed = key switch
         {
+            "profile" => _backend.IsConnected,
             "config-save" or "config-discard" => _backend.IsConnected && !_configSnapshotStale && _providerDraft.Count > 0,
             "config-preview" => _backend.IsConnected && !_configSnapshotStale,
             "result-copy" or "result-export" => !string.IsNullOrWhiteSpace(_lastResultExport),
@@ -1262,7 +1274,7 @@ public sealed partial class MainWindow : Window
         };
         if (EnvironmentBusy && new[] { "updates-cli", "updates-install", "connect", "profile", "skills-install", "cli-enable" }.Contains(key)) allowed = false;
         if (Bool(_skills, "busy") && new[] { "updates-cli", "updates-install", "connect", "profile", "environment-check", "environment-verify", "environment-install", "cli-enable" }.Contains(key)) allowed = false;
-        button.IsEnabled = allowed && !busy && !(new[] { "state", "config-save", "config-preview", "config-discard", "profile" }.Contains(key) && ConfigOperationBusy);
+        button.IsEnabled = allowed && (binding.Enabled?.Invoke() ?? true) && !busy && !(new[] { "state", "config-save", "config-preview", "config-discard", "profile" }.Contains(key) && ConfigOperationBusy);
         var label = busy ? binding.BusyText : binding.Label();
         if (busy)
             button.Content = new StackPanel
@@ -1285,6 +1297,8 @@ public sealed partial class MainWindow : Window
                 _saveSummary.Text = count > 0 ? L("有 {0} 项未保存修改 · 密钥留空会保留原值", count) : L("没有未保存的修改 · 测试不会自动保存配置");
             foreach (var group in ConfigurationFields.Where(field => Text(field, "provider").Length > 0).GroupBy(field => Text(field, "provider")))
                 if (_providerRowStatus.TryGetValue("provider:" + group.Key, out var status)) status.Text = ProviderListStatus(group.Key, group);
+            if (_providerRowStatus.TryGetValue("section:routing", out var routingStatus))
+                routingStatus.Text = ChoiceLabel("SMART_SEARCH_INTENT_ROUTER", EffectiveConfigurationValue("SMART_SEARCH_INTENT_ROUTER"));
             foreach (var editor in _fieldEditors.Values)
             {
                 editor.Input.IsEnabled = !_operations.IsBusy("config-save");
@@ -1788,7 +1802,7 @@ public sealed partial class MainWindow : Window
     }
 
     private sealed record FieldDraft(string? Text, bool IsChecked, bool Clear);
-    private sealed record ActionBinding(Func<string> Key, Func<string> Label, string BusyText);
+    private sealed record ActionBinding(Func<string> Key, Func<string> Label, string BusyText, Func<bool>? Enabled);
     private sealed record ActivityRowView(ListViewItem Row, Action<JsonElement> Update);
 
     private sealed record DraftChange(Dictionary<string, object?> Set, List<string> Unset);

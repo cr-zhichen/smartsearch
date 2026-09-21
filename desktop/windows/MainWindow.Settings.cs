@@ -45,9 +45,14 @@ public sealed partial class MainWindow
         preferences.Children.Add(Divider());
         preferences.Children.Add(SettingRow(L("外观"), L("跟随系统外观，或单独选择浅色、深色模式。"), theme));
         preferences.Children.Add(Divider());
+        var directoryActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        directoryActions.Children.Add(ActionButton(L("选择配置目录…"), SelectConfigDirectoryAsync, operationKey: "profile", busyText: L("切换中…")));
+        directoryActions.Children.Add(ActionButton(L("恢复默认配置目录"), RestoreDefaultConfigDirectoryAsync,
+            operationKey: "profile", busyText: L("切换中…"),
+            enabled: () => Text(_state, "default_config_dir").Length > 0 && !Bool(_state, "is_default_config_dir")));
         preferences.Children.Add(SettingRow(L("当前配置目录"), Text(_state, "config_dir", Text(_state, "config_path", L("未连接"))),
-            ActionButton(L("选择配置目录…"), SelectConfigDirectoryAsync, operationKey: "profile", busyText: L("切换中…"))));
-        panel.Children.Add(SettingsSection(L("通用"), L("管理语言和配置目录。"), Card(preferences)));
+            directoryActions));
+        panel.Children.Add(SettingsSection(L("通用"), L("管理语言、外观和配置目录。"), Card(preferences)));
 
         _autoUpdateSwitch = CompactSwitch(L("自动检查更新"), Bool(_updates, "auto_check", true));
         _autoUpdateSwitch.Toggled += async (_, _) =>

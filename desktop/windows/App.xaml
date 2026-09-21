@@ -81,6 +81,11 @@
         <Setter Property="BorderThickness" Value="0,1,0,0" />
         <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
       </Style>
+      <Style x:Key="WorkspaceToolbarStyle" TargetType="Border">
+        <Setter Property="Padding" Value="24,12" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="BorderBrush" Value="{ThemeResource DividerStrokeColorDefaultBrush}" />
+      </Style>
       <Style x:Key="ToolbarIconButtonStyle" TargetType="Button">
         <Setter Property="Width" Value="36" />
         <Setter Property="Height" Value="36" />
@@ -100,6 +105,21 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
         <Setter Property="CornerRadius" Value="14" />
+      </Style>
+      <Style x:Key="ConnectionIdleStyle" TargetType="Ellipse">
+        <Setter Property="Width" Value="8" />
+        <Setter Property="Height" Value="8" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Fill" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+      </Style>
+      <Style x:Key="ConnectionReadyStyle" TargetType="Ellipse" BasedOn="{StaticResource ConnectionIdleStyle}">
+        <Setter Property="Fill" Value="{ThemeResource SystemFillColorSuccessBrush}" />
+      </Style>
+      <Style x:Key="ConnectionPendingStyle" TargetType="Ellipse" BasedOn="{StaticResource ConnectionIdleStyle}">
+        <Setter Property="Fill" Value="{ThemeResource SystemFillColorCautionBrush}" />
+      </Style>
+      <Style x:Key="ConnectionFailedStyle" TargetType="Ellipse" BasedOn="{StaticResource ConnectionIdleStyle}">
+        <Setter Property="Fill" Value="{ThemeResource SystemFillColorCriticalBrush}" />
       </Style>
       <Style x:Key="StatusNeutralStyle" TargetType="ContentControl">
         <Setter Property="Padding" Value="8,4" />

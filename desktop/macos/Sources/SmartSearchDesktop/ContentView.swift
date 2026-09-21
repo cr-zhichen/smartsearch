@@ -30,22 +30,22 @@ struct ContentView: View {
             .navigationTitle("Smart Search")
             .navigationSplitViewColumnWidth(220)
             .safeAreaInset(edge: .bottom, spacing: 0) {
-                HStack {
-                    ConnectionIndicator(state: model.connection)
-                        .font(.caption)
-                    Spacer()
-                    if model.connection == .failed || model.connection == .disconnected {
-                        Button {
-                            Task { await model.reconnect() }
-                        } label: {
-                            Label(L("重新连接"), systemImage: "arrow.clockwise")
-                                .labelStyle(.iconOnly)
-                        }
-                        .buttonStyle(.borderless)
-                        .help(L("重新连接"))
+                ZStack(alignment: .bottomLeading) {
+                    if let mascot = AppBranding.mascot {
+                        Image(nsImage: mascot)
+                            .resizable().scaledToFit()
+                            .frame(width: 168, height: 168)
+                            .offset(y: 16)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(height: 160, alignment: .bottom)
+                            .clipped()
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
                     }
+                    ConnectionIndicator(state: model.connection, compact: true)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                        .padding(.horizontal, 16).padding(.vertical, 10)
                 }
-                .padding(16)
             }
         } detail: {
             destinationView
@@ -168,14 +168,25 @@ private struct OperationFeedback: View {
 
 private struct ConnectionIndicator: View {
     let state: AppModel.ConnectionState
+    var compact = false
 
     var body: some View {
-        Label {
-            Text(state.title).foregroundStyle(.secondary)
-        } icon: {
-            Image(systemName: state.symbol).foregroundStyle(tint)
+        Group {
+            if compact {
+                Circle().fill(tint).frame(width: 8, height: 8)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            } else {
+                Label {
+                    Text(state.title).foregroundStyle(.secondary)
+                } icon: {
+                    Image(systemName: state.symbol).foregroundStyle(tint)
+                }
+            }
         }
-            .accessibilityLabel(L("后端状态：{0}", "\(state.title)"))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L("后端状态：{0}", state.title))
+        .help(L("后端状态：{0}", state.title))
     }
 
     private var tint: Color {
@@ -335,10 +346,9 @@ private struct ProvidersView: View {
                         TextField(L("查找服务商"), text: $filter)
                             .textFieldStyle(.roundedBorder).padding(12)
                         List(selection: $selection) {
-                            if state.fields.contains(where: { $0.key == "SMART_SEARCH_INTENT_ROUTER" }) {
-                                Text(L("意图路由"))
-                                    .fontWeight(.medium)
-                                    .padding(.vertical, 5)
+                            if let field = state.fields.first(where: { $0.key == "SMART_SEARCH_INTENT_ROUTER" }) {
+                                navigationRow(L("意图路由"), subtitle: configurationChoiceLabel(
+                                    model.configDraft[field.key] ?? state.effectiveValue(for: field), for: field))
                                     .tag(ConfigurationRoute.section("routing"))
                                     .listRowSeparator(.hidden)
                             }
@@ -387,16 +397,21 @@ private struct ProvidersView: View {
     }
 
     private func providerRow(_ group: ProviderFieldGroup, state: DesktopState) -> some View {
+        navigationRow(group.id, subtitle: providerIsConfigured(group, state: state) ? L("已配置") : L("未配置"),
+                      hasDraft: group.fields.contains { model.configDraft[$0.key] != nil || model.clearSecretKeys.contains($0.key) })
+    }
+
+    private func navigationRow(_ title: String, subtitle: String, hasDraft: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Text(group.id).fontWeight(.medium)
-                if group.fields.contains(where: { model.configDraft[$0.key] != nil || model.clearSecretKeys.contains($0.key) }) {
+                Text(title).fontWeight(.medium)
+                if hasDraft {
                     Image(systemName: "pencil.circle")
                         .foregroundStyle(.orange).help(L("有未保存修改"))
                         .accessibilityLabel(L("有未保存修改"))
                 }
             }
-            Text(providerIsConfigured(group, state: state) ? L("已配置") : L("未配置"))
+            Text(subtitle)
                 .font(.caption).foregroundStyle(.secondary)
         }
         .padding(.vertical, 5)
@@ -1269,11 +1284,12 @@ private struct ActivityView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
+                Text(L("活动筛选"))
                 Picker(L("活动筛选"), selection: $filter) {
                     Text(L("全部")).tag("all")
                     Text(L("运行中")).tag("running")
                     Text(L("失败")).tag("failed")
-                }.pickerStyle(.segmented).frame(maxWidth: 320)
+                }.labelsHidden().pickerStyle(.segmented).frame(width: 190)
                 Spacer()
                 Button(L("刷新")) { Task { await model.refreshActivity(repeatFeedback: true) } }.disabled(model.isBusy.contains("activity"))
                 Menu {
@@ -1282,7 +1298,7 @@ private struct ActivityView: View {
                         .disabled(model.isBusy.contains("clear-activity"))
                 } label: { Image(systemName: "ellipsis.circle") }
                 .menuStyle(.borderlessButton).fixedSize().help(L("活动选项"))
-            }.padding(20)
+            }.padding(.horizontal, 16).padding(.vertical, 12)
             if !model.activityEnabled || !model.activityErrors.isEmpty {
                 HStack {
                     Label(model.activityErrors.isEmpty ? L("活动记录已暂停") : L("部分活动目录无法读取"), systemImage: "exclamationmark.circle")
@@ -1602,57 +1618,68 @@ private struct IntegrationView: View {
     var body: some View {
         if model.state != nil {
             DesktopPage(L("更新 Skills"), subtitle: L("选择要接入的 Agent，再更新对应的技能文件。")) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(L("技能来源")).font(.headline)
-                        Text(skills["source"]?["version"]?.stringValue.map { "npm " + $0 } ?? L("尚未检查"))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Button { Task { await model.skillsAction("skills.check") } } label: {
-                        BusyLabel(text: L("检查最新 Skills"), busyText: L("检查中…"), busy: model.skillsChecking)
-                    }.disabled(unavailable)
-                    Button { sheet = .preferences } label: { Image(systemName: "gearshape") }
-                        .help(L("检查偏好"))
-                }
-                if skills["cached"]?.boolValue == true {
-                    Text(L("显示上次缓存；请检查最新 Skills 后再更新。")).font(.callout).foregroundStyle(.secondary)
-                }
-                if let error = skills["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.red) }
-                if let compatibility = skills["compatibility"]?.stringValue, !compatibility.isEmpty {
+                DesktopPanel {
                     HStack {
-                        Text(compatibility).font(.callout).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L("技能来源")).font(.headline)
+                            Text(skills["source"]?["version"]?.stringValue.map { "npm " + $0 } ?? L("尚未检查"))
+                                .foregroundStyle(.secondary)
+                        }
                         Spacer()
-                        Button(L("准备运行环境…")) { sheet = .environment }
+                        Button { Task { await model.skillsAction("skills.check") } } label: {
+                            BusyLabel(text: L("检查最新 Skills"), busyText: L("检查中…"), busy: model.skillsChecking)
+                        }.disabled(unavailable)
+                        Button { sheet = .preferences } label: { Image(systemName: "gearshape") }
+                            .help(L("检查偏好"))
+                    }
+                    if skills["cached"]?.boolValue == true {
+                        Text(L("显示上次缓存；请检查最新 Skills 后再更新。")).font(.callout).foregroundStyle(.secondary)
+                    }
+                    if let error = skills["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.red) }
+                    if let compatibility = skills["compatibility"]?.stringValue, !compatibility.isEmpty {
+                        Text(compatibility).font(.callout).foregroundStyle(.secondary)
                     }
                 }
-                VStack(spacing: 0) {
-                    ForEach(skills["targets"]?.arrayValue ?? [], id: \.self) { target in
-                        let id = target["target"]?.stringValue ?? ""
-                        let name = target["label"]?.displayString ?? id
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 5) {
-                                Text(name).font(.body.weight(.medium))
-                                Text(skillStatus(target)).font(.caption).foregroundStyle(.secondary)
-                                if let error = target["error"]?.stringValue, !error.isEmpty {
-                                    Text(error).font(.caption).foregroundStyle(.red)
+                DesktopPanel(compact: true) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(L("运行环境")).font(.headline)
+                            Text(L("所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。"))
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(L("管理运行环境…")) { sheet = .environment }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(L("选择 Agent")).font(.headline)
+                    Text(L("状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。"))
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                DesktopPanel {
+                    VStack(spacing: 0) {
+                        ForEach(skills["targets"]?.arrayValue ?? [], id: \.self) { target in
+                            let id = target["target"]?.stringValue ?? ""
+                            let name = target["label"]?.displayString ?? id
+                            HStack(spacing: 12) {
+                                VStack(alignment: .leading, spacing: 5) {
+                                    Text(name).font(.body.weight(.medium))
+                                    Text(skillStatus(target)).font(.caption).foregroundStyle(.secondary)
+                                    if let error = target["error"]?.stringValue, !error.isEmpty {
+                                        Text(error).font(.caption).foregroundStyle(.red)
+                                    }
                                 }
-                            }
-                            Spacer()
-                            Button { sheet = .files(target) } label: { Image(systemName: "info.circle") }
-                                .buttonStyle(.borderless).help(L("查看 {0} 的文件详情", name))
-                            Toggle(name, isOn: Binding(
-                                get: { model.selectedSkillTargets.contains(id) },
-                                set: { if $0 { model.selectedSkillTargets.insert(id) } else { model.selectedSkillTargets.remove(id) } }))
-                                .labelsHidden().disabled(model.skillsBusy)
-                        }.padding(.vertical, 14)
-                        Divider()
+                                Spacer()
+                                Button { sheet = .files(target) } label: { Image(systemName: "info.circle") }
+                                    .buttonStyle(.borderless).help(L("查看 {0} 的文件详情", name))
+                                Toggle(name, isOn: Binding(
+                                    get: { model.selectedSkillTargets.contains(id) },
+                                    set: { if $0 { model.selectedSkillTargets.insert(id) } else { model.selectedSkillTargets.remove(id) } }))
+                                    .labelsHidden().disabled(model.skillsBusy)
+                            }.padding(.vertical, 14)
+                            if target != skills["targets"]?.arrayValue?.last { Divider() }
+                        }
                     }
-                }
-                HStack {
-                    Button(L("刷新本机状态")) { Task { await model.refreshSkillStatus() } }.disabled(unavailable)
-                    Spacer()
-                    Button(L("运行环境…")) { sheet = .environment }
                 }
                 ForEach(skills["result"]?["installed"]?.arrayValue ?? [], id: \.self) { receipt in
                     Label((receipt["target"]?.displayString ?? "") + L("：已同步"), systemImage: "checkmark.circle").foregroundStyle(.green)
@@ -1671,11 +1698,14 @@ private struct IntegrationView: View {
                         Text(L("已选择 {0} 个 Agent", "\(model.selectedSkillTargets.count)"))
                             .font(.callout).foregroundStyle(.secondary)
                         Spacer()
+                        Button { Task { await model.refreshSkillStatus() } } label: {
+                            BusyLabel(text: L("刷新本机状态"), busyText: L("刷新中…"), busy: model.isBusy.contains("skills.catalog"))
+                        }.disabled(unavailable || model.isBusy.contains("skills.catalog"))
                         Button { Task { await model.installSelectedSkills() } } label: {
                             BusyLabel(text: L("更新所选 Skills"), busyText: L("更新中…"), busy: model.skillsBusy)
                         }.buttonStyle(.borderedProminent)
                             .disabled(unavailable || model.selectedSkillTargets.isEmpty || skills["can_sync"]?.boolValue != true)
-                    }.padding(16)
+                    }.padding(.horizontal, DesktopMetrics.pagePadding).padding(.vertical, 12)
                 }.background(DesktopAppearance.contentBackground)
             }
             .sheet(item: $sheet) { selected in
@@ -1698,8 +1728,16 @@ private struct IntegrationView: View {
                         KeyValueLine(label: L("安装位置"), value: target["path"]?.displayString ?? L("未发现"))
                         Text(L("状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。"))
                             .font(.callout).foregroundStyle(.secondary)
-                        let changed = (target["stale_files"]?.arrayValue ?? []) + (target["missing_files"]?.arrayValue ?? [])
-                        if !changed.isEmpty { Text(L("将同步：{0}", changed.map(\.displayString).joined(separator: ", "))) }
+                        ForEach(["missing_files", "stale_files"], id: \.self) { key in
+                            let files = target[key]?.arrayValue ?? []
+                            if !files.isEmpty {
+                                Text(key == "missing_files" ? L("待安装的文件") : L("内容不同的文件")).font(.headline)
+                                Text(files.map(\.displayString).joined(separator: "\n"))
+                                    .font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                            }
+                        }
+                        Text(L("这里只查看文件状态。点击“更新所选 Skills”后才会安装或更新文件。"))
+                            .font(.callout).foregroundStyle(.secondary)
                         ForEach(target["legacy_locations"]?.arrayValue ?? [], id: \.self) { legacy in
                             Text(L("历史副本，保留：{0}", legacy["path"]?.displayString ?? "")).font(.caption)
                         }
@@ -1722,6 +1760,7 @@ private struct IntegrationView: View {
 
 private struct SettingsAboutView: View {
     @ObservedObject var model: AppModel
+    @AppStorage(AppearancePreference.defaultsKey) private var appearance = AppearancePreference.system
     @State private var showEnvironment = false
     @State private var confirmEnableCLI = false
 
@@ -1729,7 +1768,7 @@ private struct SettingsAboutView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 applicationInfo
-                settingsSection(L("通用"), subtitle: L("管理语言和配置目录。")) {
+                settingsSection(L("通用"), subtitle: L("管理语言、外观和配置目录。")) {
                     generalSettings
                 }
                 settingsSection(L("App 更新"), subtitle: L("更新 App 和内置引擎。")) {
@@ -1822,6 +1861,22 @@ private struct SettingsAboutView: View {
             Divider()
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
+                    Text(L("外观")).fontWeight(.medium)
+                    Text(L("跟随系统外观，或单独选择浅色、深色模式。"))
+                        .font(.callout).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Picker(L("外观"), selection: $appearance) {
+                    ForEach(AppearancePreference.allCases) { preference in
+                        Text(preference.title).tag(preference)
+                    }
+                }
+                .labelsHidden().frame(width: 168, alignment: .trailing)
+            }
+            Divider()
+            HStack(alignment: .top, spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(L("当前配置目录")).fontWeight(.medium)
                     Text(model.state?.configDirectory ?? L("后端尚未提供"))
                         .font(.system(.callout, design: .monospaced))
@@ -1829,10 +1884,16 @@ private struct SettingsAboutView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button(model.isBusy.contains("profile") ? L("切换中…") : L("选择配置目录…"), action: model.chooseConfigDirectory)
-                    .fixedSize()
-                    .frame(width: 168, alignment: .trailing)
-                    .disabled(model.connection != .ready || model.configOperationBusy)
+                HStack(spacing: 8) {
+                    Button(model.isBusy.contains("profile") ? L("切换中…") : L("选择配置目录…"), action: model.chooseConfigDirectory)
+                    Button(L("恢复默认配置目录")) {
+                        Task { await model.restoreDefaultConfigDirectory() }
+                    }
+                    .disabled(model.state?.defaultConfigDirectory == nil || model.state?.isDefaultConfigDirectory == true)
+                }
+                .fixedSize()
+                .frame(minWidth: 168, alignment: .trailing)
+                .disabled(model.connection != .ready || model.configOperationBusy || model.environmentBusy || model.skillsBusy)
             }
         }
     }

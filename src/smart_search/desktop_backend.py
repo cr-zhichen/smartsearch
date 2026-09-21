@@ -118,8 +118,11 @@ class Backend:
 
     def state(self):
         data = ui_api.state()
+        default_directory = config._default_config_dir().resolve()
         data.update(protocol_version=PROTOCOL_VERSION, version=cli._get_version(), generation=self.generation,
-                    config_dir=self.directory, commands=command_catalog(), activity=self.activity(), cli=self.cli_status(),
+                    config_dir=self.directory, default_config_dir=str(default_directory),
+                    is_default_config_dir=config._same_config_dir(Path(self.directory), default_directory),
+                    commands=command_catalog(), activity=self.activity(), cli=self.cli_status(),
                     updates=self.updates.state, environment=self.environment.state, skills=self.skills.state, language=self.language)
         checks = {}
         for run in sorted(self.runs.values(), key=lambda item: item.get("finished_at", 0)):

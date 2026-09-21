@@ -16259,6 +16259,10 @@
     "部分活动目录不可读取。请检查观察设置。",
     "Some activity directories could not be read. Check observation settings."
   ],
+  "恢复默认配置目录": [
+    "恢复默认配置目录",
+    "Restore Default Folder"
+  ],
   "待安装的文件": [
     "待安装的文件",
     "Files to install"
@@ -16294,5 +16298,13 @@
   "跟随系统外观，或单独选择浅色、深色模式。": [
     "跟随系统外观，或单独选择浅色、深色模式。",
     "Follow the system appearance, or choose light or dark mode for this app."
+  ],
+  "管理语言、外观和配置目录。": [
+    "管理语言、外观和配置目录。",
+    "Manage language, appearance, and configuration folders."
+  ],
+  "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。": [
+    "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。",
+    "All Agents share the independent CLI. Prepare it first, then choose the Agents whose Skills you want to update."
   ]
 }

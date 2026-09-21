@@ -322,6 +322,12 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func restoreDefaultConfigDirectory() async {
+        guard let directory = state?.defaultConfigDirectory, !directory.isEmpty,
+              state?.isDefaultConfigDirectory == false else { return }
+        await selectProfile(directory)
+    }
+
     func addObservedDirectory() {
         let panel = NSOpenPanel()
         panel.title = L("添加要观察的配置目录")

@@ -27,10 +27,10 @@ public sealed partial class MainWindow
             ActionButton(L("检查最新 Skills"), () => SkillsRequestAsync("skills.check"), operationKey: "skills-check", busyText: L("检查中…")),
             DetailsButton(L("检查详情与偏好"), ShowSkillPreferencesAsync)));
         panel.Children.Add(Card(source));
+        panel.Children.Add(Card(SettingRow(L("运行环境"), L("所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。"),
+            ActionButton(L("管理运行环境…"), OpenRuntimeSettingsAsync))));
         panel.Children.Add(SettingsSection(L("选择 Agent"), L("状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。"), Card(_skillRows)));
         panel.Children.Add(_skillResult);
-        panel.Children.Add(SettingRow(L("运行环境"), L("所有 Agent 共用独立 CLI。此处只准备运行环境，Skills 在上方单独更新。"),
-            ActionButton(L("管理运行环境…"), OpenRuntimeSettingsAsync)));
         _skillSelectionSummary = Secondary(string.Empty);
         var footer = WorkspaceFooter(_skillSelectionSummary,
             ActionRow(ActionButton(L("刷新本机状态"), LoadSkillsAsync, operationKey: "skills-status", busyText: L("刷新中…")),

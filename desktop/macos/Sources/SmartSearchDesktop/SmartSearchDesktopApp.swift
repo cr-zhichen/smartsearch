@@ -5,10 +5,14 @@ import SwiftUI
 struct SmartSearchDesktopApp: App {
     @NSApplicationDelegateAdaptor(ApplicationDelegate.self) private var applicationDelegate
     @StateObject private var model = AppModel()
+    @AppStorage(AppearancePreference.defaultsKey) private var appearance = AppearancePreference.system
 
     var body: some Scene {
         Window("Smart Search", id: "main") {
             ContentView(model: model)
+                .preferredColorScheme(appearance.colorScheme)
+                .onAppear { appearance.applyToApplication() }
+                .onChange(of: appearance) { $0.applyToApplication() }
                 .frame(minWidth: 920, minHeight: 620)
                 .background(WindowConfigurator { window in
                     applicationDelegate.configure(window: window, model: model)
@@ -144,6 +148,9 @@ private final class MainWindowDelegate: NSObject, NSWindowDelegate {
 }
 
 enum AppBranding {
+    static let mascot: NSImage? = Bundle.main.url(forResource: "mascot", withExtension: "png")
+        .flatMap { NSImage(contentsOf: $0) }
+
     static let icon: NSImage = {
         if let url = Bundle.main.url(forResource: "SmartSearch", withExtension: "icns"),
            let image = NSImage(contentsOf: url) {

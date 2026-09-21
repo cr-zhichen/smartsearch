@@ -24,13 +24,17 @@ public sealed partial class MainWindow
 
     private UIElement BuildActivityPage()
     {
-        var filter = new ComboBox { MinWidth = 128 };
-        foreach (var label in new[] { L("全部"), L("运行中"), L("失败") }) filter.Items.Add(label);
-        filter.SelectedIndex = _activityFilter switch { "running" => 1, "failed" => 2, _ => 0 };
+        var filter = new SelectorBar { MinHeight = 36, VerticalAlignment = VerticalAlignment.Center };
+        foreach (var (value, label) in new[] { ("all", L("全部")), ("running", L("运行中")), ("failed", L("失败")) })
+        {
+            var item = new SelectorBarItem { Text = label, Tag = value };
+            filter.Items.Add(item);
+            if (value == _activityFilter) filter.SelectedItem = item;
+        }
         AutomationProperties.SetName(filter, L("筛选活动"));
         filter.SelectionChanged += (_, _) =>
         {
-            _activityFilter = filter.SelectedIndex switch { 1 => "running", 2 => "failed", _ => "all" };
+            _activityFilter = filter.SelectedItem?.Tag as string ?? "all";
             if (_activitySnapshot is { } snapshot) RenderActivity(snapshot);
         };
         var more = new MenuFlyout();
@@ -40,10 +44,18 @@ public sealed partial class MainWindow
         clear.Click += async (_, _) => await RunOperationAsync("activity-clear", ClearActivityAsync);
         more.Items.Add(preferences);
         more.Items.Add(clear);
-        var toolbar = ActionRow(filter,
-            ActionButton(L("立即刷新"), () => RefreshActivityAsync(silent: false), operationKey: "activity-refresh", busyText: L("刷新中…")),
+        var toolbar = new Grid { ColumnSpacing = 16 };
+        toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        toolbar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var filterLabel = Body(L("活动筛选"));
+        filterLabel.VerticalAlignment = VerticalAlignment.Center;
+        toolbar.Children.Add(new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { filterLabel, filter } });
+        var actions = ActionRow(
+            ActionButton(L("刷新"), () => RefreshActivityAsync(silent: false), operationKey: "activity-refresh", busyText: L("刷新中…")),
             new Button { Content = L("更多"), Flyout = more });
-        toolbar.Margin = new Thickness(24, 12, 24, 16);
+        Grid.SetColumn(actions, 1);
+        toolbar.Children.Add(actions);
+        var toolbarSurface = new Border { Style = UiStyle("WorkspaceToolbarStyle"), Child = toolbar };
         _activityViews.Clear();
         _activityHint = Secondary(string.Empty);
         _activityHint.Visibility = Visibility.Collapsed;
@@ -70,7 +82,7 @@ public sealed partial class MainWindow
         var layout = new Grid();
         layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        layout.Children.Add(toolbar);
+        layout.Children.Add(toolbarSurface);
         Grid.SetRow(split, 1);
         layout.Children.Add(split);
         if (_activitySnapshot is { } existing) RenderActivity(existing);
