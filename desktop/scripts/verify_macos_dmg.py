@@ -63,7 +63,7 @@ def main() -> None:
             desktop = app / "Contents/MacOS/SmartSearchDesktop"
             backend = app / "Contents/Resources/backend/smart-search"
             for executable in (desktop, backend):
-                subprocess.run(["lipo", "-verify_arch", args.architecture, str(executable)], check=True)
+                subprocess.run(["xcrun", "lipo", str(executable), "-verify_arch", args.architecture], check=True)
             verify_frontend_sdk(desktop, args.architecture, info["LSMinimumSystemVersion"], args.sdk_version)
             # Copy exactly what a Finder install copies, including resource seals.
             installed = root / "Applications/Smart Search.app"
