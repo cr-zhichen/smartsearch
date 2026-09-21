@@ -100,3 +100,25 @@ Release 构建、打包静态检查、DMG 签名/安装布局校验和 12 轮真
 用户补充要求将复选框换成开关：在主界面统一使用系统 `.switch` Toggle 样式，覆盖 Agent 选择、Skills/App 自动检查、搜索布尔参数和活动记录选项。Agent 行改为左侧名称/状态、右侧开关，保留无障碍名称、原选择绑定与更新期间禁用状态；开启只表示选中目标，不会自动安装或更新 Skills。
 
 此轮 Release 构建、打包静态检查、12 轮真实后端通信检查、DMG 签名和安装布局检查通过。合并白底与开关调整后的产物：`.desktop-artifacts/macos-arm64-20260921T032358Z-40871-28254/SmartSearch-0.1.22-macos-arm64-unsigned-test.dmg`。未启动 GUI、未替换现有安装，等待用户验收。
+
+## 阶段 2C：修正 linked-on SDK，恢复新系统原生外观
+
+用户提供了 Codex Tweaks 与 Smart Search 的同屏对比，指出顶部、按钮和开关明显使用不同代际的外观。此前仅调整工具栏样式没有解决核心问题。
+
+直接读取两份可执行文件的 `LC_BUILD_VERSION`：
+
+| 实际二进制 | 最低运行版本 | linked-on SDK |
+| --- | --- | --- |
+| `/Applications/Codex Tweaks.app` 的两种架构 | 13.0 | 26.5 |
+| 上一阶段 Smart Search 打包产物 | 13.0 | **13.0** |
+| 本阶段重新链接的 Smart Search | 13.0 | **27.0** |
+
+本机选中的 Xcode SDK 是 27.0，旧 SwiftPM 构建日志也指定了这个 SDK，但最终 Mach-O 错把最低运行版本记成 SDK。系统会依据 linked-on SDK 决定兼容行为；苹果说明新版外观需要用新版 SDK 重建，单纯使用 SwiftUI 并不足够。参见 [Platforms State of the Union](https://developer.apple.com/videos/play/wwdc2025/102/) 和 [Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass)。
+
+- 新增 `compile-macos.sh`，从选中的 Xcode 读取实际 SDK 路径和版本，同时用于编译与链接的 `-platform_version`；不修改成品二进制，不伪造 SDK 版本，也不提高最低运行版本。
+- 本地 compile 和正式打包共用此入口；低于 SDK 26 时清楚报错。历史 tag 构建时一起加载该脚本。
+- DMG 校验新增真实 Mach-O SDK 检查：SDK 至少为 26、与构建工具链一致，最低版本与 Info.plist 一致。已使用上一阶段真实旧产物验证检查会拒绝 SDK 13；新产物 SDK 27/最低系统 13 检查通过。这是产物元数据校验，不是 UI 单元测试。
+- 移除强制不透明工具栏背景、覆盖顶部安全区的白底及冗余窗口工具栏样式声明，恢复与 Codex Tweaks 相同的系统窗口管理。仅内容区保留用户要求的白底，开关仍为原生 `.switch`。
+- 没有加入自绘阴影或模拟玻璃；按钮、开关、侧边栏和工具栏交由系统按真实 SDK 绘制。实际外观依旧由用户验收，不操作桌面或虚拟机。
+
+本阶段完整 Release/DMG 构建、ShellCheck/actionlint、12 轮真实后端通信、严格签名和新 SDK 校验通过。产物：`.desktop-artifacts/macos-arm64-20260921T033726Z-59779-6926/SmartSearch-0.1.22-macos-arm64-unsigned-test.dmg`。包内程序实际为 SDK 27.0 / 最低 macOS 13.0。仍为 ad-hoc 签名、未经 Apple 公证的测试包。

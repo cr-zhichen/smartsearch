@@ -32,6 +32,8 @@ mise run desktop:macos:build --architecture arm64
 
 脚本要求 Python、宿主机和目标架构一致，避免把 PyInstaller 的原生二进制误当成交叉编译产物。它用 Xcode 提供的 Swift 工具链和独立 SwiftPM scratch 目录构建 `desktop/macos` 的 `SmartSearchDesktop`，将后端放入 `Smart Search.app/Contents/Resources/backend/smart-search`。Intel 构建使用 `--architecture x86_64`。
 
+构建原生界面需要选中带 macOS SDK 26 或更新版本的 Xcode，最低运行版本仍是 macOS 13。`compile-macos.sh` 将同一个实际 SDK 路径/版本同时传入编译和链接，避免 SwiftPM 将最低系统版本误记为 linked-on SDK，导致新版 macOS 仍显示旧控件样式。打包验证会读取真实 Mach-O 的 SDK 和最低版本，并拒绝旧 SDK 或与构建 SDK 不一致的产物。
+
 所有资源组装完成后，脚本对完整 `.app` 做 ad-hoc 签名，并强制执行 `codesign --verify --deep --strict`。编译器为单个可执行文件生成的 linker signature 不能代替完整应用签名；修复前 v0.1.22 的应用会报 `code has no resources but signature indicates they must be present`。SHA-256 一致也无法发现这种打包错误。
 
 DMG 沿用 Codex Tweaks / DJOneHub 的 660×440 安装窗口：中英双语提示、青色拖拽箭头、112pt 图标、Applications 链接，以及 1×/2× 背景。布局位于 `packaging/macos/dmg-settings.py`，修改 SVG 后运行 `mise run desktop:macos:background` 重新生成两个 PNG。打包不依赖 Finder 自动化，支持无界面的 CI。

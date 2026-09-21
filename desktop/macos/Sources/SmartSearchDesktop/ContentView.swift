@@ -51,10 +51,8 @@ struct ContentView: View {
                 destinationView
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(DesktopAppearance.contentBackground.ignoresSafeArea(.container, edges: .top))
+            .background(DesktopAppearance.contentBackground)
             .navigationTitle(model.selectedDestination.title)
-            .toolbarBackground(DesktopAppearance.contentBackground, for: .windowToolbar)
-            .toolbarBackground(.visible, for: .windowToolbar)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {

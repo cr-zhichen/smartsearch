@@ -134,7 +134,7 @@ jobs:
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
           git fetch --no-tags --depth=1 origin "$WORKFLOW_SHA"
-          git restore --source="$WORKFLOW_SHA" -- mise.toml desktop/scripts/build_backend.py desktop/scripts/build-macos.sh desktop/scripts/check-macos-backend.sh desktop/scripts/verify_macos_dmg.py desktop/checks desktop/packaging/macos
+          git restore --source="$WORKFLOW_SHA" -- mise.toml desktop/scripts/build_backend.py desktop/scripts/build-macos.sh desktop/scripts/compile-macos.sh desktop/scripts/check-macos-backend.sh desktop/scripts/verify_macos_dmg.py desktop/checks desktop/packaging/macos
 
       - name: Set up packaging tools
         uses: jdx/mise-action@v3

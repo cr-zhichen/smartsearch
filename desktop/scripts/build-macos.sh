@@ -103,8 +103,8 @@ if [[ ! -f "$macos_directory/Package.swift" ]]; then
   exit 1
 fi
 scratch_directory="$run_directory/swift-build"
-swift build --package-path "$macos_directory" --configuration release --product SmartSearchDesktop --arch "$architecture" --scratch-path "$scratch_directory"
-bin_directory="$(swift build --package-path "$macos_directory" --configuration release --arch "$architecture" --scratch-path "$scratch_directory" --show-bin-path)"
+bash "$repository_root/desktop/scripts/compile-macos.sh" --product SmartSearchDesktop --arch "$architecture" --scratch-path "$scratch_directory"
+bin_directory="$(bash "$repository_root/desktop/scripts/compile-macos.sh" --arch "$architecture" --scratch-path "$scratch_directory" --show-bin-path)"
 desktop_binary="$bin_directory/SmartSearchDesktop"
 if [[ ! -f "$desktop_binary" ]]; then
   echo "SwiftPM did not create the expected desktop executable: $desktop_binary" >&2
@@ -149,5 +149,6 @@ bash "$repository_root/desktop/scripts/check-macos-backend.sh" "$app_directory/C
 dmg="$run_directory/SmartSearch-$version-macos-$architecture-unsigned-test.dmg"
 "${DMGBUILD:-dmgbuild}" -s "$repository_root/desktop/packaging/macos/dmg-settings.py" \
   -D "app=$app_directory" -D "assets=$repository_root/desktop/packaging/macos" "Smart Search" "$dmg"
-"$python_bin" "$repository_root/desktop/scripts/verify_macos_dmg.py" "$dmg" --architecture "$architecture" --version "$version"
+"$python_bin" "$repository_root/desktop/scripts/verify_macos_dmg.py" "$dmg" \
+  --architecture "$architecture" --version "$version" --sdk-version "$(xcrun --sdk macosx --show-sdk-version)"
 echo "macOS ad-hoc signed, unnotarized test artifact: $dmg"
