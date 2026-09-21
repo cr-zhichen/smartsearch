@@ -15503,6 +15503,818 @@
     "独立 CLI 已就绪。可返回上方检查并更新 Skills。",
     "The independent CLI is ready. Check and update Skills above."
   ],
+  "连接后会读取当前配置、工具目录和活动记录。": [
+    "连接后会读取当前配置、工具目录和活动记录。",
+    "Your configuration, tools and activity will appear once connected."
+  ],
+  "查看配置状态": [
+    "查看配置状态",
+    "Review configuration"
+  ],
+  "有未保存修改": [
+    "有未保存修改",
+    "Unsaved changes"
+  ],
+  "开发选项": [
+    "开发选项",
+    "Developer options"
+  ],
+  "偏好设置": [
+    "偏好设置",
+    "Preferences"
+  ],
+  "安装位置": [
+    "安装位置",
+    "Installation paths"
+  ],
+  "工具说明": [
+    "工具说明",
+    "Tool details"
+  ],
+  "已选择 {0} 个 Agent": [
+    "已选择 {0} 个 Agent",
+    "{0} agents selected"
+  ],
+  "文件详情": [
+    "文件详情",
+    "File details"
+  ],
+  "更多能力": [
+    "更多能力",
+    "More capabilities"
+  ],
+  "最近记录": [
+    "最近记录",
+    "Recent activity"
+  ],
+  "检查详情与偏好": [
+    "检查详情与偏好",
+    "Check details and preferences"
+  ],
+  "管理记录": [
+    "管理记录",
+    "Manage activity"
+  ],
+  "管理语言、配置目录和软件更新。": [
+    "管理语言、配置目录和软件更新。",
+    "Manage language, configuration folders and software updates."
+  ],
+  "进行中的任务": [
+    "进行中的任务",
+    "Running tasks"
+  ],
+  "选择工具，输入问题或链接，查看结果与来源。": [
+    "选择工具，输入问题或链接，查看结果与来源。",
+    "Choose a tool, enter a question or URL, and read the results and sources."
+  ],
+  "项目主页": [
+    "项目主页",
+    "Project website"
+  ],
+  "App 内置 CLI": [
+    "App 内置 CLI",
+    "Bundled CLI"
+  ],
+  "App 更新": [
+    "App 更新",
+    "App Updates"
+  ],
+  "任务正在运行": [
+    "任务正在运行",
+    "Task in progress"
+  ],
+  "修改先保留为草稿；测试使用当前填写的值。": [
+    "修改先保留为草稿；测试使用当前填写的值。",
+    "Changes stay in your draft until saved. Tests use the values entered here."
+  ],
+  "先选择工具并运行一次请求。": [
+    "先选择工具并运行一次请求。",
+    "Choose a tool and run a request first."
+  ],
+  "内置入口随 App 卸载失效。独立 CLI 接入不使用此入口；已有同名命令不会被覆盖。": [
+    "内置入口随 App 卸载失效。独立 CLI 接入不使用此入口；已有同名命令不会被覆盖。",
+    "The bundled entry point stops working when the App is removed. The independent CLI uses its own installation. Existing commands with the same name are preserved."
+  ],
+  "准备运行环境…": [
+    "准备运行环境…",
+    "Set Up Runtime…"
+  ],
+  "备份：{0}": [
+    "备份：{0}",
+    "Backup: {0}"
+  ],
+  "字段说明": [
+    "字段说明",
+    "Field Information"
+  ],
+  "工作区": [
+    "工作区",
+    "Workspace"
+  ],
+  "已展开": [
+    "已展开",
+    "Expanded"
+  ],
+  "已收起": [
+    "已收起",
+    "Collapsed"
+  ],
+  "当前：{0}": [
+    "当前：{0}",
+    "Current: {0}"
+  ],
+  "所有修改已保存": [
+    "所有修改已保存",
+    "All changes saved"
+  ],
+  "扩展能力": [
+    "扩展能力",
+    "Additional capabilities"
+  ],
+  "技能来源": [
+    "技能来源",
+    "Skills source"
+  ],
+  "按类别管理应用偏好和更新。": [
+    "按类别管理应用偏好和更新。",
+    "Manage preferences and updates by category."
+  ],
+  "搜索选项": [
+    "搜索选项",
+    "Search Options"
+  ],
+  "搜索选项…": [
+    "搜索选项…",
+    "Search Options…"
+  ],
+  "查找服务商": [
+    "查找服务商",
+    "Find a provider"
+  ],
+  "查看 {0} 的文件详情": [
+    "查看 {0} 的文件详情",
+    "View file details for {0}"
+  ],
+  "查看活动": [
+    "查看活动",
+    "View Activity"
+  ],
+  "查看设置": [
+    "查看设置",
+    "View Settings"
+  ],
+  "查看路由顺序和最近请求状态。": [
+    "查看路由顺序和最近请求状态。",
+    "Review routing order and recent request status."
+  ],
+  "检查使用当前草稿，不会保存或发起服务商请求。": [
+    "检查使用当前草稿，不会保存或发起服务商请求。",
+    "This checks your current draft without saving it or contacting providers."
+  ],
+  "检查偏好": [
+    "检查偏好",
+    "Check Preferences"
+  ],
+  "每类能力选择一个服务商，填写连接信息后测试并保存。": [
+    "每类能力选择一个服务商，填写连接信息后测试并保存。",
+    "Choose a provider for each capability, enter connection details, then test and save."
+  ],
+  "没有匹配的服务商": [
+    "没有匹配的服务商",
+    "No matching providers"
+  ],
+  "没有记录不代表外部 CLI 一定空闲。": [
+    "没有记录不代表外部 CLI 一定空闲。",
+    "No records does not mean an external CLI is idle."
+  ],
+  "活动筛选": [
+    "活动筛选",
+    "Filter Activity"
+  ],
+  "活动记录已暂停": [
+    "活动记录已暂停",
+    "Activity recording is paused"
+  ],
+  "活动选项": [
+    "活动选项",
+    "Activity Options"
+  ],
+  "管理连接信息和检索服务。": [
+    "管理连接信息和检索服务。",
+    "Manage connections and search providers."
+  ],
+  "结果会显示在这里": [
+    "结果会显示在这里",
+    "Results appear here"
+  ],
+  "观察设置": [
+    "观察设置",
+    "Observation Settings"
+  ],
+  "观察设置…": [
+    "观察设置…",
+    "Observation Settings…"
+  ],
+  "设置类别": [
+    "设置类别",
+    "Settings Category"
+  ],
+  "输入": [
+    "输入",
+    "Input"
+  ],
+  "运行环境…": [
+    "运行环境…",
+    "Runtime…"
+  ],
+  "返回输入": [
+    "返回输入",
+    "Back to Input"
+  ],
+  "这里显示当前观察范围内的任务。": [
+    "这里显示当前观察范围内的任务。",
+    "Tasks from the current observation scope appear here."
+  ],
+  "连接设置": [
+    "连接设置",
+    "Connection"
+  ],
+  "选择一条活动查看详情": [
+    "选择一条活动查看详情",
+    "Select an activity to view details"
+  ],
+  "选择工具并输入内容。完成后在结果中阅读和导出。": [
+    "选择工具并输入内容。完成后在结果中阅读和导出。",
+    "Choose a tool and enter your request. Read and export the result when it finishes."
+  ],
+  "选择要接入的 Agent，再更新对应的技能文件。": [
+    "选择要接入的 Agent，再更新对应的技能文件。",
+    "Choose your agents, then update their skill files."
+  ],
+  "通用": [
+    "通用",
+    "General"
+  ],
+  "部分活动目录无法读取": [
+    "部分活动目录无法读取",
+    "Some activity directories could not be read"
+  ],
+  "配置服务商": [
+    "配置服务商",
+    "Configure Providers"
+  ],
+  "配置范围": [
+    "配置范围",
+    "Configuration Scope"
+  ],
+  "配置详情…": [
+    "配置详情…",
+    "Configuration Details…"
+  ],
+  "高级": [
+    "高级",
+    "Advanced"
+  ],
+  "高级配置": [
+    "高级配置",
+    "Advanced Configuration"
+  ],
+  "当前阶段": [
+    "当前阶段",
+    "Current phase"
+  ],
+  "服务商与模型": [
+    "服务商与模型",
+    "Provider and model"
+  ],
+  "从左侧选择服务商或配置项目。": [
+    "从左侧选择服务商或配置项目。",
+    "Select a provider or configuration section on the left."
+  ],
+  "更新 App 和内置引擎。": [
+    "更新 App 和内置引擎。",
+    "Update the App and its bundled engine."
+  ],
+  "版本 {0}": [
+    "版本 {0}",
+    "Version {0}"
+  ],
+  "管理独立安装的命令行工具。": [
+    "管理独立安装的命令行工具。",
+    "Manage the independently installed command-line tools."
+  ],
+  "管理语言和配置目录。": [
+    "管理语言和配置目录。",
+    "Manage language and configuration folders."
+  ],
+  "选择工具并填写请求，结果会显示在右侧。": [
+    "选择工具并填写请求，结果会显示在右侧。",
+    "Choose a tool and enter a request. Results appear on the right."
+  ],
+  "配置连接参数和内置 CLI。": [
+    "配置连接参数和内置 CLI。",
+    "Configure backend connections and the bundled CLI."
+  ],
+  "研究数据源": [
+    "研究数据源",
+    "Research sources"
+  ],
+  "先选择路由方式，再填写该模式使用的参数。": [
+    "先选择路由方式，再填写该模式使用的参数。",
+    "Choose a routing mode, then configure the parameters it uses."
+  ],
+  "请求设置": [
+    "请求设置",
+    "Request settings"
+  ],
+  "JEV 连接": [
+    "JEV 连接",
+    "JEV connection"
+  ],
+  "检索与判断": [
+    "检索与判断",
+    "Retrieval and judgments"
+  ],
+  "结果处理": [
+    "结果处理",
+    "Result processing"
+  ],
+  "以规则为基础，可按需配置向量模型和分类模型增强判断。未配置的模型不会被调用。": [
+    "以规则为基础，可按需配置向量模型和分类模型增强判断。未配置的模型不会被调用。",
+    "Start with rules and optionally add an embedding model and a classifier. Only configured models are used."
+  ],
+  "使用 JEV 选择检索渠道并判断证据是否充分，需要单独配置 TypeSafe 凭据。": [
+    "使用 JEV 选择检索渠道并判断证据是否充分，需要单独配置 TypeSafe 凭据。",
+    "Use JEV to select search channels and judge evidence sufficiency. Separate TypeSafe credentials are required."
+  ],
+  "仅使用本地规则判断意图，无需填写模型接口或密钥。": [
+    "仅使用本地规则判断意图，无需填写模型接口或密钥。",
+    "Use local rules to identify intent. No model endpoints or keys are needed."
+  ],
+  "关闭自动意图路由，无需填写路由参数。": [
+    "关闭自动意图路由，无需填写路由参数。",
+    "Automatic intent routing is off. No routing parameters are needed."
+  ],
+  "请选择一种路由模式。": [
+    "请选择一种路由模式。",
+    "Choose a routing mode."
+  ],
+  "混合路由": [
+    "混合路由",
+    "Hybrid routing"
+  ],
+  "JEV 语义路由": [
+    "JEV 语义路由",
+    "JEV semantic routing"
+  ],
+  "规则路由": [
+    "规则路由",
+    "Rule-based routing"
+  ],
+  "关闭路由": [
+    "关闭路由",
+    "Routing off"
+  ],
+  "直接返回证据": [
+    "直接返回证据",
+    "Return evidence directly"
+  ],
+  "按需汇总": [
+    "按需汇总",
+    "Summarize when needed"
+  ],
+  "始终汇总": [
+    "始终汇总",
+    "Always summarize"
+  ],
+  "输入 API Key": [
+    "输入 API Key",
+    "Enter an API key"
+  ],
+  "、": [
+    "、",
+    ", "
+  ],
+  "结果汇总": [
+    "结果汇总",
+    "Result synthesis"
+  ],
+  "其他能力": [
+    "其他能力",
+    "Other capabilities"
+  ],
+  "用于{0}。": [
+    "用于{0}。",
+    "Provides {0}."
+  ],
+  "用于{0}，侧重{1}。": [
+    "用于{0}，侧重{1}。",
+    "Provides {0}, specializing in {1}."
+  ],
+  "实验性能力。": [
+    "实验性能力。",
+    "Experimental capability."
+  ],
+  "仅在明确指定时调用。": [
+    "仅在明确指定时调用。",
+    "Used only when explicitly requested."
+  ],
+  "不参与自动路由。": [
+    "不参与自动路由。",
+    "Excluded from automatic routing."
+  ],
+  "broad synthesis": [
+    "多来源综合回答",
+    "multi-source synthesis"
+  ],
+  "web_search": [
+    "网页搜索",
+    "web search"
+  ],
+  "x_search": [
+    "X 平台搜索",
+    "searching X"
+  ],
+  "relay compatibility": [
+    "兼容 OpenAI 协议的中转服务",
+    "OpenAI-compatible relays"
+  ],
+  "library docs": [
+    "类库文档",
+    "library documentation"
+  ],
+  "API docs": [
+    "API 文档",
+    "API documentation"
+  ],
+  "framework docs": [
+    "框架文档",
+    "framework documentation"
+  ],
+  "versioned snippets": [
+    "指定版本的代码示例",
+    "version-specific code examples"
+  ],
+  "official domains": [
+    "官方网站",
+    "official websites"
+  ],
+  "papers": [
+    "论文",
+    "research papers"
+  ],
+  "product pages": [
+    "产品页面",
+    "product pages"
+  ],
+  "trusted low-noise discovery": [
+    "可信来源检索",
+    "trusted, low-noise source discovery"
+  ],
+  "similar pages": [
+    "相似页面",
+    "similar pages"
+  ],
+  "Chinese": [
+    "中文内容",
+    "Chinese-language content"
+  ],
+  "domestic China": [
+    "国内信息",
+    "information from China"
+  ],
+  "current": [
+    "时效信息",
+    "current information"
+  ],
+  "policy": [
+    "政策",
+    "policies"
+  ],
+  "announcements": [
+    "公告",
+    "announcements"
+  ],
+  "recency filters": [
+    "按时间筛选",
+    "recency filtering"
+  ],
+  "Coding Plan quota": [
+    "使用 Coding Plan 配额",
+    "Coding Plan quota"
+  ],
+  "remote MCP web_search_prime": [
+    "通过 MCP 搜索网页",
+    "web search through MCP"
+  ],
+  "site map": [
+    "站点地图",
+    "site maps"
+  ],
+  "URL extract": [
+    "网页正文提取",
+    "web page content extraction"
+  ],
+  "known public URL": [
+    "指定公开网页",
+    "known public URLs"
+  ],
+  "PDF": [
+    "PDF 文档",
+    "PDF documents"
+  ],
+  "arXiv": [
+    "arXiv 论文",
+    "arXiv papers"
+  ],
+  "clean markdown": [
+    "干净的 Markdown 正文",
+    "clean Markdown content"
+  ],
+  "ReaderLM-v2 with key": [
+    "需 Key 的 ReaderLM-v2 提取",
+    "ReaderLM-v2 extraction with an API key"
+  ],
+  "remote MCP webReader": [
+    "通过 MCP 提取网页正文",
+    "web page reading through MCP"
+  ],
+  "robust scrape fallback": [
+    "抓取失败时的备用提取",
+    "resilient scraping fallback"
+  ],
+  "JS-heavy pages": [
+    "依赖 JavaScript 的页面",
+    "JavaScript-heavy pages"
+  ],
+  "dynamic pages": [
+    "动态页面",
+    "dynamic pages"
+  ],
+  "OCR/PDF/structured extraction": [
+    "OCR、PDF 和结构化提取",
+    "OCR, PDF, and structured extraction"
+  ],
+  "broad web discovery": [
+    "广泛查找网页来源",
+    "broad web discovery"
+  ],
+  "clean markdown extraction": [
+    "提取干净的 Markdown 正文",
+    "clean Markdown extraction"
+  ],
+  "news and locale hints": [
+    "新闻与地区偏好",
+    "news and locale hints"
+  ],
+  "research-paper domain type": [
+    "论文类站点检索",
+    "research-paper domains"
+  ],
+  "CVE": [
+    "CVE 漏洞信息",
+    "CVE vulnerabilities"
+  ],
+  "finance": [
+    "金融",
+    "finance"
+  ],
+  "legal": [
+    "法律",
+    "legal information"
+  ],
+  "academic": [
+    "学术",
+    "academic research"
+  ],
+  "code/docs": [
+    "代码与文档",
+    "code and documentation"
+  ],
+  "structured vertical domains": [
+    "垂直领域的结构化检索",
+    "structured vertical-domain search"
+  ],
+  "academic literature": [
+    "学术文献",
+    "academic literature"
+  ],
+  "semantic paper search": [
+    "论文语义检索",
+    "semantic paper search"
+  ],
+  "citation relations": [
+    "引用与被引关系",
+    "citation relationships"
+  ],
+  "paper content snippets": [
+    "论文内容片段",
+    "paper content snippets"
+  ],
+  "evidence-only final synthesis": [
+    "仅依据已有证据生成结论",
+    "evidence-only final synthesis"
+  ],
+  "操作提示": [
+    "操作提示",
+    "Operation messages"
+  ],
+  "查看操作提示": [
+    "查看操作提示",
+    "Show operation messages"
+  ],
+  "清除提示": [
+    "清除提示",
+    "Clear messages"
+  ],
+  "调整分栏宽度": [
+    "调整分栏宽度",
+    "Resize panes"
+  ],
+  "拖动调整宽度；方向键微调": [
+    "拖动调整宽度；方向键微调",
+    "Drag to resize; use arrow keys for fine adjustments"
+  ],
+  "保存更改后生效。": [
+    "保存更改后生效。",
+    "Takes effect after saving changes."
+  ],
+  "参数": [
+    "参数",
+    "Parameters"
+  ],
+  "字段说明：{0}": [
+    "字段说明：{0}",
+    "Field details: {0}"
+  ],
+  "当前生效": [
+    "当前生效",
+    "Effective value"
+  ],
+  "路由与回退": [
+    "路由与回退",
+    "Routing and fallback"
+  ],
+  "配置已保存": [
+    "配置已保存",
+    "Configuration saved"
+  ],
+  "配置已保存，但暂未读回最新状态。请刷新后继续编辑。": [
+    "配置已保存，但暂未读回最新状态。请刷新后继续编辑。",
+    "Configuration was saved, but the latest state could not be read. Refresh before editing again."
+  ],
+  "Activity history": [
+    "活动记录",
+    "Activity history"
+  ],
+  "Existing history is retained when recording is turned off.": [
+    "关闭后保留已有历史。",
+    "Existing history is retained when recording is turned off."
+  ],
+  "Filter activity": [
+    "筛选活动",
+    "Filter activity"
+  ],
+  "Loading run details…": [
+    "正在读取运行详情…",
+    "Loading run details…"
+  ],
+  "Manage runtime…": [
+    "管理运行环境…",
+    "Manage runtime…"
+  ],
+  "More": [
+    "更多",
+    "More"
+  ],
+  "No activity matches this filter.": [
+    "没有符合筛选条件的记录。",
+    "No activity matches this filter."
+  ],
+  "Select a task on the left to view its status, events, and results.": [
+    "在左侧选择任务，查看状态、阶段事件和结果。",
+    "Select a task on the left to view its status, events, and results."
+  ],
+  "Select an activity": [
+    "选择一条活动记录",
+    "Select an activity"
+  ],
+  "Some activity directories could not be read. Check observation settings.": [
+    "部分活动目录不可读取。请检查观察设置。",
+    "Some activity directories could not be read. Check observation settings."
+  ],
+  "Synced {0}; failed {1}.": [
+    "已同步 {0} 个，失败 {1} 个。",
+    "Synced {0}; failed {1}."
+  ],
+  "npm {0}": [
+    "npm {0}",
+    "npm {0}"
+  ],
+  "关闭后保留已有历史。": [
+    "关闭后保留已有历史。",
+    "Existing history is retained when recording is turned off."
+  ],
+  "在左侧选择任务，查看状态、阶段事件和结果。": [
+    "在左侧选择任务，查看状态、阶段事件和结果。",
+    "Select a task on the left to view its status, events, and results."
+  ],
+  "已同步 {0} 个，失败 {1} 个。": [
+    "已同步 {0} 个，失败 {1} 个。",
+    "Synced {0}; failed {1}."
+  ],
+  "开始": [
+    "开始",
+    "Started"
+  ],
+  "更多": [
+    "更多",
+    "More"
+  ],
+  "正在读取运行详情…": [
+    "正在读取运行详情…",
+    "Loading run details…"
+  ],
+  "没有符合筛选条件的记录。": [
+    "没有符合筛选条件的记录。",
+    "No activity matches this filter."
+  ],
+  "活动记录": [
+    "活动记录",
+    "Activity history"
+  ],
+  "筛选活动": [
+    "筛选活动",
+    "Filter activity"
+  ],
+  "管理运行环境…": [
+    "管理运行环境…",
+    "Manage runtime…"
+  ],
+  "选择一条活动记录": [
+    "选择一条活动记录",
+    "Select an activity"
+  ],
+  "部分活动目录不可读取。请检查观察设置。": [
+    "部分活动目录不可读取。请检查观察设置。",
+    "Some activity directories could not be read. Check observation settings."
+  ],
+  "恢复默认配置目录": [
+    "恢复默认配置目录",
+    "Restore Default Folder"
+  ],
+  "待安装的文件": [
+    "待安装的文件",
+    "Files to install"
+  ],
+  "Files to install": [
+    "待安装的文件",
+    "Files to install"
+  ],
+  "内容不同的文件": [
+    "内容不同的文件",
+    "Files with different content"
+  ],
+  "Files with different content": [
+    "内容不同的文件",
+    "Files with different content"
+  ],
+  "文件内容与来源不同": [
+    "文件内容与来源不同",
+    "Files differ from the source"
+  ],
+  "Files differ from the source": [
+    "文件内容与来源不同",
+    "Files differ from the source"
+  ],
+  "这里只查看文件状态。点击“更新所选 Skills”后才会安装或更新文件。": [
+    "这里只查看文件状态。点击“更新所选 Skills”后才会安装或更新文件。",
+    "This view only shows file status. Files are installed or updated when you choose Update selected Skills."
+  ],
+  "This view only shows file status. Files are installed or updated when you choose Update selected Skills.": [
+    "这里只查看文件状态。点击“更新所选 Skills”后才会安装或更新文件。",
+    "This view only shows file status. Files are installed or updated when you choose Update selected Skills."
+  ],
+  "跟随系统外观，或单独选择浅色、深色模式。": [
+    "跟随系统外观，或单独选择浅色、深色模式。",
+    "Follow the system appearance, or choose light or dark mode for this app."
+  ],
+  "管理语言、外观和配置目录。": [
+    "管理语言、外观和配置目录。",
+    "Manage language, appearance, and configuration folders."
+  ],
+  "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。": [
+    "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。",
+    "All Agents share the independent CLI. Prepare it first, then choose the Agents whose Skills you want to update."
+  ],
+  "Provider {0} is disabled by {1}=false. No network request was made.": [
+    "服务商 {0} 已通过 {1}=false 禁用，未发起网络请求。",
+    "Provider {0} is disabled by {1}=false. No network request was made."
+  ],
+  "服务商 {0} 已通过 {1}=false 禁用，未发起网络请求。": [
+    "服务商 {0} 已通过 {1}=false 禁用，未发起网络请求。",
+    "Provider {0} is disabled by {1}=false. No network request was made."
+  ],
   "App update available": [
     "发现 App 新版本",
     "App update available"

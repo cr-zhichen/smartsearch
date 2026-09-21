@@ -175,6 +175,7 @@ struct ConfigField: Identifiable, Hashable {
     let docsURL: String?
     let defaultValue: String
     let placeholder: String
+    let isProviderToggle: Bool
 
     var id: String { key }
     var isAdvanced: Bool { tier == "advanced" || ["routing", "reliability", "diagnostics"].contains(section) }
@@ -198,6 +199,7 @@ struct ConfigField: Identifiable, Hashable {
         docsURL = raw.string("docs_url")
         defaultValue = raw["default"]?.displayString ?? ""
         placeholder = raw.string("placeholder") ?? defaultValue
+        isProviderToggle = raw.bool("provider_toggle") ?? false
     }
 }
 
@@ -219,12 +221,24 @@ struct ConfigSection: Identifiable, Hashable {
 struct ProviderFieldGroup: Identifiable {
     let id: String
     let fields: [ConfigField]
+    let profile: [String: JSONValue]
 
-    var primaryCapability: String? {
-        ["main_search", "docs_search", "web_fetch"].first { capability in
-            fields.contains { $0.tier == "essential" && $0.capabilities.contains(capability) }
-        }
+    var primaryCapability: String? { capabilities.first }
+
+    var capabilities: [String] {
+        // Runtime profiles own the classification. Field tiers describe setup
+        // requirements, not a provider's primary role (for example, Tavily).
+        let declared = ([profile.string("capability")].compactMap { $0 }
+            + profile.array("capabilities").compactMap(\.stringValue)).filter { !$0.isEmpty }
+        let available = declared.isEmpty ? fields.flatMap(\.capabilities) : declared
+        var seen: Set<String> = []
+        return available.filter { !$0.isEmpty && seen.insert($0).inserted }
     }
+
+    var strengths: [String] { profile.array("strengths").compactMap(\.stringValue) }
+    var isExperimental: Bool { profile.bool("experimental") == true }
+    var isExplicitOnly: Bool { profile.bool("explicit_only") == true }
+    var isRoutingDisabled: Bool { profile.bool("route_enabled") == false }
 }
 
 struct OperationState {
@@ -264,8 +278,8 @@ struct CommandField: Identifiable, Hashable {
     init?(_ value: JSONValue) {
         guard let raw = value.objectValue, let name = raw.string("name") else { return nil }
         self.name = name
-        label = raw.string("label") ?? name
-        help = raw.string("help") ?? ""
+        label = L(raw.string("label") ?? name)
+        help = L(raw.string("help") ?? "")
         flags = raw.array("flags").compactMap(\.stringValue)
         kind = raw.string("kind") ?? "text"
         choices = raw.array("choices").compactMap(\.stringValue)
@@ -287,8 +301,8 @@ struct CommandCatalogEntry: Identifiable, Hashable {
     init?(_ value: JSONValue) {
         guard let raw = value.objectValue, let id = raw.string("id") else { return nil }
         self.id = id
-        label = raw.string("label") ?? id
-        description = raw.string("description") ?? ""
+        label = L(raw.string("label") ?? id)
+        description = L(raw.string("description") ?? "")
         experimental = raw.bool("experimental") ?? false
         fields = raw.array("fields").compactMap(CommandField.init)
     }
@@ -364,6 +378,8 @@ enum OwnedRunKind: Hashable {
 struct OwnedRunDescriptor: Hashable {
     let kind: OwnedRunKind
     let label: String
+    var commandID: String? = nil
+    var providerID: String? = nil
 }
 
 struct OwnedRunResultStore {
@@ -376,8 +392,9 @@ struct OwnedRunResultStore {
         self.capacity = max(1, capacity)
     }
 
-    mutating func register(runID: String, kind: OwnedRunKind, label: String) {
-        descriptors[runID] = OwnedRunDescriptor(kind: kind, label: label)
+    mutating func register(runID: String, kind: OwnedRunKind, label: String,
+                           commandID: String? = nil, providerID: String? = nil) {
+        descriptors[runID] = OwnedRunDescriptor(kind: kind, label: label, commandID: commandID, providerID: providerID)
     }
 
     @discardableResult
@@ -408,6 +425,8 @@ struct DesktopState {
     let revision: JSONValue?
     let configPath: String?
     let configDirectory: String?
+    let defaultConfigDirectory: String?
+    let isDefaultConfigDirectory: Bool
     let generation: String?
     let version: String?
     let values: [String: JSONValue]
@@ -431,6 +450,8 @@ struct DesktopState {
         revision = raw["revision"]
         configPath = raw.string("config_path")
         configDirectory = raw.string("config_dir")
+        defaultConfigDirectory = raw.string("default_config_dir")
+        isDefaultConfigDirectory = raw.bool("is_default_config_dir") ?? false
         generation = raw.string("generation")
         version = raw.string("version")
         values = raw.object("values")
@@ -462,6 +483,10 @@ struct DesktopState {
         values[field.key]?.displayString ?? field.defaultValue
     }
 
+    func hasSecretValue(for field: ConfigField) -> Bool {
+        raw["secret_presence"]?[field.key]?.boolValue ?? !effectiveValue(for: field).isEmpty
+    }
+
     func savedValue(for field: ConfigField) -> String {
         savedValues[field.key]?.displayString ?? ""
     }
@@ -486,7 +511,8 @@ struct DesktopState {
         var seen: Set<String> = []
         return fields.compactMap { field in
             guard let provider = field.provider, !provider.isEmpty, seen.insert(provider).inserted else { return nil }
-            return ProviderFieldGroup(id: provider, fields: fields.filter { $0.provider == provider })
+            return ProviderFieldGroup(id: provider, fields: fields.filter { $0.provider == provider },
+                                      profile: raw["provider_profiles"]?[provider]?.objectValue ?? [:])
         }
     }
 }

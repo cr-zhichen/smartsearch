@@ -24,6 +24,7 @@ from .desktop_environment import Environment, cli_runtime_commands, depends_on_a
 from .desktop_skills import Skills
 from .i18n import render_messages, resolve, tr, use_language
 from .provider_errors import sanitize_provider_error_message as sanitize_error_message
+from .ui_metadata import CONFIG_FIELDS
 
 PROTOCOL_VERSION = 1
 MAX_LINE = 2 * 1024 * 1024
@@ -59,6 +60,7 @@ class Backend:
         self.generation = uuid.uuid4().hex
         self.directory = ""
         self.initialized = False
+        self.include_config_secrets = False
         self.language = "zh"  # Protocol v1 clients without a language keep their existing presentation.
         self.stopping = False
         self.app_update_pending = False
@@ -119,8 +121,11 @@ class Backend:
 
     def state(self):
         data = ui_api.state()
+        default_directory = config._default_config_dir().resolve()
         data.update(protocol_version=PROTOCOL_VERSION, version=cli._get_version(), generation=self.generation,
-                    config_dir=self.directory, commands=command_catalog(), activity=self.activity(), cli=self.cli_status(),
+                    config_dir=self.directory, default_config_dir=str(default_directory),
+                    is_default_config_dir=config._same_config_dir(Path(self.directory), default_directory),
+                    commands=command_catalog(), activity=self.activity(), cli=self.cli_status(),
                     updates=self.updates.state, environment=self.environment.state, skills=self.skills.state, language=self.language)
         checks = {}
         for run in sorted(self.runs.values(), key=lambda item: item.get("finished_at", 0)):
@@ -131,6 +136,15 @@ class Backend:
                                        "source": "app", "scope": run["scope"], "probe": result.get("probe", "none"),
                                        "message": result.get("message", result.get("error", ""))}
         data["provider_checks"] = checks
+        if self.include_config_secrets:
+            # Only an opted-in native client receives editable credentials over
+            # its private pipe. Shared Web/CLI status remains masked.
+            effective = config.effective_values(masked=False)
+            data["config_secrets"] = {
+                field.key: effective.get(field.key, "")
+                for field in CONFIG_FIELDS
+                if field.kind == "secret" and config.get_config_source(field.key) != "environment"
+            }
         return data
 
     def cli_status(self):
@@ -488,6 +502,7 @@ class Backend:
                 raise ValueError(tr('App 与后端协议版本不匹配，请安装完整的同版本 App。'))
             self.directory = absolute_directory(params["config_dir"]) if params.get("config_dir") else str(config.config_file.parent)
             self.initialized = True
+            self.include_config_secrets = params.get("include_config_secrets") is True
             self.updates.current_version = str(params.get("app_version", cli._get_version()))
             self.updates.state["app"]["current_version"] = self.updates.current_version
             self.updates.enabled = params.get("enable_update_checks") is True

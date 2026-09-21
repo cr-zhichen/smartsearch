@@ -50,6 +50,26 @@ Managers such as mise may skip npm lifecycle scripts, so the package version can
 
 Retry the App check in Settings after restoring the network. A downloaded update still needs installation and restart. Finish App tasks, protected writes and unsaved drafts before proceeding. Windows development folders and old Inno installations must first use the new full installer; macOS test builds without an update key cannot update. Use only the official release matching your architecture. Signature or integrity failures must not be bypassed; keep using the installed version and report the error. App updates do not repair or upgrade the separate CLI/Skills automatically.
 
+## macOS says the app is damaged or the developer cannot be verified
+
+Download from this project's release page and check the DMG against that release's `SHA256SUMS.txt`. Open the DMG, drag **Smart Search** to **Applications**, then launch it from Applications. These are still unnotarized test packages.
+
+“Damaged” does not necessarily mean a failed download. Before the packaging fix, v0.1.22 did not re-sign the assembled app, so verification reports `code has no resources but signature indicates they must be present`. Check the installed copy:
+
+```bash
+codesign --verify --deep --strict --verbose=2 "/Applications/Smart Search.app"
+```
+
+If verification fails, use a new build containing the packaging fix. Do not just remove quarantine to hide an invalid signature. A matching SHA-256 only proves that the download matches the published file.
+
+If verification passes but macOS blocks launch, follow [Apple's instructions](https://support.apple.com/en-us/102445) to use **System Settings → Privacy & Security → Open Anyway**. If this unnotarized test build still shows “damaged”, only after checking its official source, checksum and signature and deciding to trust it, remove the download quarantine flag from this app and reopen it:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Smart Search.app"
+```
+
+This targets only this app; do not disable Gatekeeper globally. Ad-hoc signing does not verify the publisher's identity or constitute Apple notarization.
+
 ## Interface language
 
 Set the App language in Settings & about, and the independent CLI language with `smart-search config set SMART_SEARCH_LANGUAGE en`. If the CLI still uses another language, check a per-call `--lang` and the `SMART_SEARCH_LANGUAGE` environment override. `auto` follows the CLI locale, which can differ from the GUI session. Use `smart-search --lang en --help` to test without changing settings. Unreadable preferences fall back with a warning; repair that configuration file without deleting provider keys. Original page text and third-party logs do not change language.

@@ -6,6 +6,8 @@ on:
       - ".github/workflows/desktop-build.yml"
       - ".config/dotnet-tools.json"
       - "desktop/**"
+      - "assets/branding/**"
+      - "mise.toml"
       - "pyproject.toml"
       - "src/smart_search/**"
       - "tests/**"
@@ -166,51 +168,60 @@ jobs:
     name: macOS ${{ matrix.architecture }} native update package
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
+    env:
+      # Preserve the SDK used to validate the PR51 native interface and icons.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     strategy:
       fail-fast: false
       matrix:
         include:
           - architecture: x86_64
             runner: macos-15-intel
-            python_architecture: x64
           - architecture: arm64
             runner: macos-15
-            python_architecture: arm64
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.release_tag || github.ref }}
           persist-credentials: false
-      - uses: actions/setup-python@v6
-        id: python
-        with:
-          python-version: "3.12"
-          architecture: ${{ matrix.python_architecture }}
       - name: Validate release source
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           python3 - <<'PY'
           import json, os, re, subprocess
+          from pathlib import Path
           tag = os.environ.get('RELEASE_TAG', '')
           if tag:
               assert re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag)
               assert tag == 'v' + json.load(open('package.json'))['version']
               assert subprocess.check_output(['git','rev-parse',tag+'^{commit}']) == subprocess.check_output(['git','rev-parse','HEAD'])
+              assert Path('desktop/macos/Sources/SmartSearchDesktop/AppUpdater.swift').is_file(), 'Release source must include the native updater'
           PY
+      - name: Load macOS packaging from the workflow revision
+        if: inputs.release_tag != ''
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git restore --source="$WORKFLOW_SHA" -- mise.toml assets/branding desktop/scripts/build_backend.py desktop/scripts/build-macos.sh desktop/scripts/compile-macos.sh desktop/scripts/compile-macos-icon.sh desktop/scripts/check-macos-backend.sh desktop/scripts/verify_macos_dmg.py desktop/scripts/package-sparkle.sh desktop/scripts/test_sparkle_updates.py desktop/scripts/update_artifacts.py desktop/checks desktop/packaging/macos
+      - name: Set up packaging tools
+        uses: jdx/mise-action@v3
       - name: Install build dependencies
-        run: python3 -m pip install --disable-pip-version-check ".[dev]" "pyinstaller==6.22.3"
+        run: |
+          mise run desktop:macos:install
+          .venv/bin/python -m pip install --disable-pip-version-check '.[dev]'
       - name: Test backend and native models
         run: |
-          python3 -m pytest -q
+          .venv/bin/python -m pytest -q
           swift test --package-path desktop/macos --configuration release --arch ${{ matrix.architecture }} --scratch-path .desktop-artifacts/macos-model-tests
       - name: Fetch and verify previous Sparkle archive
         if: inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')"
-          python3 desktop/scripts/update_artifacts.py baseline --platform macos --architecture ${{ matrix.architecture }} --version "$version" --directory "$RUNNER_TEMP/previous-macos" --result "$RUNNER_TEMP/macos-baseline.json"
+          version="$(.venv/bin/python -c 'import json; print(json.load(open("package.json"))["version"])')"
+          .venv/bin/python desktop/scripts/update_artifacts.py baseline --platform macos --architecture ${{ matrix.architecture }} --version "$version" --directory "$RUNNER_TEMP/previous-macos" --result "$RUNNER_TEMP/macos-baseline.json"
       - name: Prepare explicitly configured Sparkle release signing
         if: github.event_name == 'workflow_dispatch' && inputs.release_tag != ''
         env:
@@ -227,21 +238,21 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
           set -euo pipefail
-          args=(--architecture '${{ matrix.architecture }}' --python '${{ steps.python.outputs.python-path }}')
+          args=(--architecture '${{ matrix.architecture }}')
           if [[ -n "$RELEASE_TAG" ]]; then
             args+=(--release-updates --update-key-file "$RUNNER_TEMP/smartsearch-sparkle-key" --update-public-key "$SMART_SEARCH_SPARKLE_PUBLIC_KEY")
-            previous="$(python3 -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/macos-baseline.json"))["directory"] or "")')"
+            previous="$(.venv/bin/python -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/macos-baseline.json"))["directory"] or "")')"
             if [[ -n "$previous" ]]; then args+=(--previous-release-directory "$previous"); fi
           fi
-          bash desktop/scripts/build-macos.sh "${args[@]}"
+          mise run desktop:macos:build "${args[@]}"
       - name: Verify real Sparkle delta, fallback and wrong-key rejection
         run: |
           builds=(.desktop-artifacts/macos-${{ matrix.architecture }}-*/result.json)
           test "${#builds[@]}" -eq 1
-          python3 desktop/scripts/test_sparkle_updates.py "${builds[0]}"
+          .venv/bin/python desktop/scripts/test_sparkle_updates.py "${builds[0]}"
       - name: Remove only the temporary release key
         if: always() && inputs.release_tag != ''
-        run: python3 -c 'import os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"],"smartsearch-sparkle-key").unlink(missing_ok=True)'
+        run: .venv/bin/python -c 'import os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"],"smartsearch-sparkle-key").unlink(missing_ok=True)'
       - name: Stage complete macOS release assets
         if: inputs.release_tag != ''
         uses: actions/upload-artifact@v4
@@ -276,6 +287,12 @@ jobs:
         with:
           ref: ${{ inputs.release_tag }}
           persist-credentials: false
+      - name: Load the release validator from the workflow revision
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git restore --source="$WORKFLOW_SHA" -- desktop/scripts/update_artifacts.py
       - uses: actions/download-artifact@v4
         with:
           pattern: release-package-*

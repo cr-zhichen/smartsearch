@@ -1,6 +1,6 @@
 # Smart Search 桌面构建
 
-脚本默认构建未签名测试产物；Windows 显式使用 `-SigningMode Required` 时生成自签名产物，签名失败即停止。不创建 GitHub Release、不修改 PATH，也不会读取或删除共享配置、用户结果或外部 npm CLI。每次执行都会在 `.desktop-artifacts/` 新建独立目录；失败现场保留供排查。
+脚本默认构建未做发行者签名的测试产物：macOS 使用 ad-hoc 完整性签名，但未公证；Windows 显式使用 `-SigningMode Required` 时生成自签名产物，签名失败即停止。不创建 GitHub Release、不修改 PATH，也不会读取或删除共享配置、用户结果或外部 npm CLI。每次执行都会在 `.desktop-artifacts/` 新建独立目录；失败现场保留供排查。
 
 Python 后端固定为 PyInstaller `onedir`：`smart-search.exe`（Windows）或 `smart-search`（macOS），并验证 `smart_search/assets` 全量存在、`smart-search` 包元数据存在。`--smoke` 仅发送本机 `initialize` 与 `shutdown` 协议消息，使用本次运行目录中的空配置目录，不发真实服务商请求。
 
@@ -27,24 +27,43 @@ Windows 签名覆盖自有 App EXE/DLL、后端、Velopack Setup、启动包装�
 在目标架构的 macOS 13+ 机器上执行：
 
 ```bash
-bash desktop/scripts/build-macos.sh --architecture arm64 --python python3
+mise install
+mise run desktop:macos:install
+mise run desktop:macos:build --architecture arm64
 ```
 
-脚本要求 Python、宿主机和目标架构一致。它用独立 SwiftPM scratch 目录构建 `SmartSearchDesktop`，将后端放入 `Smart Search.app/Contents/Resources/backend/smart-search`，完整复制固定版本的 Sparkle framework 与 helper。App 使用本地 ad-hoc 签名，不包含 Apple Developer ID 或公证；DMG 保持 `unsigned-test` 文件名。Intel 使用 `--architecture x86_64`。
+脚本要求 Python、宿主机和目标架构一致，避免把 PyInstaller 的原生二进制误当成交叉编译产物。它用 Xcode 提供的 Swift 工具链和独立 SwiftPM scratch 目录构建 `desktop/macos` 的 `SmartSearchDesktop`，将后端放入 `Smart Search.app/Contents/Resources/backend/smart-search`。Intel 构建使用 `--architecture x86_64`。
 
-正式更新需同时传入 `--release-updates --update-key-file <仓库外私钥文件> --update-public-key <公钥>`，由官方 `generate_appcast` 签署完整 ZIP、差分及 appcast；可用 `--previous-release-directory` 提供已验证的上一版。私钥缺失或公钥不匹配即停止，普通无密钥候选关闭更新。`test_sparkle_updates.py <result.json>` 使用临时 EdDSA 身份、本地 feed 和官方 sparkle-cli 验证差分、回退及错误公钥拒绝，必须在 macOS 实际运行。首次从旧版迁移需关闭旧 App 并完整替换一次。
+构建原生界面需要选中带 macOS SDK 26 或更新版本的 Xcode，最低运行版本仍是 macOS 13。`compile-macos.sh` 将同一个实际 SDK 路径/版本同时传入编译和链接，避免 SwiftPM 将最低系统版本误记为 linked-on SDK，导致新版 macOS 仍显示旧控件样式。打包验证会读取真实 Mach-O 的 SDK 和最低版本，并拒绝旧 SDK 或与构建 SDK 不一致的产物。
+
+所有资源组装完成后，脚本对完整 `.app` 做 ad-hoc 签名，并强制执行 `codesign --verify --deep --strict`。编译器为单个可执行文件生成的 linker signature 不能代替完整应用签名；修复前 v0.1.22 的应用会报 `code has no resources but signature indicates they must be present`。SHA-256 一致也无法发现这种打包错误。
+
+DMG 沿用 Codex Tweaks / DJOneHub 的 660×440 安装窗口：中英双语提示、青色拖拽箭头、112pt 图标、Applications 链接，以及 1×/2× 背景。布局位于 `packaging/macos/dmg-settings.py`，修改 SVG 后运行 `mise run desktop:macos:background` 重新生成两个 PNG。打包不依赖 Finder 自动化，支持无界面的 CI。
+
+构建最后会只读挂载实际 DMG，校验应用签名、版本、架构和安装资源，复制到临时 Applications 目录，再检查复制后的签名并执行隔离配置的后端启动/退出 smoke。也可单独检查：
+
+```bash
+mise run desktop:macos:verify /path/to/SmartSearch.dmg --architecture arm64 --version 0.1.22
+mise run desktop:packaging:lint
+```
+
+文件名保留 `unsigned-test`，表示没有 Developer ID 发行者签名和 Apple 公证。ad-hoc 只修复包的完整性，不保证 Gatekeeper 默认放行；首次打开说明见[macOS 排障](../docs/guide/zh-CN/troubleshooting.md#macos-提示已损坏或无法验证开发者)。发行者信任仍需 Developer ID 签名和公证；干净机器使用须另行验收。
+
+完整 App 同时嵌入锁定版本的 Sparkle framework/helper，所有资源与更新公钥/feed 写入均在完整 bundle 签名之前完成。`result.json` 保存 App、DMG、架构及框架工具位置；原生 IPC、真实 SDK 标记、Icon Composer 资源和复制安装校验保持工程师 PR #51 的实现。
+
+正式更新需同时传入 `--release-updates --update-key-file <仓库外私钥文件> --update-public-key <公钥>`，由官方 `generate_appcast` 签署完整 ZIP、差分及 appcast；可用 `--previous-release-directory` 提供已验证的上一版。私钥缺失或公钥不匹配即停止，普通无密钥候选关闭 App 自动更新。`test_sparkle_updates.py <result.json>` 使用临时 EdDSA 身份、本地 feed 和官方 sparkle-cli 验证差分、回退及错误公钥拒绝，必须在 macOS 实际运行。首次从旧版迁移需关闭旧 App 并完整替换一次。
 
 ## CI 与发布边界
 
-两端由不同开发者推进时，可手动开启 `windows_only` 和 `sign_windows`，保持 `release_tag` 为空，只验证 Windows x64/ARM64 候选。macOS job 和发布 job 会跳过；完整发布仍要求四架构及合并后的统一验证。
+`.github/workflows/desktop-build.yml` 在 PR 或手动触发时分别构建 Windows x64/ARM64 与 macOS arm64/x86_64，并运行各平台的真实框架升级检查；PR 不获取发布 Secrets。Mac 使用 PR #51 已验证的 Xcode 26.3、mise 工具与 ensurepip 安装路径。手动开启 `sign_windows` 可生成不发布的 Windows 自签名候选；`windows_only` 仅用于独立 Windows 候选，此时必须保持 `release_tag` 为空。
 
-`.github/workflows/desktop-build.yml` 在 PR 或手动触发时分别构建 Windows x64/ARM64 与 macOS arm64/x86_64，并运行各平台的真实框架升级检查；PR 不获取发布 Secrets。手动开启 `sign_windows` 可生成不发布的 Windows 自签名候选。填写已有稳定 `release_tag` 属于显式发布：强制 Windows 签名和 Sparkle EdDSA 身份，四架构全部通过后，先上传安装器、完整包、差分包与校验清单，最后上传引用它们的 feed。不会创建 Release/Tag；只修改 workflow 不代表线上已运行。
+填写已有稳定 `release_tag` 属于显式发布：强制 Windows 签名和 Sparkle EdDSA 身份，四架构全部通过后，先上传安装器、完整包、差分包与校验清单，最后上传引用它们的 feed。发布源必须已经包含原生更新客户端，不能把旧下载器产品和新更新包拼成一个发行版。桌面工作流不会创建 Release/Tag；但仓库独立的 `publish-npm.yml` 会在 main 推送后自动发布 npm beta 并创建 GitHub 预发布，正式 latest 由稳定 tag 控制。
 
 签名 CI 运行错误密码/证书、内容/签名/时间戳篡改及签名失败检查；真实隔离升级后验签落盘的 App、后端、启动包装器与 Update.exe，不启动 GUI。结果保存在构建 `result.json`、升级 `receipt.json` 与签名检查记录。构建、验签和隔离安装不能代替用户 GUI、干净机器或 SmartScreen 提示验收。
 
-发布的产品、打包脚本和测试都来自同一个 tag，且 tag 必须与包版本一致。禁止混用旧产品与新更新工具。`replace_existing_assets` 仅用于经明确批准的附件修复，不应重打同一已安装版本；正常更新提高版本号。后端携带固定路径的 `package.json` 清单，以实际版本读回确认升级。
+修复已有原生更新发行版的包装时，产品源码仍固定在 tag；Mac 打包脚本、成品校验、安装资源、mise 配置及发布资产校验器可取工作流提交。`replace_existing_assets` 仅用于明确批准的附件修复，不应重打同一已安装版本；正常更新提高版本号。后端携带固定路径的 `package.json` 清单，以实际版本读回确认升级。
 
-Windows 签名构建使用 `-signed.exe`，始终属于 self-signed；测试使用 `-unsigned-test.exe`。Sparkle 更新签名不是 Apple Developer ID 或公证。正式 Sparkle 配置为 Secret `SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY` 与公开变量 `SMART_SEARCH_SPARKLE_PUBLIC_KEY`，本次开发不会自动配置它们。
+Windows 签名构建使用 `-signed.exe`，始终属于 self-signed；测试使用 `-unsigned-test.exe`。Sparkle 更新签名不是 Apple Developer ID 或公证。正式 Sparkle 配置为 Secret `SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY` 与公开变量 `SMART_SEARCH_SPARKLE_PUBLIC_KEY`，本次整合不会自动配置它们。缺少正式密钥时仍能跑隔离更新测试，但不能上传正式 Sparkle 更新资产。
 
 ## App 和 CLI 更新
 

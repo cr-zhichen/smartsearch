@@ -24,6 +24,7 @@
     <PackageReference Include="Velopack" Version="1.2.0" />
     <Content Include="Assets\smart-search.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\smart-search.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\mascot.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
   <Target Name="PublishCompiledXaml" AfterTargets="ComputeFilesToPublish">
     <ItemGroup>
