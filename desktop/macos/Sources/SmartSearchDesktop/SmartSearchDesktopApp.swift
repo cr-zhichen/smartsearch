@@ -15,7 +15,8 @@ struct SmartSearchDesktopApp: App {
                 })
         }
         .defaultSize(width: 1080, height: 760)
-        .windowToolbarStyle(.unified)
+        // Let NavigationSplitView adopt the current system's sidebar and title-bar layout.
+        .windowToolbarStyle(.automatic)
         .commands {
             CommandGroup(replacing: .appSettings) {
                 Button(L("设置与关于")) {
