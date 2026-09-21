@@ -108,3 +108,6 @@ finally {
     $env:SMART_SEARCH_WINDOWS_PFX_BASE64 = $null
     $env:SMART_SEARCH_WINDOWS_PFX_PASSWORD = $null
 }
+# The expected failing signtool probe leaves LASTEXITCODE=1. GitHub's pwsh
+# wrapper forwards that value unless this successful check exits explicitly.
+exit 0
