@@ -219,12 +219,24 @@ struct ConfigSection: Identifiable, Hashable {
 struct ProviderFieldGroup: Identifiable {
     let id: String
     let fields: [ConfigField]
+    let profile: [String: JSONValue]
 
-    var primaryCapability: String? {
-        ["main_search", "docs_search", "web_fetch"].first { capability in
-            fields.contains { $0.tier == "essential" && $0.capabilities.contains(capability) }
-        }
+    var primaryCapability: String? { capabilities.first }
+
+    var capabilities: [String] {
+        // Runtime profiles own the classification. Field tiers describe setup
+        // requirements, not a provider's primary role (for example, Tavily).
+        let declared = ([profile.string("capability")].compactMap { $0 }
+            + profile.array("capabilities").compactMap(\.stringValue)).filter { !$0.isEmpty }
+        let available = declared.isEmpty ? fields.flatMap(\.capabilities) : declared
+        var seen: Set<String> = []
+        return available.filter { !$0.isEmpty && seen.insert($0).inserted }
     }
+
+    var strengths: [String] { profile.array("strengths").compactMap(\.stringValue) }
+    var isExperimental: Bool { profile.bool("experimental") == true }
+    var isExplicitOnly: Bool { profile.bool("explicit_only") == true }
+    var isRoutingDisabled: Bool { profile.bool("route_enabled") == false }
 }
 
 struct OperationState {
@@ -493,7 +505,8 @@ struct DesktopState {
         var seen: Set<String> = []
         return fields.compactMap { field in
             guard let provider = field.provider, !provider.isEmpty, seen.insert(provider).inserted else { return nil }
-            return ProviderFieldGroup(id: provider, fields: fields.filter { $0.provider == provider })
+            return ProviderFieldGroup(id: provider, fields: fields.filter { $0.provider == provider },
+                                      profile: raw["provider_profiles"]?[provider]?.objectValue ?? [:])
         }
     }
 }

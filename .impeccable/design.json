@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-09-21T06:33:38Z",
+  "generatedAt": "2026-09-21T07:00:53Z",
   "title": "Design System: Smart Search for macOS",
   "extensions": {
     "native": {
@@ -111,7 +111,7 @@
         "panels": "DesktopPanel including every CLI group"
       },
       "routingEditor": {
-        "placement": "plain text native row pinned above provider search and the scrolling list",
+        "placement": "plain text first row in the shared scrolling provider list, below the search field",
         "modes": {
           "hybrid": "embedding and classifier configuration with shared timeout",
           "jev": "TypeSafe credentials, retrieval judgments and result processing",
@@ -126,6 +126,19 @@
         "existingValue": "fixed mask shown as SecureField prompt, never as a draft value",
         "presence": "backend Boolean secret_presence distinguishes empty and configured keys",
         "clear": "explicit clear action; typing a replacement removes the pending clear"
+      },
+      "providerNavigation": {
+        "classification": "runtime provider_profiles.capability; field capabilities only as fallback",
+        "order": [
+          "main_search",
+          "docs_search",
+          "web_search",
+          "web_fetch",
+          "vertical_search"
+        ],
+        "rows": "one occurrence per provider; name, configuration state and unsaved marker",
+        "subtitle": "localized runtime strengths and all declared capabilities; experimental and explicit-only restrictions retained",
+        "search": "name, purpose and all capabilities; selection and drafts remain stable"
       }
     },
     "motion": [

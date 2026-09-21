@@ -289,28 +289,27 @@ private struct ProvidersView: View {
 
     var body: some View {
         if let state = model.state {
+            let providers = groups(state)
             VStack(spacing: 0) {
                 DesktopSplitView("providers") {
                     VStack(spacing: 0) {
-                        if state.fields.contains(where: { $0.key == "SMART_SEARCH_INTENT_ROUTER" }) {
-                            List(selection: $selection) {
-                                Text(L("意图路由"))
-                                    .fontWeight(.medium)
-                                    .tag(ConfigurationRoute.section("routing"))
-                                    .listRowSeparator(.hidden)
-                            }
-                            .listStyle(.inset)
-                            .scrollContentBackground(.hidden)
-                            .scrollDisabled(true)
-                            .frame(height: 44)
-                        }
                         TextField(L("查找服务商"), text: $filter)
                             .textFieldStyle(.roundedBorder).padding(12)
                         List(selection: $selection) {
-                            Section(L("服务商")) {
-                                ForEach(groups(state)) { group in
-                                    providerRow(group, state: state)
-                                        .tag(ConfigurationRoute.provider(group.id))
+                            if state.fields.contains(where: { $0.key == "SMART_SEARCH_INTENT_ROUTER" }) {
+                                Text(L("意图路由"))
+                                    .fontWeight(.medium)
+                                    .padding(.vertical, 5)
+                                    .tag(ConfigurationRoute.section("routing"))
+                                    .listRowSeparator(.hidden)
+                            }
+                            ForEach(providerCategories(providers), id: \.self) { capability in
+                                Section(capabilityName(capability)) {
+                                    ForEach(providers.filter { ($0.primaryCapability ?? "other") == capability }) { group in
+                                        providerRow(group, state: state)
+                                            .tag(ConfigurationRoute.provider(group.id))
+                                            .listRowSeparator(.hidden)
+                                    }
                                 }
                             }
                             Section(L("高级配置")) {
@@ -331,7 +330,7 @@ private struct ProvidersView: View {
                         }
                         .listStyle(.inset)
                         .scrollContentBackground(.hidden)
-                        if groups(state).isEmpty && !filter.isEmpty {
+                        if providers.isEmpty && !filter.isEmpty {
                             Text(L("没有匹配的服务商")).font(.caption)
                                 .foregroundStyle(.secondary).padding(12)
                         }
@@ -358,8 +357,6 @@ private struct ProvidersView: View {
                         .accessibilityLabel(L("有未保存修改"))
                 }
             }
-            Text(group.primaryCapability.map(capabilityName) ?? L("扩展能力"))
-                .font(.caption).foregroundStyle(.secondary)
             Text(providerIsConfigured(group, state: state) ? L("已配置") : L("未配置"))
                 .font(.caption).foregroundStyle(.secondary)
         }
@@ -371,7 +368,8 @@ private struct ProvidersView: View {
         switch selection {
         case .provider(let id):
             if let group = state.providerGroups.first(where: { $0.id == id }) {
-                ConfigurationEditor(model: model, title: id, fields: group.fields, section: id)
+                ConfigurationEditor(model: model, title: id, subtitle: providerPurpose(group),
+                                    fields: group.fields, section: id)
                     .id(ConfigurationRoute.provider(id))
             }
         case .section(let id):
@@ -430,12 +428,21 @@ private struct ProvidersView: View {
     }
 
     private func groups(_ state: DesktopState) -> [ProviderFieldGroup] {
-        state.providerGroups.filter { matches($0.id) || matches($0.primaryCapability.map(capabilityName) ?? "") }
+        state.providerGroups
+            .filter { group in
+                matches(group.id) || matches(providerPurpose(group)) || group.capabilities.contains { matches($0) }
+            }
             .sorted {
                 let left = providerIsConfigured($0, state: state)
                 let right = providerIsConfigured($1, state: state)
                 return left == right ? $0.id < $1.id : left
             }
+    }
+
+    private func providerCategories(_ groups: [ProviderFieldGroup]) -> [String] {
+        let order = ["main_search", "docs_search", "web_search", "web_fetch", "vertical_search", "site_map", "synthesis"]
+        let present = Set(groups.map { $0.primaryCapability ?? "other" })
+        return order.filter(present.contains) + present.subtracting(order).sorted()
     }
 
     private func matches(_ text: String) -> Bool {
@@ -580,12 +587,13 @@ private struct ConfigActions: View {
 private struct ConfigurationEditor: View {
     @ObservedObject var model: AppModel
     let title: String
+    var subtitle: String = L("修改先保留为草稿；测试使用当前填写的值。")
     let fields: [ConfigField]
     let section: String
 
     var body: some View {
         if let state = model.state {
-            DesktopPage(title, subtitle: L("修改先保留为草稿；测试使用当前填写的值。"), padding: 16) {
+            DesktopPage(title, subtitle: subtitle, padding: 16) {
                 ProviderSection(model: model, state: state, section: section, fields: fields)
             }
         }
@@ -594,7 +602,29 @@ private struct ConfigurationEditor: View {
 
 private func capabilityName(_ value: String) -> String {
     ["main_search": L("主搜索"), "docs_search": L("文档检索"), "web_fetch": L("网页抓取"),
-     "web_search": L("网页搜索"), "vertical_search": L("垂直检索")][value] ?? value
+     "web_search": L("网页搜索"), "vertical_search": L("垂直检索"), "site_map": L("站点地图"),
+     "synthesis": L("结果汇总"), "other": L("其他能力")][value] ?? value
+}
+
+private func providerPurpose(_ group: ProviderFieldGroup) -> String {
+    let capabilities = group.capabilities.map(capabilityName).joined(separator: L("、"))
+    let strengths = group.strengths.map { L($0) }.joined(separator: L("、"))
+    var sentences: [String] = []
+    if !capabilities.isEmpty {
+        let purpose = strengths.isEmpty
+            ? L("用于{0}。", capabilities)
+            : L("用于{0}，侧重{1}。", capabilities, strengths)
+        sentences.append(purpose)
+    } else if let help = group.fields.first(where: { !$0.help.isEmpty })?.help {
+        sentences.append(help)
+    }
+    if group.isExperimental { sentences.append(L("实验性能力。")) }
+    if group.isExplicitOnly {
+        sentences.append(L("仅在明确指定时调用。"))
+    } else if group.isRoutingDisabled {
+        sentences.append(L("不参与自动路由。"))
+    }
+    return sentences.joined(separator: " ")
 }
 
 /// Section ids in backend order, with anything the backend did not describe

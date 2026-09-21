@@ -15890,5 +15890,229 @@
   "输入 API Key": [
     "输入 API Key",
     "Enter an API key"
+  ],
+  "、": [
+    "、",
+    ", "
+  ],
+  "结果汇总": [
+    "结果汇总",
+    "Result synthesis"
+  ],
+  "其他能力": [
+    "其他能力",
+    "Other capabilities"
+  ],
+  "用于{0}。": [
+    "用于{0}。",
+    "Provides {0}."
+  ],
+  "用于{0}，侧重{1}。": [
+    "用于{0}，侧重{1}。",
+    "Provides {0}, specializing in {1}."
+  ],
+  "实验性能力。": [
+    "实验性能力。",
+    "Experimental capability."
+  ],
+  "仅在明确指定时调用。": [
+    "仅在明确指定时调用。",
+    "Used only when explicitly requested."
+  ],
+  "不参与自动路由。": [
+    "不参与自动路由。",
+    "Excluded from automatic routing."
+  ],
+  "broad synthesis": [
+    "多来源综合回答",
+    "multi-source synthesis"
+  ],
+  "web_search": [
+    "网页搜索",
+    "web search"
+  ],
+  "x_search": [
+    "X 平台搜索",
+    "searching X"
+  ],
+  "relay compatibility": [
+    "兼容 OpenAI 协议的中转服务",
+    "OpenAI-compatible relays"
+  ],
+  "library docs": [
+    "类库文档",
+    "library documentation"
+  ],
+  "API docs": [
+    "API 文档",
+    "API documentation"
+  ],
+  "framework docs": [
+    "框架文档",
+    "framework documentation"
+  ],
+  "versioned snippets": [
+    "指定版本的代码示例",
+    "version-specific code examples"
+  ],
+  "official domains": [
+    "官方网站",
+    "official websites"
+  ],
+  "papers": [
+    "论文",
+    "research papers"
+  ],
+  "product pages": [
+    "产品页面",
+    "product pages"
+  ],
+  "trusted low-noise discovery": [
+    "可信来源检索",
+    "trusted, low-noise source discovery"
+  ],
+  "similar pages": [
+    "相似页面",
+    "similar pages"
+  ],
+  "Chinese": [
+    "中文内容",
+    "Chinese-language content"
+  ],
+  "domestic China": [
+    "国内信息",
+    "information from China"
+  ],
+  "current": [
+    "时效信息",
+    "current information"
+  ],
+  "policy": [
+    "政策",
+    "policies"
+  ],
+  "announcements": [
+    "公告",
+    "announcements"
+  ],
+  "recency filters": [
+    "按时间筛选",
+    "recency filtering"
+  ],
+  "Coding Plan quota": [
+    "使用 Coding Plan 配额",
+    "Coding Plan quota"
+  ],
+  "remote MCP web_search_prime": [
+    "通过 MCP 搜索网页",
+    "web search through MCP"
+  ],
+  "site map": [
+    "站点地图",
+    "site maps"
+  ],
+  "URL extract": [
+    "网页正文提取",
+    "web page content extraction"
+  ],
+  "known public URL": [
+    "指定公开网页",
+    "known public URLs"
+  ],
+  "PDF": [
+    "PDF 文档",
+    "PDF documents"
+  ],
+  "arXiv": [
+    "arXiv 论文",
+    "arXiv papers"
+  ],
+  "clean markdown": [
+    "干净的 Markdown 正文",
+    "clean Markdown content"
+  ],
+  "ReaderLM-v2 with key": [
+    "需 Key 的 ReaderLM-v2 提取",
+    "ReaderLM-v2 extraction with an API key"
+  ],
+  "remote MCP webReader": [
+    "通过 MCP 提取网页正文",
+    "web page reading through MCP"
+  ],
+  "robust scrape fallback": [
+    "抓取失败时的备用提取",
+    "resilient scraping fallback"
+  ],
+  "JS-heavy pages": [
+    "依赖 JavaScript 的页面",
+    "JavaScript-heavy pages"
+  ],
+  "dynamic pages": [
+    "动态页面",
+    "dynamic pages"
+  ],
+  "OCR/PDF/structured extraction": [
+    "OCR、PDF 和结构化提取",
+    "OCR, PDF, and structured extraction"
+  ],
+  "broad web discovery": [
+    "广泛查找网页来源",
+    "broad web discovery"
+  ],
+  "clean markdown extraction": [
+    "提取干净的 Markdown 正文",
+    "clean Markdown extraction"
+  ],
+  "news and locale hints": [
+    "新闻与地区偏好",
+    "news and locale hints"
+  ],
+  "research-paper domain type": [
+    "论文类站点检索",
+    "research-paper domains"
+  ],
+  "CVE": [
+    "CVE 漏洞信息",
+    "CVE vulnerabilities"
+  ],
+  "finance": [
+    "金融",
+    "finance"
+  ],
+  "legal": [
+    "法律",
+    "legal information"
+  ],
+  "academic": [
+    "学术",
+    "academic research"
+  ],
+  "code/docs": [
+    "代码与文档",
+    "code and documentation"
+  ],
+  "structured vertical domains": [
+    "垂直领域的结构化检索",
+    "structured vertical-domain search"
+  ],
+  "academic literature": [
+    "学术文献",
+    "academic literature"
+  ],
+  "semantic paper search": [
+    "论文语义检索",
+    "semantic paper search"
+  ],
+  "citation relations": [
+    "引用与被引关系",
+    "citation relationships"
+  ],
+  "paper content snippets": [
+    "论文内容片段",
+    "paper content snippets"
+  ],
+  "evidence-only final synthesis": [
+    "仅依据已有证据生成结论",
+    "evidence-only final synthesis"
   ]
 }
