@@ -74,9 +74,11 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     private weak var mainWindow: NSWindow?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // SwiftPM executables can initially receive the generic process icon.
-        // Load the packaged brand resource explicitly before Dock registration.
-        NSApp.applicationIconImage = AppBranding.icon
+        // Packaged apps keep the system-rendered bundle icon and its macOS background.
+        // Only bare SwiftPM launches need an explicit fallback icon.
+        if Bundle.main.bundleURL.pathExtension != "app" {
+            NSApp.applicationIconImage = AppBranding.icon
+        }
     }
 
     func configure(window: NSWindow, model: AppModel) {

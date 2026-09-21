@@ -231,3 +231,11 @@ Release/DMG 构建、12 轮真实后端启动／并发状态请求／停止、�
 - 完整 Release/DMG 构建、12 轮真实后端生命周期、严格签名、复制安装后启动、SDK 27.0／最低 macOS 13.0、语言资源一致性和打包静态检查通过。使用 simplify 整理了模式分组和显示辅助逻辑，未新增 UI 单元测试。
 
 最终产物：`.desktop-artifacts/macos-arm64-20260921T063047Z-94707-5490/SmartSearch-0.1.22-macos-arm64-unsigned-test.dmg`。保留 ad-hoc 测试签名；用户验收后再创建上游 PR。
+
+## 阶段 7：保留系统 Dock 图标底板
+
+用户发现未运行时图标有白色底板，启动后底板消失。启动委托把透明的原始 `SmartSearch.icns` 读成 `NSImage` 后赋给 `NSApp.applicationIconImage`，覆盖了系统对应用包图标的呈现。现在打包的 `.app` 使用系统从 `CFBundleIconFile` 解析的图标；只有直接运行裸 SwiftPM 可执行文件时才设置备用图标。关于页继续使用品牌资源，未改动原始图稿。
+
+完整 Release/DMG 构建、12 轮真实后端生命周期、严格签名、复制安装后后端启动、SDK 与静态检查通过；额外核对包内 Info.plist 声明的 ICNS 存在、格式有效且与源资源一致。未新增 UI 单元测试。CUA 读取 Dock 超时，运行前后最终视觉一致性仍需实机验收。
+
+产物：`.desktop-artifacts/macos-arm64-20260921T063708Z-4259-31096/SmartSearch-0.1.22-macos-arm64-unsigned-test.dmg`。
