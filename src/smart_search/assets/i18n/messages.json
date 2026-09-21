@@ -16134,5 +16134,33 @@
   "拖动调整宽度；方向键微调": [
     "拖动调整宽度；方向键微调",
     "Drag to resize; use arrow keys for fine adjustments"
+  ],
+  "保存更改后生效。": [
+    "保存更改后生效。",
+    "Takes effect after saving changes."
+  ],
+  "参数": [
+    "参数",
+    "Parameters"
+  ],
+  "字段说明：{0}": [
+    "字段说明：{0}",
+    "Field details: {0}"
+  ],
+  "当前生效": [
+    "当前生效",
+    "Effective value"
+  ],
+  "路由与回退": [
+    "路由与回退",
+    "Routing and fallback"
+  ],
+  "配置已保存": [
+    "配置已保存",
+    "Configuration saved"
+  ],
+  "配置已保存，但暂未读回最新状态。请刷新后继续编辑。": [
+    "配置已保存，但暂未读回最新状态。请刷新后继续编辑。",
+    "Configuration was saved, but the latest state could not be read. Refresh before editing again."
   ]
 }

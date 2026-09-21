@@ -148,14 +148,15 @@ public sealed partial class MainWindow : Window
         RenderCurrentPage();
     }
 
-    private async Task RefreshStateAsync(bool preserveDraft = true)
+    private async Task<bool> RefreshStateAsync(bool preserveDraft = true)
     {
         var result = await RequestAsync("get_state", new { }, L("无法刷新本机状态。"));
         if (result is null)
-            return;
+            return false;
         ApplyState(result.Value);
-        if (!preserveDraft) _providerDraft.Clear();
+        if (!preserveDraft) { _providerDraft.Clear(); _fieldEditors.Clear(); }
         RenderCurrentPage();
+        return true;
     }
 
     private async Task<JsonElement?> RequestAsync(string method, object parameters, string failure)
@@ -182,6 +183,7 @@ public sealed partial class MainWindow : Window
         _updates = Property(state, "updates").Clone();
         _environment = Property(state, "environment").Clone();
         _skills = Property(state, "skills").Clone();
+        _configSnapshotStale = false;
     }
 
     private void OnNavigationSelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -244,166 +246,6 @@ public sealed partial class MainWindow : Window
             [KeyValue(L("配置目录"), Text(state, "config_dir", Text(state, "config_path", L("未返回")))),
              KeyValue(L("配置版本"), Text(state, "revision", L("未返回"))), .. CapabilityChains(state)])));
         return Scroll(panel);
-    }
-
-    private UIElement BuildProvidersPage(Dictionary<string, FieldDraft>? preservedDraft)
-    {
-        _fieldEditors.Clear();
-        var panel = PagePanel();
-        panel.Children.Add(PageTitle(L("配置与服务商")));
-        panel.Children.Add(Secondary(L("先配齐三类能力，其余按需展开。修改后可先测试，再保存。")));
-        if (_state is not { } state)
-        {
-            panel.Children.Add(OfflineHint());
-            return Scroll(panel);
-        }
-
-        var fields = Items(Property(Property(state, "metadata"), "fields")).ToList();
-        if (fields.Count == 0)
-        {
-            panel.Children.Add(Body(L("后端没有返回可编辑字段。请刷新状态或检查协议版本。")));
-            return Scroll(panel);
-        }
-
-        var providerGroups = fields.Where(field => !string.IsNullOrWhiteSpace(Text(field, "provider")))
-            .GroupBy(field => Text(field, "provider")).ToList();
-        var shown = new HashSet<string>();
-        var step = 0;
-        foreach (var capability in new[] { "main_search", "docs_search", "web_fetch" })
-        {
-            var groups = providerGroups.Where(group => !shown.Contains(group.Key) && group.Any(field =>
-                Text(field, "tier") == "essential" && Items(field, "capabilities").Any(value => value.GetString() == capability))).ToList();
-            var content = new StackPanel { Spacing = 20 };
-            var ready = Bool(Property(Property(state, "capability_status"), capability), "ok");
-            content.Children.Add(HeadingWithStatus($"{++step}. {CapabilityLabel(capability)}", ready ? L("已配置") : L("待配置"), ready ? "Success" : "Warning"));
-            content.Children.Add(Secondary(L("下面的服务商任选一个即可。")));
-            bool Configured(IGrouping<string, JsonElement> group) => group.Any(field => IsSecret(field) && !string.IsNullOrWhiteSpace(DisplayValue(Property(state, "values"), Text(field, "key"))));
-            foreach (var group in groups.OrderByDescending(Configured))
-            {
-                shown.Add(group.Key);
-                var providerForm = BuildProviderGroup(state, group.Key, group.ToList(), preservedDraft);
-                content.Children.Add(Configured(group) || !groups.Any(Configured)
-                    ? providerForm
-                    : Disclosure("alternative:" + group.Key, ProviderLabel(group.Key) + L(" · 可选"), providerForm));
-            }
-            panel.Children.Add(Card(content));
-        }
-        panel.Children.Add(SectionHeading(L("更多服务商")));
-        panel.Children.Add(Secondary(L("按需启用网页搜索和实验性检索。测试会发送真实请求，可能计费。")));
-        foreach (var group in providerGroups.Where(group => !shown.Contains(group.Key)))
-            panel.Children.Add(Disclosure("provider:" + group.Key, ProviderLabel(group.Key),
-                BuildProviderGroup(state, group.Key, group.ToList(), preservedDraft)));
-
-        var metadata = Property(state, "metadata");
-        foreach (var section in Items(metadata, "sections").OrderBy(section => Number(section, "order")))
-        {
-            var id = Text(section, "id");
-            var sectionFields = fields.Where(field => string.IsNullOrWhiteSpace(Text(field, "provider")) && Text(field, "section") == id).ToList();
-            if (sectionFields.Count == 0) continue;
-            var content = new StackPanel { Spacing = 16 };
-            content.Children.Add(Secondary(Text(section, "blurb_" + Localization.Language)));
-            foreach (var field in sectionFields) content.Children.Add(BuildFieldEditor(field, preservedDraft));
-            panel.Children.Add(Disclosure("section:" + id, Text(section, "label_" + Localization.Language, id), content));
-        }
-        _saveSummary = Secondary("");
-        var footer = new StackPanel { Spacing = 8 };
-        footer.Children.Add(_saveSummary);
-        footer.Children.Add(ActionRow(
-            ActionButton(L("保存更改"), SaveDraftAsync, primary: true, operationKey: "config-save", busyText: L("保存中…")),
-            ActionButton(L("预览"), PreviewDraftAsync, operationKey: "config-preview", busyText: L("预览中…")),
-            ActionButton(L("刷新"), () => RefreshStateAsync(), operationKey: "state", busyText: L("刷新中…"))));
-        var layout = new Grid();
-        layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        layout.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        layout.Children.Add(Scroll(panel));
-        var footerCard = Card(footer);
-        footerCard.Margin = new Thickness(24, 8, 24, 12);
-        Grid.SetRow(footerCard, 1);
-        layout.Children.Add(footerCard);
-        return layout;
-    }
-
-    private UIElement BuildProviderGroup(JsonElement state, string provider, List<JsonElement> fields, Dictionary<string, FieldDraft>? draft)
-    {
-        var content = new StackPanel { Spacing = 12 };
-        content.Children.Add(new TextBlock { Text = ProviderLabel(provider), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 16 });
-        foreach (var field in fields.Where(field => !IsAdvanced(field))) content.Children.Add(BuildFieldEditor(field, draft));
-        var advanced = fields.Where(IsAdvanced).ToList();
-        if (advanced.Count > 0)
-        {
-            var options = new StackPanel { Spacing = 16 };
-            foreach (var field in advanced) options.Children.Add(BuildFieldEditor(field, draft));
-            content.Children.Add(Disclosure("advanced:" + provider, L("更多设置（{0}）", advanced.Count), options));
-        }
-        var status = BuildProviderStatus(state, provider);
-        _providerStatusPanels[provider] = status;
-        content.Children.Add(status);
-        content.Children.Add(ActionButton(L("测试"), () => TestProviderDraftAsync(provider), operationKey: "test:" + provider,
-            busyText: Text(Property(state, "probe_kinds"), provider) == "presence" ? L("检查中…") : L("测试中…"), label: () => ProviderTestLabel(provider)));
-        return content;
-    }
-
-    private UIElement BuildFieldEditor(JsonElement field, Dictionary<string, FieldDraft>? preservedDraft)
-    {
-        var key = Text(field, "key");
-        var source = Text(Property(_state!.Value, "sources"), key, "default");
-        var value = DisplayValue(Property(_state!.Value, "values"), key);
-        var initialValue = string.IsNullOrWhiteSpace(value) ? Text(field, "default") : value;
-        var isSecret = IsSecret(field);
-        var isLocked = source.Equals("environment", StringComparison.OrdinalIgnoreCase);
-        var label = new StackPanel { Spacing = 6 };
-        label.Children.Add(new TextBlock { Text = Label(field), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap });
-        var help = Text(field, "help_" + Localization.Language, Text(field, "help_en"));
-        if (!string.IsNullOrWhiteSpace(help))
-            label.Children.Add(Secondary(help));
-        var links = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        foreach (var (property, text) in new[] { ("key_url", L("申请 Key")), ("docs_url", L("文档")) })
-            if (Uri.TryCreate(Text(field, property), UriKind.Absolute, out var uri) && uri.Scheme is "https" or "http")
-                links.Children.Add(new HyperlinkButton { Content = text, NavigateUri = uri, Padding = new Thickness(0), FontSize = 12 });
-        if (links.Children.Count > 0) label.Children.Add(links);
-        var box = new StackPanel { Spacing = 8 };
-        var saved = DisplayValue(Property(_state!.Value, "saved_values"), key);
-
-        var input = CreateFieldInput(field, isSecret, initialValue, isLocked);
-        AutomationProperties.SetName(input, Label(field));
-        input.HorizontalAlignment = HorizontalAlignment.Stretch;
-        box.Children.Add(input);
-        var detail = new StackPanel { Spacing = 6 };
-        detail.Children.Add(DataText(key));
-        detail.Children.Add(DataText(L("当前生效：{0}", (string.IsNullOrWhiteSpace(initialValue) ? L("未设置") : initialValue))));
-        if (saved != initialValue) detail.Children.Add(DataText(L("配置文件：{0}", (string.IsNullOrWhiteSpace(saved) ? L("未设置") : saved))));
-        box.Children.Add(Badge(SourceLabel(source), "Neutral"));
-        if (isSecret && !string.IsNullOrWhiteSpace(value)) box.Children.Add(DataText(L("当前密钥：") + value));
-        CheckBox? clear = null;
-        if (!isLocked)
-        {
-            clear = new CheckBox
-            {
-                Content = isSecret ? L("清除已保存的密钥") : L("恢复默认值"),
-                IsEnabled = true
-            };
-            detail.Children.Add(clear);
-        }
-        else
-        {
-            box.Children.Add(Secondary(L("由环境变量提供，在此处只读。")));
-        }
-        box.Children.Add(Disclosure("field:" + key, L("来源与重置"), detail));
-
-        var editor = new FieldEditor(field.Clone(), input, clear, ReadControl(input), isSecret, isLocked);
-        _fieldEditors[key] = editor;
-        if (preservedDraft is not null && preservedDraft.TryGetValue(key, out var draft))
-            RestoreDraft(editor, draft);
-        void Changed() { _providerDraft = CaptureDraft(); RefreshActionButtons(); }
-        switch (input)
-        {
-            case TextBox textBox: textBox.TextChanged += (_, _) => Changed(); break;
-            case PasswordBox passwordBox: passwordBox.PasswordChanged += (_, _) => Changed(); break;
-            case ComboBox comboBox: comboBox.SelectionChanged += (_, _) => Changed(); break;
-            case ToggleSwitch toggle: toggle.Toggled += (_, _) => Changed(); break;
-        }
-        if (clear is not null) { clear.Checked += (_, _) => Changed(); clear.Unchecked += (_, _) => Changed(); }
-        return FieldRow(label, box);
     }
 
     private static IEnumerable<UIElement> CapabilityRows(JsonElement state)
@@ -775,8 +617,13 @@ public sealed partial class MainWindow : Window
             return;
         }
         _providerDraft.Clear();
-        await RefreshStateAsync(preserveDraft: false);
-        ShowNotice(L("已保存"), L("新配置会用于下一次任务；已经开始的任务继续使用它自己的配置快照。"), InfoBarSeverity.Success);
+        _fieldEditors.Clear();
+        _configSnapshotStale = true;
+        RenderProviderDetail();
+        if (await RefreshStateAsync(preserveDraft: false))
+            ShowNotice(L("已保存"), L("新配置会用于下一次任务；已经开始的任务继续使用它自己的配置快照。"), InfoBarSeverity.Success);
+        else
+            ShowNotice(L("配置已保存"), L("配置已保存，但暂未读回最新状态。请刷新后继续编辑。"), InfoBarSeverity.Warning);
     }
 
     private async Task TestProviderDraftAsync(string provider)
@@ -1664,7 +1511,7 @@ public sealed partial class MainWindow : Window
 
     private async Task RunOperationAsync(string key, Func<Task> action)
     {
-        if (new[] { "state", "config-save", "config-preview", "profile" }.Contains(key) && ConfigOperationBusy) return;
+        if (new[] { "state", "config-save", "config-preview", "config-discard", "profile" }.Contains(key) && ConfigOperationBusy) return;
         if (!_operations.Begin(key)) return;
         RefreshActionButtons();
         try { await action(); }
@@ -1672,7 +1519,7 @@ public sealed partial class MainWindow : Window
         finally { _operations.EndRequest(key); RefreshActionButtons(); }
     }
 
-    private bool ConfigOperationBusy => new[] { "state", "config-save", "config-preview", "profile" }.Any(_operations.IsBusy);
+    private bool ConfigOperationBusy => new[] { "state", "config-save", "config-preview", "config-discard", "profile" }.Any(_operations.IsBusy);
 
     private void UpdateActionButton(Button button, ActionBinding binding)
     {
@@ -1686,6 +1533,8 @@ public sealed partial class MainWindow : Window
             Bool(_environment, "busy") && key == "environment-" + Text(_environment, "operation");
         var allowed = key switch
         {
+            "config-save" or "config-discard" => _backend.IsConnected && !_configSnapshotStale && _providerDraft.Count > 0,
+            "config-preview" => _backend.IsConnected && !_configSnapshotStale,
             "skills-install" => _state is not null && Bool(_skills, "can_sync") && !Bool(_skills, "checking") && !EnvironmentBusy && !updatingCli && _selectedSkillTargets.Count > 0,
             "skills-check" or "skills-status" => _state is not null && !Bool(_skills, "busy") && !Bool(_skills, "checking") && !EnvironmentBusy && !updatingCli,
             "environment-check" or "environment-verify" => _state is not null && !EnvironmentBusy && !updatingCli,
@@ -1701,7 +1550,7 @@ public sealed partial class MainWindow : Window
         };
         if (EnvironmentBusy && new[] { "updates-cli", "updates-install", "connect", "profile", "skills-install", "cli-enable" }.Contains(key)) allowed = false;
         if (Bool(_skills, "busy") && new[] { "updates-cli", "updates-install", "connect", "profile", "environment-check", "environment-verify", "environment-install", "cli-enable" }.Contains(key)) allowed = false;
-        button.IsEnabled = allowed && !busy && !(new[] { "state", "config-save", "config-preview", "profile" }.Contains(key) && ConfigOperationBusy);
+        button.IsEnabled = allowed && !busy && !(new[] { "state", "config-save", "config-preview", "config-discard", "profile" }.Contains(key) && ConfigOperationBusy);
         var label = busy ? binding.BusyText : binding.Label();
         if (busy)
             button.Content = new StackPanel
@@ -1722,6 +1571,8 @@ public sealed partial class MainWindow : Window
             var count = changes.Set.Count + changes.Unset.Count;
             if (_saveSummary is not null)
                 _saveSummary.Text = count > 0 ? L("有 {0} 项未保存修改 · 密钥留空会保留原值", count) : L("没有未保存的修改 · 测试不会自动保存配置");
+            foreach (var group in ConfigurationFields.Where(field => Text(field, "provider").Length > 0).GroupBy(field => Text(field, "provider")))
+                if (_providerRowStatus.TryGetValue("provider:" + group.Key, out var status)) status.Text = ProviderListStatus(group.Key, group);
             foreach (var editor in _fieldEditors.Values)
             {
                 editor.Input.IsEnabled = !_operations.IsBusy("config-save");
@@ -1751,7 +1602,7 @@ public sealed partial class MainWindow : Window
     private Control CreateFieldInput(JsonElement field, bool secret, string value, bool isLocked)
     {
         if (isLocked)
-            return new TextBox { Text = value, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas") };
+            return new TextBox { Text = secret ? (HasSavedSecret(field) ? "••••••••" : L("未设置")) : value, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas") };
         if (secret)
             return new PasswordBox { PlaceholderText = L("留空将保留当前密钥"), IsEnabled = true };
         if (Text(field, "kind").Equals("bool", StringComparison.OrdinalIgnoreCase))
@@ -1761,8 +1612,8 @@ public sealed partial class MainWindow : Window
         {
             var combo = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
             foreach (var choice in choices)
-                combo.Items.Add(choice);
-            combo.SelectedItem = choices.FirstOrDefault(choice => choice.Equals(value, StringComparison.OrdinalIgnoreCase)) ?? choices.FirstOrDefault();
+                combo.Items.Add(new ConfigurationChoice(choice, ChoiceLabel(Text(field, "key"), choice)));
+            combo.SelectedItem = combo.Items.OfType<ConfigurationChoice>().FirstOrDefault(choice => choice.Value.Equals(value, StringComparison.OrdinalIgnoreCase)) ?? combo.Items.FirstOrDefault();
             return combo;
         }
         return new TextBox { Text = value, PlaceholderText = Text(field, "placeholder", Text(field, "default")), TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas") };
@@ -1794,46 +1645,45 @@ public sealed partial class MainWindow : Window
 
     private DraftChange CollectDraft(string? provider = null)
     {
+        _providerDraft = CaptureDraft();
         var set = new Dictionary<string, object?>();
         var unset = new List<string>();
-        foreach (var (key, editor) in _fieldEditors)
+        foreach (var field in ConfigurationFields)
         {
-            if (editor.Locked || (provider is not null && !Text(editor.Field, "provider").Equals(provider, StringComparison.OrdinalIgnoreCase)))
-                continue;
-            var value = ReadEditorValue(editor);
-            if (!HasDraftChange(editor, value))
-                continue;
-            if (editor.Clear?.IsChecked == true)
-            {
-                unset.Add(key);
-                continue;
-            }
-            set[key] = ConvertValue(editor, value);
+            var key = Text(field, "key");
+            if (!_providerDraft.TryGetValue(key, out var draft) ||
+                Text(Property(_state, "sources"), key).Equals("environment", StringComparison.OrdinalIgnoreCase) ||
+                (provider is not null && Text(field, "provider") != provider)) continue;
+            if (draft.Clear) unset.Add(key);
+            else set[key] = ConvertValue(field, new CommandValue(draft.Text, draft.IsChecked));
         }
         return new DraftChange(set, unset);
     }
 
     private Dictionary<string, FieldDraft> CaptureDraft()
     {
-        var captured = new Dictionary<string, FieldDraft>(StringComparer.Ordinal);
+        // Editors represent only the selected detail. Other drafts belong to the page model.
+        var captured = new Dictionary<string, FieldDraft>(_providerDraft, StringComparer.Ordinal);
         foreach (var (key, editor) in _fieldEditors)
         {
             var value = ReadEditorValue(editor);
-            if (!HasDraftChange(editor, value))
-                continue;
-            captured[key] = new FieldDraft(value.Text, value.IsChecked, editor.Clear?.IsChecked == true);
+            if (HasDraftChange(editor, value)) captured[key] = new FieldDraft(value.Text, value.IsChecked, editor.Clear?.IsOn == true);
+            else captured.Remove(key);
         }
         return captured;
     }
 
     private static bool HasDraftChange(FieldEditor editor, CommandValue value) =>
-        !editor.Locked && (editor.Clear?.IsChecked == true ||
+        !editor.Locked && (editor.Clear?.IsOn == true ||
                            (editor.Secret ? !string.IsNullOrWhiteSpace(value.Text) : !ControlValueComparer.Equal(value, editor.Initial)));
 
     private static void RestoreDraft(FieldEditor editor, FieldDraft draft)
     {
-        RestoreControl(editor.Input, new CommandValue(draft.Text, draft.IsChecked));
-        if (editor.Clear is not null) editor.Clear.IsChecked = draft.Clear;
+        var value = draft.Clear && !editor.Secret
+            ? new CommandValue(Text(editor.Field, "default"), ConfigurationBoolean(Text(editor.Field, "default")))
+            : new CommandValue(draft.Text, draft.IsChecked);
+        RestoreControl(editor.Input, value);
+        if (editor.Clear is not null) editor.Clear.IsOn = draft.Clear;
     }
 
     private void CaptureCommandInputs()
@@ -1848,7 +1698,9 @@ public sealed partial class MainWindow : Window
         {
             case TextBox textBox: textBox.Text = value.Text ?? string.Empty; break;
             case PasswordBox passwordBox: passwordBox.Password = value.Text ?? string.Empty; break;
-            case ComboBox comboBox: comboBox.SelectedItem = value.Text; break;
+            case ComboBox comboBox:
+                comboBox.SelectedItem = comboBox.Items.OfType<ConfigurationChoice>().FirstOrDefault(choice => choice.Value == value.Text) ?? (object?)value.Text;
+                break;
             case ToggleSwitch toggle: toggle.IsOn = value.IsChecked; break;
         }
     }
@@ -1861,14 +1713,14 @@ public sealed partial class MainWindow : Window
     {
         TextBox textBox => new CommandValue(textBox.Text),
         PasswordBox passwordBox => new CommandValue(passwordBox.Password),
-        ComboBox comboBox => new CommandValue(comboBox.SelectedItem?.ToString()),
+        ComboBox comboBox => new CommandValue(comboBox.SelectedItem is ConfigurationChoice choice ? choice.Value : comboBox.SelectedItem?.ToString()),
         ToggleSwitch toggle => new CommandValue(null, toggle.IsOn),
         _ => new CommandValue(null)
     };
 
-    private static object? ConvertValue(FieldEditor editor, CommandValue value)
+    private static object? ConvertValue(JsonElement field, CommandValue value)
     {
-        var kind = Text(editor.Field, "kind").ToLowerInvariant();
+        var kind = Text(field, "kind").ToLowerInvariant();
         return kind switch
         {
             "bool" => value.IsChecked,
@@ -1923,8 +1775,9 @@ public sealed partial class MainWindow : Window
         "main_search" => L("主搜索"),
         "web_search" => L("网页搜索"),
         "docs_search" => L("文档检索"),
-        "web_fetch" => L("网页读取"),
-        "vertical_search" => L("垂直搜索"),
+        "web_fetch" => L("网页抓取"),
+        "vertical_search" => L("垂直检索"),
+        "site_map" => L("站点地图"), "synthesis" => L("结果汇总"), "other" => L("其他能力"),
         _ => capability
     };
 
@@ -2228,7 +2081,7 @@ public sealed partial class MainWindow : Window
 
     private sealed record DraftChange(Dictionary<string, object?> Set, List<string> Unset);
 
-    private sealed record FieldEditor(JsonElement Field, Control Input, CheckBox? Clear, CommandValue Initial, bool Secret, bool Locked);
+    private sealed record FieldEditor(JsonElement Field, Control Input, ToggleSwitch? Clear, CommandValue Initial, bool Secret, bool Locked);
 
     private sealed record BackendLaunch(string? Path, IReadOnlyList<string> Arguments);
 }
