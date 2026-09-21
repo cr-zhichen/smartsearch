@@ -16163,27 +16163,111 @@
     "配置已保存，但暂未读回最新状态。请刷新后继续编辑。",
     "Configuration was saved, but the latest state could not be read. Refresh before editing again."
   ],
-  "恢复默认配置目录": [
-    "恢复默认配置目录",
-    "Restore Default Folder"
+  "Activity history": [
+    "活动记录",
+    "Activity history"
   ],
-  "管理语言、外观和配置目录。": [
-    "管理语言、外观和配置目录。",
-    "Manage language, appearance, and configuration folders."
+  "Existing history is retained when recording is turned off.": [
+    "关闭后保留已有历史。",
+    "Existing history is retained when recording is turned off."
   ],
-  "跟随系统外观，或单独选择浅色、深色模式。": [
-    "跟随系统外观，或单独选择浅色、深色模式。",
-    "Follow the system appearance, or choose light or dark mode for this app."
+  "Filter activity": [
+    "筛选活动",
+    "Filter activity"
   ],
-  "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。": [
-    "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。",
-    "All Agents share the independent CLI. Prepare it first, then choose the Agents whose Skills you want to update."
+  "Loading run details…": [
+    "正在读取运行详情…",
+    "Loading run details…"
+  ],
+  "Manage runtime…": [
+    "管理运行环境…",
+    "Manage runtime…"
+  ],
+  "More": [
+    "更多",
+    "More"
+  ],
+  "No activity matches this filter.": [
+    "没有符合筛选条件的记录。",
+    "No activity matches this filter."
+  ],
+  "Select a task on the left to view its status, events, and results.": [
+    "在左侧选择任务，查看状态、阶段事件和结果。",
+    "Select a task on the left to view its status, events, and results."
+  ],
+  "Select an activity": [
+    "选择一条活动记录",
+    "Select an activity"
+  ],
+  "Some activity directories could not be read. Check observation settings.": [
+    "部分活动目录不可读取。请检查观察设置。",
+    "Some activity directories could not be read. Check observation settings."
+  ],
+  "Synced {0}; failed {1}.": [
+    "已同步 {0} 个，失败 {1} 个。",
+    "Synced {0}; failed {1}."
+  ],
+  "npm {0}": [
+    "npm {0}",
+    "npm {0}"
+  ],
+  "关闭后保留已有历史。": [
+    "关闭后保留已有历史。",
+    "Existing history is retained when recording is turned off."
+  ],
+  "在左侧选择任务，查看状态、阶段事件和结果。": [
+    "在左侧选择任务，查看状态、阶段事件和结果。",
+    "Select a task on the left to view its status, events, and results."
+  ],
+  "已同步 {0} 个，失败 {1} 个。": [
+    "已同步 {0} 个，失败 {1} 个。",
+    "Synced {0}; failed {1}."
+  ],
+  "开始": [
+    "开始",
+    "Started"
+  ],
+  "更多": [
+    "更多",
+    "More"
+  ],
+  "正在读取运行详情…": [
+    "正在读取运行详情…",
+    "Loading run details…"
+  ],
+  "没有符合筛选条件的记录。": [
+    "没有符合筛选条件的记录。",
+    "No activity matches this filter."
+  ],
+  "活动记录": [
+    "活动记录",
+    "Activity history"
+  ],
+  "筛选活动": [
+    "筛选活动",
+    "Filter activity"
   ],
   "管理运行环境…": [
     "管理运行环境…",
     "Manage runtime…"
   ],
+  "选择一条活动记录": [
+    "选择一条活动记录",
+    "Select an activity"
+  ],
+  "部分活动目录不可读取。请检查观察设置。": [
+    "部分活动目录不可读取。请检查观察设置。",
+    "Some activity directories could not be read. Check observation settings."
+  ],
+  "恢复默认配置目录": [
+    "恢复默认配置目录",
+    "Restore Default Folder"
+  ],
   "待安装的文件": [
+    "待安装的文件",
+    "Files to install"
+  ],
+  "Files to install": [
     "待安装的文件",
     "Files to install"
   ],
@@ -16191,8 +16275,44 @@
     "内容不同的文件",
     "Files with different content"
   ],
+  "Files with different content": [
+    "内容不同的文件",
+    "Files with different content"
+  ],
+  "文件内容与来源不同": [
+    "文件内容与来源不同",
+    "Files differ from the source"
+  ],
+  "Files differ from the source": [
+    "文件内容与来源不同",
+    "Files differ from the source"
+  ],
   "这里只查看文件状态。点击“更新所选 Skills”后才会安装或更新文件。": [
     "这里只查看文件状态。点击“更新所选 Skills”后才会安装或更新文件。",
     "This view only shows file status. Files are installed or updated when you choose Update selected Skills."
+  ],
+  "This view only shows file status. Files are installed or updated when you choose Update selected Skills.": [
+    "这里只查看文件状态。点击“更新所选 Skills”后才会安装或更新文件。",
+    "This view only shows file status. Files are installed or updated when you choose Update selected Skills."
+  ],
+  "跟随系统外观，或单独选择浅色、深色模式。": [
+    "跟随系统外观，或单独选择浅色、深色模式。",
+    "Follow the system appearance, or choose light or dark mode for this app."
+  ],
+  "管理语言、外观和配置目录。": [
+    "管理语言、外观和配置目录。",
+    "Manage language, appearance, and configuration folders."
+  ],
+  "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。": [
+    "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。",
+    "All Agents share the independent CLI. Prepare it first, then choose the Agents whose Skills you want to update."
+  ],
+  "Provider {0} is disabled by {1}=false. No network request was made.": [
+    "服务商 {0} 已通过 {1}=false 禁用，未发起网络请求。",
+    "Provider {0} is disabled by {1}=false. No network request was made."
+  ],
+  "服务商 {0} 已通过 {1}=false 禁用，未发起网络请求。": [
+    "服务商 {0} 已通过 {1}=false 禁用，未发起网络请求。",
+    "Provider {0} is disabled by {1}=false. No network request was made."
   ]
 }

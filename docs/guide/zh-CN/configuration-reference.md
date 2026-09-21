@@ -18,6 +18,8 @@
 | `OPENAI_COMPATIBLE_FALLBACK_MODELS` | 逗号分隔。主模型不可用时按顺序往下试。 | `csv` | 未设置 |
 | `OPENAI_COMPATIBLE_API_MODE` | 大多数服务用 chat-completions。 | `chat-completions, responses` | `chat-completions` |
 | `OPENAI_COMPATIBLE_STREAM` | 部分服务只在流式下才肯长时间思考。 | `bool` | `false` |
+| `XAI_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `OPENAI_COMPATIBLE_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
 
 ## 数据源
 
@@ -44,7 +46,7 @@
 | `JINA_TIMEOUT_SECONDS` | Jina 超时（秒） | `float` | `30` |
 | `TAVILY_API_KEY` | 搜索和抓取都能做，一个 key 顶两类能力。 | `secret` | 未设置 |
 | `TAVILY_API_URL` | Tavily 地址 | `url` | `https://api.tavily.com` |
-| `TAVILY_ENABLED` | 关掉之后即使填了 key 也不会被使用。 | `bool` | `true` |
+| `TAVILY_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
 | `TAVILY_TIMEOUT_SECONDS` | Tavily 超时（秒） | `float` | `30` |
 | `FIRECRAWL_API_KEY` | 可选的搜索与抓取渠道。当前仅检查 Key 是否填写，不验证凭据或接口可用性。 | `secret` | 未设置 |
 | `FIRECRAWL_API_URL` | Firecrawl 地址 | `url` | `https://api.firecrawl.dev/v2` |
@@ -58,6 +60,16 @@
 | `SCIVERSE_API_TOKEN` | 学术论文检索，实验性，只在明确指定时才会被用到。 | `secret` | 未设置 |
 | `SCIVERSE_API_URL` | Sciverse 地址 | `url` | `https://api.sciverse.space` |
 | `SCIVERSE_TIMEOUT_SECONDS` | Sciverse 超时（秒） | `float` | `30` |
+| `CONTEXT7_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `EXA_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `ZHIPU_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `ZHIPU_MCP_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `ZHIPU_MCP_READER_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `FIRECRAWL_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `TINYFISH_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `JINA_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `ANYSEARCH_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
+| `SCIVERSE_ENABLED` | 禁用后保留配置，不再发起请求。保存更改后生效。 | `bool` | `true` |
 
 ## 意图路由
 

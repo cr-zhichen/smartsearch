@@ -16306,5 +16306,13 @@
   "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。": [
     "所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。",
     "All Agents share the independent CLI. Prepare it first, then choose the Agents whose Skills you want to update."
+  ],
+  "Provider {0} is disabled by {1}=false. No network request was made.": [
+    "服务商 {0} 已通过 {1}=false 禁用，未发起网络请求。",
+    "Provider {0} is disabled by {1}=false. No network request was made."
+  ],
+  "服务商 {0} 已通过 {1}=false 禁用，未发起网络请求。": [
+    "服务商 {0} 已通过 {1}=false 禁用，未发起网络请求。",
+    "Provider {0} is disabled by {1}=false. No network request was made."
   ]
 }

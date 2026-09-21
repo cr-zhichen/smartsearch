@@ -175,6 +175,7 @@ struct ConfigField: Identifiable, Hashable {
     let docsURL: String?
     let defaultValue: String
     let placeholder: String
+    let isProviderToggle: Bool
 
     var id: String { key }
     var isAdvanced: Bool { tier == "advanced" || ["routing", "reliability", "diagnostics"].contains(section) }
@@ -198,6 +199,7 @@ struct ConfigField: Identifiable, Hashable {
         docsURL = raw.string("docs_url")
         defaultValue = raw["default"]?.displayString ?? ""
         placeholder = raw.string("placeholder") ?? defaultValue
+        isProviderToggle = raw.bool("provider_toggle") ?? false
     }
 }
 

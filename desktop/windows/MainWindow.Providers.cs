@@ -125,7 +125,16 @@ public sealed partial class MainWindow
     private string ProviderListStatus(string provider, IEnumerable<JsonElement> fields)
     {
         var status = fields.Any(field => IsSecret(field) && HasSavedSecret(field)) ? L("已配置") : L("未配置");
+        var profile = Property(Property(_state, "provider_profiles"), provider);
+        if (Property(profile, "enabled").ValueKind == JsonValueKind.False)
+            status = L("已禁用");
         return _providerDraft.Keys.Any(key => fields.Any(field => Text(field, "key") == key)) ? status + " · " + L("未保存") : status;
+    }
+
+    private bool ProviderEnabled(string provider)
+    {
+        var key = Text(Property(Property(_state, "provider_profiles"), provider), "enabled_key");
+        return key.Length == 0 || ConfigurationBoolean(EffectiveConfigurationValue(key));
     }
 
     private List<string> ProviderCapabilities(string provider, IEnumerable<JsonElement> fields)
@@ -182,13 +191,16 @@ public sealed partial class MainWindow
             var selected = fields.Where(field => Text(field, "provider") == provider).ToList();
             panel.Children.Add(PageTitle(ProviderLabel(provider)));
             panel.Children.Add(Secondary(ProviderPurpose(provider, selected)));
-            AddFields(L("连接设置"), selected.Where(field => !IsAdvanced(field)));
-            AddFields(L("高级参数"), selected.Where(IsAdvanced));
+            foreach (var enableField in selected.Where(field => Bool(field, "provider_toggle")))
+                panel.Children.Add(Card(BuildFieldEditor(enableField, _providerDraft)));
+            AddFields(L("连接设置"), selected.Where(field => !Bool(field, "provider_toggle") && !IsAdvanced(field)));
+            AddFields(L("高级参数"), selected.Where(field => !Bool(field, "provider_toggle") && IsAdvanced(field)));
             var status = BuildProviderStatus(state, provider);
             _providerStatusPanels[provider] = status;
             panel.Children.Add(status);
             panel.Children.Add(ActionButton(L("测试"), () => TestProviderDraftAsync(provider), operationKey: "test:" + provider,
-                busyText: Text(Property(state, "probe_kinds"), provider) == "presence" ? L("检查中…") : L("测试中…"), label: () => ProviderTestLabel(provider)));
+                busyText: Text(Property(state, "probe_kinds"), provider) == "presence" ? L("检查中…") : L("测试中…"),
+                label: () => ProviderTestLabel(provider), enabled: () => ProviderEnabled(provider)));
         }
         else if (_providerSelection == "section:routing")
         {
@@ -275,10 +287,12 @@ public sealed partial class MainWindow
         var initialValue = string.IsNullOrWhiteSpace(value) ? Text(field, "default") : value;
         var secret = IsSecret(field);
         var locked = source.Equals("environment", StringComparison.OrdinalIgnoreCase);
-        var input = CreateFieldInput(field, secret, initialValue, locked);
+        var providerToggle = Bool(field, "provider_toggle");
+        var input = providerToggle ? CompactSwitch(Label(field), ConfigurationBoolean(initialValue)) : CreateFieldInput(field, secret, initialValue, locked);
+        if (providerToggle) input.IsEnabled = !locked;
         AutomationProperties.SetName(input, Label(field));
         input.HorizontalAlignment = HorizontalAlignment.Stretch;
-        ToggleSwitch? clear = locked ? null : CompactSwitch(secret ? L("清除已保存的密钥") : L("恢复默认值"), false);
+        ToggleSwitch? clear = locked || providerToggle ? null : CompactSwitch(secret ? L("清除已保存的密钥") : L("恢复默认值"), false);
         var editor = new FieldEditor(field.Clone(), input, clear, ReadControl(input), secret, locked);
         _fieldEditors[key] = editor;
         if (preservedDraft is not null && preservedDraft.TryGetValue(key, out var draft)) RestoreDraft(editor, draft);
@@ -321,8 +335,10 @@ public sealed partial class MainWindow
         };
         UpdatePlaceholder();
 
-        var details = new StackPanel { Spacing = 12, MaxWidth = 360 };
         var help = Text(field, "help_" + Localization.Language, Text(field, "help_en"));
+        if (providerToggle)
+            return SettingRow(Label(field), locked ? help + "\n" + L("由环境变量提供，在此处只读。") : help, input);
+        var details = new StackPanel { Spacing = 12, MaxWidth = 360 };
         if (help.Length > 0) details.Children.Add(Body(help));
         details.Children.Add(KeyValue(L("来源"), SourceLabel(source)));
         details.Children.Add(DataText(key));

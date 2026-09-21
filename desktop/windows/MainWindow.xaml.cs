@@ -1301,7 +1301,7 @@ public sealed partial class MainWindow : Window
                 routingStatus.Text = ChoiceLabel("SMART_SEARCH_INTENT_ROUTER", EffectiveConfigurationValue("SMART_SEARCH_INTENT_ROUTER"));
             foreach (var editor in _fieldEditors.Values)
             {
-                editor.Input.IsEnabled = !_operations.IsBusy("config-save");
+                editor.Input.IsEnabled = !_operations.IsBusy("config-save") && !(editor.Locked && editor.Input is ToggleSwitch);
                 if (editor.Clear is not null) editor.Clear.IsEnabled = !_operations.IsBusy("config-save");
             }
             if (_state is { } state)

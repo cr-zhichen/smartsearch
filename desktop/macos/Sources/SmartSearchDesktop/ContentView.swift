@@ -175,11 +175,29 @@ private struct OperationFeedback: View {
 private struct ConnectionIndicator: View {
     let state: AppModel.ConnectionState
     var compact = false
+    @State private var showingStatus = false
+
+    private var statusDescription: String { L("后端状态：{0}", state.title) }
 
     var body: some View {
         if compact {
-            NativeConnectionLight(statusDescription: L("后端状态：{0}", state.title), color: nativeTint)
-                .frame(width: 24, height: 24)
+            Button { showingStatus = true } label: {
+                Circle()
+                    .fill(Color(nsColor: nativeTint))
+                    .frame(width: 8, height: 8)
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(statusDescription)
+            .onHover { showingStatus = $0 }
+            .popover(isPresented: $showingStatus, arrowEdge: .bottom) {
+                Text(statusDescription)
+                    .font(.caption)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+            }
+            .onDisappear { showingStatus = false }
         } else {
             Label {
                 Text(state.title).foregroundStyle(.secondary)
@@ -187,8 +205,8 @@ private struct ConnectionIndicator: View {
                 Image(systemName: state.symbol).foregroundStyle(Color(nsColor: nativeTint))
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(L("后端状态：{0}", state.title))
-            .help(L("后端状态：{0}", state.title))
+            .accessibilityLabel(statusDescription)
+            .help(statusDescription)
         }
     }
 
@@ -198,41 +216,6 @@ private struct ConnectionIndicator: View {
         case .connecting: return .systemOrange
         case .failed: return .systemRed
         case .disconnected: return .secondaryLabelColor
-        }
-    }
-}
-
-private struct NativeConnectionLight: NSViewRepresentable {
-    let statusDescription: String
-    let color: NSColor
-
-    func makeNSView(context: Context) -> LightView {
-        let view = LightView()
-        view.setAccessibilityElement(true)
-        view.setAccessibilityRole(.image)
-        return view
-    }
-
-    func updateNSView(_ view: LightView, context: Context) {
-        view.color = color
-        if view.toolTip != statusDescription {
-            view.toolTip = statusDescription
-            view.setAccessibilityLabel(statusDescription)
-        }
-        view.needsDisplay = true
-    }
-
-    final class LightView: NSView {
-        var color = NSColor.secondaryLabelColor
-
-        override func draw(_ dirtyRect: NSRect) {
-            color.setFill()
-            NSBezierPath(ovalIn: NSRect(x: bounds.midX - 4, y: bounds.midY - 4, width: 8, height: 8)).fill()
-        }
-
-        override func viewDidChangeEffectiveAppearance() {
-            super.viewDidChangeEffectiveAppearance()
-            needsDisplay = true
         }
     }
 }
@@ -438,7 +421,9 @@ private struct ProvidersView: View {
     }
 
     private func providerRow(_ group: ProviderFieldGroup, state: DesktopState) -> some View {
-        navigationRow(group.id, subtitle: providerIsConfigured(group, state: state) ? L("已配置") : L("未配置"),
+        let enabled = group.fields.first(where: \.isProviderToggle).map { configurationBooleanValue(state.effectiveValue(for: $0)) } ?? true
+        let status = providerIsConfigured(group, state: state) ? L("已配置") : L("未配置")
+        return navigationRow(group.id, subtitle: enabled ? status : L("已禁用"),
                       hasDraft: group.fields.contains { model.configDraft[$0.key] != nil || model.clearSecretKeys.contains($0.key) })
     }
 
@@ -986,18 +971,43 @@ private struct ProviderSection: View {
     }
 
     private var testKey: String { "test:" + (provider ?? section) }
-    private var connectionFields: [ConfigField] { fields.filter { !$0.isAdvanced } }
-    private var advancedFields: [ConfigField] { fields.filter(\.isAdvanced) }
+    private var enableField: ConfigField? { fields.first(where: \.isProviderToggle) }
+    private var parameterFields: [ConfigField] { fields.filter { !$0.isProviderToggle } }
+    private var connectionFields: [ConfigField] { parameterFields.filter { !$0.isAdvanced } }
+    private var advancedFields: [ConfigField] { parameterFields.filter(\.isAdvanced) }
+
+    private var providerEnabled: Bool {
+        enableField.map { configurationBooleanValue(model.configDraft[$0.key] ?? state.effectiveValue(for: $0)) } ?? true
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
+            if let enableField {
+                DesktopPanel {
+                    HStack(spacing: 16) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(enableField.label).fontWeight(.semibold)
+                            Text(enableField.help).font(.caption).foregroundStyle(.secondary)
+                            if model.isEnvironmentReadOnly(enableField) {
+                                Text(L("由环境变量提供，在此处只读。")).font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 8)
+                        Toggle(enableField.label, isOn: Binding(
+                            get: { providerEnabled },
+                            set: { model.setDraft($0 ? "true" : "false", for: enableField) }))
+                            .labelsHidden()
+                            .disabled(model.configOperationBusy || model.isEnvironmentReadOnly(enableField))
+                    }
+                }
+            }
             if !connectionFields.isEmpty && !advancedFields.isEmpty {
                 Text(L("连接设置")).font(.headline)
                 fieldEditors(connectionFields)
                 Text(L("高级参数")).font(.headline).padding(.top, 10)
                 fieldEditors(advancedFields)
             } else {
-                fieldEditors(fields)
+                fieldEditors(parameterFields)
             }
             if let provider, let check = state.providerChecks?[provider] {
                 ProviderDraftCheckRow(provider: provider, check: check)
@@ -1016,7 +1026,7 @@ private struct ProviderSection: View {
                             Text(model.providerTestLabel(provider))
                         }
                     }
-                    .disabled(model.connection != .ready || model.isBusy.contains(testKey))
+                    .disabled(!providerEnabled || model.connection != .ready || model.isBusy.contains(testKey))
                 }
                 Spacer()
             }

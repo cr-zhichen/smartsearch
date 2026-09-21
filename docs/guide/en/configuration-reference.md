@@ -18,6 +18,8 @@ Generated from current configuration metadata. All saved keys appear below. See 
 | `OPENAI_COMPATIBLE_FALLBACK_MODELS` | Comma separated. Tried in order when the main model is unavailable. | `csv` | Not set |
 | `OPENAI_COMPATIBLE_API_MODE` | Most services want chat-completions. | `chat-completions, responses` | `chat-completions` |
 | `OPENAI_COMPATIBLE_STREAM` | Some services only think for long under streaming. | `bool` | `false` |
+| `XAI_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `OPENAI_COMPATIBLE_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
 
 ## Providers
 
@@ -44,7 +46,7 @@ Generated from current configuration metadata. All saved keys appear below. See 
 | `JINA_TIMEOUT_SECONDS` | Jina timeout (seconds) | `float` | `30` |
 | `TAVILY_API_KEY` | Does both search and fetching, so one key covers two capabilities. | `secret` | Not set |
 | `TAVILY_API_URL` | Tavily API URL | `url` | `https://api.tavily.com` |
-| `TAVILY_ENABLED` | Turning this off makes Tavily unused even with a key saved. | `bool` | `true` |
+| `TAVILY_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
 | `TAVILY_TIMEOUT_SECONDS` | Tavily timeout (seconds) | `float` | `30` |
 | `FIRECRAWL_API_KEY` | Optional search and fetch provider. The current check only confirms a key is present, not credential or API availability. | `secret` | Not set |
 | `FIRECRAWL_API_URL` | Firecrawl API URL | `url` | `https://api.firecrawl.dev/v2` |
@@ -58,6 +60,16 @@ Generated from current configuration metadata. All saved keys appear below. See 
 | `SCIVERSE_API_TOKEN` | Academic paper search. Experimental, and only used when asked for explicitly. | `secret` | Not set |
 | `SCIVERSE_API_URL` | Sciverse API URL | `url` | `https://api.sciverse.space` |
 | `SCIVERSE_TIMEOUT_SECONDS` | Sciverse timeout (seconds) | `float` | `30` |
+| `CONTEXT7_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `EXA_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `ZHIPU_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `ZHIPU_MCP_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `ZHIPU_MCP_READER_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `FIRECRAWL_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `TINYFISH_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `JINA_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `ANYSEARCH_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
+| `SCIVERSE_ENABLED` | Disabling keeps the configuration and stops requests. Takes effect after saving changes. | `bool` | `true` |
 
 ## Intent routing
 
