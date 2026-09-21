@@ -60,8 +60,9 @@ description: 任务优先的原生 macOS 搜索工作台。
 
 - **Buttons:** 当前主要动作使用 `.borderedProminent`；运行中显示进度与文字，冲突时禁用。危险动作声明对应 role。
 - **Settings rows:** 设置面板使用 `DesktopPanel(compact: true)`；说明靠左、控件靠右。自动更新开关保持原生尺寸，长说明允许换行；运行环境的说明和准备按钮位于同一行。
-- **Inputs:** 字段按 metadata 使用 TextField／SecureField 或 Picker；现有 Toggle 使用 `.switch`。保留系统焦点与键盘交互，字段来源等详情进入 popover。
-- **Secrets:** 已有 Key 显示固定圆点掩码，未配置时显示输入提示。掩码仅是 SecureField prompt，不进入草稿；有效值是否存在由后端布尔状态提供，空值和短 Key 不再靠掩码字符串判断。
+- **Configuration directory:** Windows 和 macOS 的当前配置目录右侧提供“选择配置目录…”和“恢复默认配置目录”，同一行排列。默认路径与是否已使用默认目录均由后端提供；已在默认目录、未连接或切换期间禁用恢复按钮。恢复沿用目录切换的草稿保护，并读取默认目录自己的配置。
+- **Inputs:** 字段按 metadata 使用 TextField／SecureField 或 Picker；当前有效值直接填入控件，placeholder 只用于空字段的输入示例。只有实际修改进入草稿，清空普通字段也会保存为空值。现有 Toggle 使用 `.switch`，保留系统焦点与键盘交互，字段来源等详情进入 popover。
+- **Secrets:** macOS 客户端显式请求后，私有后端管道提供可编辑 Key，实际值绑定 SecureField 并由系统显示密码圆点；未配置时才显示输入提示。清空或“清除 Key”在保存时删除密钥，“保留”和放弃修改恢复当前值。环境变量字段保持只读；Key 不进入通用状态、详情或诊断，Web／CLI 状态保持脱敏。
 - **Navigation:** `NavigationSplitView` 与 sidebar；记录筛选使用 segmented Picker；服务商、搜索及活动共用 `DesktopSplitView` 原生分栏。设置不增加第二套导航。配置和 Skills 底部保留操作区。
 - **Providers:** 分组顺序为主搜索、文档检索、网页搜索、网页抓取、垂直检索；依据后端 `provider_profiles.capability`，不以必填字段或是否配置推断类型。多能力服务商只出现一次，详情说明全部声明能力和用途；实验性与显式调用限制保持可见。搜索覆盖名称、用途及全部能力，过滤不清除选择或草稿。
 - **Disclosure:** 整行使用真实 Button，最小高度 30，展开箭头旋转 90°；动画 `easeInOut(0.18s)`，减少动态效果开启时禁用。提供展开状态的可访问值。

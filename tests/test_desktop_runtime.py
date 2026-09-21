@@ -320,6 +320,52 @@ def test_stdio_version_handshake_and_shutdown(tmp_path):
     assert not (tmp_path / "config.json").exists()
 
 
+@pytest.mark.parametrize("include_secrets", [None, False, True])
+def test_native_config_secrets_require_opt_in_and_follow_selected_profile(tmp_path, include_secrets):
+    secret = "synthetic-editable-credential"
+    environment_secret = "synthetic-environment-credential"
+    saved = {"EXA_API_KEY": secret, "OPENAI_COMPATIBLE_MODEL": "editable-model"}
+    config_path = tmp_path / "config.json"
+    config_path.write_text(json.dumps(saved), encoding="utf-8")
+    empty_profile = tmp_path / "empty-profile"
+    empty_profile.mkdir()
+    params = {"protocol_version": 1, "enable_update_checks": False}
+    if include_secrets is not None:
+        params["include_config_secrets"] = include_secrets
+    messages = [
+        {"id": 1, "method": "initialize", "params": params},
+        {"id": 2, "method": "get_state"},
+        {"id": 3, "method": "profile.select", "params": {"config_dir": str(empty_profile)}},
+        {"id": 4, "method": "shutdown"},
+    ]
+    env = {key: value for key, value in os.environ.items() if key not in config._CONFIG_KEYS}
+    env.update(SMART_SEARCH_CONFIG_DIR=str(tmp_path), PATH="", TAVILY_API_KEY=environment_secret)
+    result = subprocess.run(
+        [sys.executable, "-m", "smart_search.desktop_entry", "--desktop-backend"],
+        input="".join(json.dumps(message) + "\n" for message in messages),
+        capture_output=True, text=True, encoding="utf-8", timeout=20, env=env,
+    )
+    assert result.returncode == 0, result.stderr
+    frames = [json.loads(line) for line in result.stdout.splitlines()]
+    responses = {frame["id"]: frame["result"] for frame in frames if "id" in frame}
+    for identifier in (1, 2, 3):
+        state = responses[identifier]
+        if include_secrets:
+            credentials = state.pop("config_secrets")
+            assert credentials["EXA_API_KEY"] == ("" if identifier == 3 else secret)
+            assert "TAVILY_API_KEY" not in credentials
+            assert "OPENAI_COMPATIBLE_MODEL" not in credentials
+        else:
+            assert "config_secrets" not in state
+        if identifier != 3:
+            assert state["values"]["OPENAI_COMPATIBLE_MODEL"] == "editable-model"
+    assert secret not in json.dumps(frames)
+    assert environment_secret not in result.stdout
+    assert secret not in result.stderr
+    assert json.loads(config_path.read_text(encoding="utf-8")) == saved
+    assert not (empty_profile / "config.json").exists()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("default_exists", [False, True])
 async def test_restore_default_profile_reads_its_config_without_copying_or_overwriting(tmp_path, monkeypatch, default_exists):

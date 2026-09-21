@@ -1048,11 +1048,6 @@ private struct ConfigFieldEditor: View {
     let field: ConfigField
     @State private var showingInfo = false
 
-    private var secretPrompt: String {
-        state.hasSecretValue(for: field) && !model.clearSecretKeys.contains(field.key)
-            ? "••••••••" : L("输入 API Key")
-    }
-
     private var readOnlyValue: String {
         let value = state.effectiveValue(for: field)
         if field.isSecret { return state.hasSecretValue(for: field) ? "••••••••" : L("未配置") }
@@ -1076,10 +1071,8 @@ private struct ConfigFieldEditor: View {
                     .textSelection(.enabled)
             } else if field.isSecret {
                 HStack {
-                    // The mask is a prompt, never a draft value that could overwrite the key.
-                    SecureField(field.label, text: model.draftBinding(for: field), prompt: Text(secretPrompt))
+                    SecureField(field.label, text: model.draftBinding(for: field), prompt: Text(L("输入 API Key")))
                         .accessibilityLabel(field.label)
-                        .help(L("输入新值以替换；留空表示保持"))
                     if model.clearSecretKeys.contains(field.key) {
                         Button(L("保留")) { model.keepSecret(field) }
                     } else {
@@ -1087,9 +1080,7 @@ private struct ConfigFieldEditor: View {
                     }
                 }
             } else if !field.choices.isEmpty {
-                Picker(field.label, selection: Binding(
-                    get: { model.configDraft[field.key] ?? state.effectiveValue(for: field) },
-                    set: { model.setDraft($0, for: field) })) {
+                Picker(field.label, selection: model.draftBinding(for: field)) {
                     if !field.choices.contains(state.effectiveValue(for: field)) {
                         Text(L("当前：{0}", state.effectiveValue(for: field).isEmpty ? L("未设置") : configurationChoiceLabel(state.effectiveValue(for: field), for: field)))
                             .tag(state.effectiveValue(for: field))
@@ -1105,7 +1096,7 @@ private struct ConfigFieldEditor: View {
                     set: { model.setDraft($0 ? "true" : "false", for: field) }))
                     .labelsHidden()
             } else {
-                TextField(state.effectiveValue(for: field).isEmpty ? field.placeholder : state.effectiveValue(for: field), text: model.draftBinding(for: field))
+                TextField(field.label, text: model.draftBinding(for: field), prompt: Text(field.placeholder))
                     .accessibilityLabel(field.label)
             }
 

@@ -62,6 +62,7 @@ final class AppModel: ObservableObject {
     private var operations = OperationState()
 
     @Published var configDraft: [String: String] = [:]
+    private var configSecrets: [String: String] = [:]
     @Published var clearSecretKeys: Set<String> = []
     @Published private(set) var configPreview: JSONValue?
     @Published var selectedCommandID: String?
@@ -350,31 +351,48 @@ final class AppModel: ObservableObject {
 
     func draftBinding(for field: ConfigField) -> Binding<String> {
         Binding(
-            get: { self.configDraft[field.key] ?? "" },
+            get: {
+                if self.clearSecretKeys.contains(field.key) { return "" }
+                return self.configDraft[field.key] ?? self.currentConfigValue(for: field)
+            },
             set: { self.setDraft($0, for: field) }
         )
+    }
+
+    private func currentConfigValue(for field: ConfigField) -> String {
+        if field.isSecret { return configSecrets[field.key] ?? "" }
+        return state?.effectiveValue(for: field) ?? field.defaultValue
     }
 
     func setDraft(_ value: String, for field: ConfigField) {
         guard !isEnvironmentReadOnly(field), !isBusy.contains("save") else { return }
         configPreview = nil
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty || (!field.isSecret && trimmed == state?.effectiveValue(for: field)) {
-            configDraft.removeValue(forKey: field.key) // Empty secret input means KEEP.
+        if field.isSecret && value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if state?.hasSecretValue(for: field) == true {
+                clearSecret(field)
+            } else {
+                keepSecret(field)
+            }
+            return
+        }
+        clearSecretKeys.remove(field.key)
+        if value == currentConfigValue(for: field) {
+            configDraft.removeValue(forKey: field.key)
         } else {
             configDraft[field.key] = value
-            clearSecretKeys.remove(field.key)
         }
     }
 
     func clearSecret(_ field: ConfigField) {
         guard field.isSecret, !isEnvironmentReadOnly(field), !isBusy.contains("save") else { return }
+        configPreview = nil
         configDraft.removeValue(forKey: field.key)
         clearSecretKeys.insert(field.key)
     }
 
     func keepSecret(_ field: ConfigField) {
         guard !isBusy.contains("save") else { return }
+        configPreview = nil
         clearSecretKeys.remove(field.key)
         configDraft.removeValue(forKey: field.key)
     }
@@ -386,7 +404,7 @@ final class AppModel: ObservableObject {
     func draftStatus(for field: ConfigField) -> String {
         if isEnvironmentReadOnly(field) { return L("由环境变量提供，只读") }
         if clearSecretKeys.contains(field.key) { return L("将在保存时清除") }
-        if configDraft[field.key]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+        if configDraft[field.key] != nil {
             return field.isSecret ? L("将在保存时替换") : L("将在保存时更新")
         }
         if field.isSecret {
@@ -449,7 +467,7 @@ final class AppModel: ObservableObject {
         defer { end("test:\(provider)") }
         let providerKeys = Set(state.fields.filter { $0.provider == provider }.map(\.key))
         var overrides = configDraft.reduce(into: [String: JSONValue]()) { partial, item in
-            if providerKeys.contains(item.key), !item.value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if providerKeys.contains(item.key) {
                 partial[item.key] = .string(item.value)
             }
         }
@@ -864,9 +882,7 @@ final class AppModel: ObservableObject {
 
     private func configMutationParameters(includeRevision: Bool) -> JSONValue {
         var params: [String: JSONValue] = [
-            "set": .object(configDraft.compactMapValues { value in
-                value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : .string(value)
-            }),
+            "set": .object(configDraft.mapValues(JSONValue.string)),
             "unset": .array(clearSecretKeys.sorted().map(JSONValue.string)),
         ]
         if includeRevision, let revision = state?.revision { params["revision"] = revision }
@@ -874,11 +890,16 @@ final class AppModel: ObservableObject {
     }
 
     private func applyState(_ raw: JSONValue) {
-        let snapshot = raw["state"]?.objectValue == nil ? raw : (raw["state"] ?? raw)
-        guard let parsed = DesktopState(snapshot) else {
+        let incoming = raw["state"]?.objectValue == nil ? raw : (raw["state"] ?? raw)
+        var payload = incoming.objectValue
+        // Credentials belong only to the form binding, never to raw state or diagnostics.
+        let secrets = payload?.removeValue(forKey: "config_secrets")?.objectValue ?? [:]
+        guard let payload, let parsed = DesktopState(.object(payload)) else {
             errorMessage = L("后端状态格式无法读取；没有使用旧状态覆盖它。")
             return
         }
+        let snapshot = parsed.raw
+        configSecrets = secrets.compactMapValues(\.stringValue)
         state = parsed
         if let selectedBusinessRunID, let descriptor = ownedRunResults.descriptor(for: selectedBusinessRunID) {
             currentResultCommand = localizedLabel(descriptor)

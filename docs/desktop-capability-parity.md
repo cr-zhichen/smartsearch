@@ -45,6 +45,7 @@
 | 高 | 结果复制与导出格式 | 复制脱敏 JSON，导出 `.json` | 复制可读文本，导出 `.txt`；JSON 只在详情中查看 | `AppModel.swift: copyCurrentResult / exportCurrentResult`；`MainWindow.xaml.cs: CopyResult / ExportResultAsync`。建议两端都明确提供文本和 JSON。 |
 | 高 | 配置保存成功但随后读回失败 | 仍会进入通用异常路径，旧草稿没有清理，可能误以为未保存并再次提交 | 清理已提交草稿，显示已保存但待刷新的状态，阻止用旧基线继续编辑 | `AppModel.swift: saveConfig`；`MainWindow.xaml.cs: SaveDraftAsync`。这是错误恢复差异，建议优先修复 macOS。 |
 | 中 | 普通配置字段恢复默认值 | 说明浮层显示来源和值；仅密钥有显式清除入口 | 字段说明内提供恢复默认值开关 | `ContentView.swift: ConfigFieldEditor`；`MainWindow.Providers.cs: BuildFieldEditor`。建议 macOS 补齐普通字段重置。 |
+| 中 | 已保存 Key 的编辑语义 | 私有后端通过显式选择提供当前值，由 SecureField 掩码显示；清空输入会准备删除 Key | 掩码作为占位提示；空输入保持原值，清除通过独立操作 | `AppModel.swift: draftBinding / setDraft`；`MainWindow.Providers.cs: BuildFieldEditor`。两端都保留明确保存、放弃和环境变量只读语义，但编辑方式尚未统一。 |
 | 中 | 后端开发设置 | 可选择后端路径、切回内置后端、调整 5–300 秒请求超时 | 可经环境变量指定路径，但没有对应设置控件；请求超时固定为 30 秒 | `ContentView.swift: advancedSettings`；`BackendClient.cs: ResolveBackendPath / CallAsync`。若保留开发入口，应补齐 Windows。 |
 | 中 | 服务商健康记录重置 | 可查看健康 / 冷却状态，无重置操作 | 高级设置提供 `providers.reset` | `ContentView.swift: ProviderHealthView`；`MainWindow.Settings.cs`。建议 macOS 增加明确的重置入口。 |
 | 中 | 应用快捷键 | 页面切换、刷新、设置、运行命令有快捷键 | 没有对应的应用级加速键；仅保留原生控件和分隔条方向键 | `SmartSearchDesktopApp.swift: LocalizedCommands`；`ContentView.swift: requestActions`；`MainWindow.Layout.cs`。建议 Windows 使用 Ctrl 对应快捷键。 |
