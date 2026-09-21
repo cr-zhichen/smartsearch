@@ -16126,5 +16126,13 @@
   "清除提示": [
     "清除提示",
     "Clear messages"
+  ],
+  "调整分栏宽度": [
+    "调整分栏宽度",
+    "Resize panes"
+  ],
+  "拖动调整宽度；方向键微调": [
+    "拖动调整宽度；方向键微调",
+    "Drag to resize; use arrow keys for fine adjustments"
   ]
 }

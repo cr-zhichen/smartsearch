@@ -6,6 +6,7 @@
 [tools]
 python = "3.13.14"
 node = "24.16.0"
+dotnet = "8.0.422"
 "pipx:dmgbuild" = { version = "1.6.7", os = ["macos"] }
 uv = "0.11.23"
 shellcheck = "0.11.0"
@@ -77,6 +78,15 @@ run = "bash desktop/scripts/render-dmg-background.sh"
 description = "Compile the native macOS interface without launching the app"
 run = "bash desktop/scripts/compile-macos.sh"
 
+[tasks."desktop:icons"]
+description = "Generate Windows, Web and fallback macOS icons from the exported PNG"
+run = 'uv run --no-project --python "{{vars.python}}" --script desktop/scripts/build_icons.py'
+
+[tasks."desktop:macos:icon"]
+description = "Compile the Icon Composer source into native macOS icon resources"
+raw_args = true
+run = "bash desktop/scripts/compile-macos-icon.sh"
+
 [tasks."desktop:macos:verify"]
 description = "Verify a packaged DMG, its app signature and isolated backend startup"
 raw_args = true
@@ -90,7 +100,21 @@ run = "bash desktop/scripts/check-macos-backend.sh"
 [tasks."desktop:packaging:lint"]
 description = "Check the desktop workflow and macOS packaging scripts"
 run = [
-  "shellcheck desktop/scripts/build-macos.sh desktop/scripts/compile-macos.sh desktop/scripts/render-dmg-background.sh desktop/scripts/check-macos-backend.sh",
+  "shellcheck desktop/scripts/build-macos.sh desktop/scripts/compile-macos.sh desktop/scripts/compile-macos-icon.sh desktop/scripts/render-dmg-background.sh desktop/scripts/check-macos-backend.sh",
   "actionlint .github/workflows/desktop-build.yml",
   "git diff --check",
 ]
+
+[tasks."desktop:windows:compile"]
+description = "Compile the native Windows interface on Windows"
+raw_args = true
+run = 'dotnet build desktop/windows/SmartSearch.Desktop.csproj --configuration Release -p:Platform=x64 -p:RuntimeIdentifier=win-x64'
+
+[tasks."desktop:windows:install"]
+description = "Install Windows backend packaging dependencies"
+run = '"{{vars.python}}" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"'
+
+[tasks."desktop:windows:build"]
+description = "Build the Windows app and an installer when Inno Setup is available"
+raw_args = true
+run = 'powershell -NoProfile -ExecutionPolicy Bypass -File desktop/scripts/Build-Windows.ps1 -PythonPath "{{vars.python}}"'

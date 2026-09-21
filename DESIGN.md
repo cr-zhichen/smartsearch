@@ -81,3 +81,9 @@ description: 任务优先的原生 macOS 搜索工作台。
 
 - **Don't** 用 CSS 仿制品、固定色值或额外阴影替代原生系统。
 - **Don't** 让技术详情抢占主要任务，或将编译、打包视为视觉验收。
+
+## Windows adaptation
+
+Windows 使用 WinUI 保留同样的任务层级。主导航为系统 NavigationView，内容使用语义背景与系统字体；标题 26、分组 18、正文 14、说明 12。页面章节相隔 24，紧凑面板留白 16，设置行以左侧说明、右侧控件组织。保留 Windows 外观选项。
+
+分栏使用固定范围的 Grid 列与可用鼠标／键盘调整的 Thumb，按页面保存偏好；紧凑宽度改为上下布局。操作反馈通过工具栏 Flyout 显示，独立滚动且不改变页面高度。次要说明进入 Flyout，需要完整编辑或阅读的选项进入 ContentDialog。原生编译与视觉验收分别记录在 `docs/windows-ui-parity.md`。

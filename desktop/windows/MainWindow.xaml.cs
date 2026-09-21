@@ -42,8 +42,6 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, Dictionary<string, CommandValue>> _commandDrafts = [];
     private string? _renderedCommandId;
     private Dictionary<string, FieldDraft> _providerDraft = [];
-    private ScrollViewer? _pageScroll;
-    private string _renderedPage = "overview";
     private TextBlock? _saveSummary;
     private bool _connecting;
     private JsonElement? _state;
@@ -140,7 +138,7 @@ public sealed partial class MainWindow : Window
             var state = await _backend.StartAsync(configDirectory: null, CancellationToken.None);
             ApplyState(state);
             _activityTimer.Start();
-            NoticeBar.IsOpen = false;
+            ClearNotice();
         }
         catch (Exception error)
         {
@@ -198,9 +196,7 @@ public sealed partial class MainWindow : Window
     private void RenderCurrentPage(Dictionary<string, FieldDraft>? preservedDraft = null)
     {
         CaptureCommandInputs();
-        if (_pageScroll is not null)
-            _pageOffsets[_renderedPage] = _pageScroll.VerticalOffset;
-        _renderedPage = _currentPage;
+        UpdateWorkspaceHeader();
         _actionButtons.Clear();
         _providerStatusPanels.Clear();
         if (preservedDraft is not null) _providerDraft = preservedDraft;
@@ -594,7 +590,7 @@ public sealed partial class MainWindow : Window
 
     private void RenderEnvironmentState()
     {
-        if (_currentPage != "ai" || _environmentSummary is null) { RefreshActionButtons(); return; }
+        if (_currentPage is not ("ai" or "settings") || _environmentSummary is null) { RefreshActionButtons(); return; }
         _environmentSummary.Text = Text(_environment, "message", L("先检测环境，再安装缺少的组件。"));
         _environmentSteps!.Children.Clear();
         foreach (var step in Items(Property(_environment, "steps")))
@@ -664,109 +660,6 @@ public sealed partial class MainWindow : Window
             Text(_environment, "invocation") + L(" --version\n如果技能没有出现，请重新打开 AI 再试。配置目录：") + Text(_environment, "config_dir"));
         ShowNotice(L("已复制测试指引"), L("粘贴到所选 AI 中执行；App 的本机检查不代表 AI 已调用成功。"), InfoBarSeverity.Informational);
         return Task.CompletedTask;
-    }
-
-    private UIElement BuildSettingsPage()
-    {
-        var panel = PagePanel();
-        panel.Children.Add(PageTitle(L("设置与关于")));
-        panel.Children.Add(Secondary(L("管理本机配置目录、显示方式和更新。")));
-        var theme = new ComboBox { Header = L("外观"), HorizontalAlignment = HorizontalAlignment.Stretch };
-        foreach (var label in new[] { L("跟随系统"), L("浅色"), L("深色") }) theme.Items.Add(label);
-        theme.SelectedIndex = (ReadSetting("theme") ?? "auto") switch { "light" => 1, "dark" => 2, _ => 0 };
-        theme.SelectionChanged += (_, _) =>
-        {
-            var value = theme.SelectedIndex switch { 1 => "light", 2 => "dark", _ => "auto" };
-            SaveSetting("theme", value);
-            ApplyTheme(value);
-        };
-        var language = new ComboBox { Header = L("语言"), HorizontalAlignment = HorizontalAlignment.Stretch,
-            IsEnabled = !_operations.IsBusy("language") && !EnvironmentBusy && Text(Property(_updates, "cli_update"), "status") != "running" };
-        foreach (var label in new[] { L("跟随系统"), L("简体中文"), "English" }) language.Items.Add(label);
-        language.SelectedIndex = Localization.Preference switch { "zh" => 1, "en" => 2, _ => 0 };
-        language.SelectionChanged += async (_, _) =>
-        {
-            if (_operations.IsBusy("language")) return;
-            _operations.Begin("language");
-            language.IsEnabled = false;
-            try
-            {
-                var preference = language.SelectedIndex switch { 1 => "zh", 2 => "en", _ => "auto" };
-                var previous = Localization.Preference;
-                Localization.Preference = preference;
-                if (_backend.IsConnected)
-                {
-                    var state = await RequestAsync("language.set", new { lang = Localization.Language }, L("无法切换界面语言。"));
-                    if (state is null) { Localization.Preference = previous; return; }
-                    _state = state;
-                    _environment = Property(state, "environment");
-                    _updates = Property(state, "updates");
-                }
-                NoticeBar.IsOpen = false;
-                if (!SaveSetting("language", preference))
-                    ShowNotice(L("语言"), L("本次语言切换已生效，但无法保存；重新打开 App 后可能恢复原选择。"), InfoBarSeverity.Warning);
-                ApplyNavigationLanguage();
-                RenderCurrentPage();
-            }
-            finally
-            {
-                _operations.EndRequest("language");
-                if (_currentPage == "settings") RenderCurrentPage();
-            }
-        };
-        panel.Children.Add(Card(Section(L("本机偏好"),
-            [KeyValue(L("配置目录"), Text(_state, "config_dir", Text(_state, "config_path", L("未连接")))),
-             ActionButton(L("选择配置目录"), SelectConfigDirectoryAsync, operationKey: "profile", busyText: L("切换中…")), theme, language,
-             Secondary(L("App 与独立 CLI 分别保存语言选择。环境写入期间请等待操作完成。"))])));
-        var directoryRows = new StackPanel { Spacing = 8 };
-        RenderExtraDirectories(directoryRows);
-        panel.Children.Add(Card(Section(L("活动观察范围"),
-            [Secondary(L("默认观察当前配置目录。可以添加其他目录，不会自动扫描你的文件。")), directoryRows,
-             ActionButton(L("添加活动目录"), async () =>
-             {
-                 var folder = await PickFolderAsync();
-                 if (folder is not null && !_extraActivityDirectories.Contains(folder.Path, StringComparer.OrdinalIgnoreCase))
-                 {
-                     _extraActivityDirectories.Add(folder.Path);
-                     SaveExtraDirectories();
-                     RenderCurrentPage();
-                 }
-             })])));
-        _autoUpdateSwitch = new ToggleSwitch { Header = L("自动检查更新"), OnContent = L("每 24 小时检查，点击才下载"), OffContent = L("已关闭") };
-        _autoUpdateSwitch.IsOn = Bool(_updates, "auto_check", true);
-        _autoUpdateSwitch.Toggled += async (_, _) =>
-        {
-            if (_settingAutoUpdate) return;
-            await UpdateRequestAsync("updates.auto", new { enabled = _autoUpdateSwitch.IsOn });
-        };
-        _updateCheckSummary = Secondary("");
-        _appUpdateSummary = Body("");
-        _cliUpdateSummary = Body("");
-        _downloadSummary = Secondary("");
-        _cliUpdateLog = DataText("");
-        _downloadProgress = new ProgressBar { Minimum = 0, Maximum = 100 };
-        panel.Children.Add(Card(Section(L("版本与更新"),
-            [_autoUpdateSwitch, _updateCheckSummary,
-             ActionRow(ActionButton(L("检查更新"), CheckForUpdateAsync, operationKey: "updates-check", busyText: L("检查中…")),
-                       ActionButton(L("刷新已安装版本"), () => RefreshStateAsync(), operationKey: "state", busyText: L("刷新中…"))),
-             Secondary(L("App 和内置引擎一起更新；独立 CLI 使用原管理器单独更新。"))])));
-        panel.Children.Add(Card(Section(L("App 与内置引擎"), [_appUpdateSummary, _downloadSummary, _downloadProgress,
-             ActionRow(ActionButton(L("下载安装包"), () => UpdateRequestAsync("updates.download"), primary: true, operationKey: "updates-download", busyText: L("下载中…")),
-                       ActionButton(L("取消下载"), () => UpdateRequestAsync("updates.cancel"), operationKey: "updates-cancel", busyText: L("正在取消…")),
-                       ActionButton(L("退出并打开安装器"), InstallUpdateAsync, operationKey: "updates-install")),
-             ActionRow(ActionButton(L("打开下载目录"), OpenUpdateDirectoryAsync, operationKey: "updates-folder"),
-                       ActionButton(L("查看版本说明"), async () => { await Launcher.LaunchUriAsync(new Uri("https://github.com/konbakuyomu/smartsearch/releases")); })),
-             Secondary(L("安装包会校验 SHA256，尚未验证系统代码签名。安装器启动后按提示完成安装，重新打开 App 核对版本。"))])));
-        panel.Children.Add(Card(Section(L("独立 CLI"), [_cliUpdateSummary,
-             ActionRow(ActionButton(L("更新 CLI"), UpdateCliAsync, primary: true, operationKey: "updates-cli", busyText: L("更新中…")),
-                       ActionButton(L("复制更新命令"), () => { CopyText(Text(Property(_updates, "cli"), "command")); return Task.CompletedTask; }, operationKey: "updates-copy")),
-             Disclosure("update-cli-log", L("更新日志与命令"), _cliUpdateLog)])));
-        panel.Children.Add(Card(Section(L("引擎与诊断"),
-            [Disclosure("diagnostics", L("查看诊断信息"), Section(L("本地引擎"),
-                 [KeyValue(L("协议"), Text(_state, "protocol_version", "1")), KeyValue(L("路径"), _backend.BackendPath ?? L("未启动")),
-                  ActionButton(L("重置服务商健康记录"), ResetProvidersAsync, busyText: L("重置中…"))]))])));
-        RenderUpdateState();
-        return Scroll(panel);
     }
 
     private void RenderCommandFields()
@@ -1396,9 +1289,9 @@ public sealed partial class MainWindow : Window
             if (!IsTerminal(status)) return;
             await LoadRunResultAsync(runId, data);
             _operations.EndRun(runId);
-            if (NoticeBar.Title?.ToString() == L("正在测试未保存的修改") &&
+            if (_noticeTitle == L("正在测试未保存的修改") &&
                 !_ownedRunStatus.Any(item => _ownedRunKinds.GetValueOrDefault(item.Key) == "provider.test" && !IsTerminal(item.Value)))
-                NoticeBar.IsOpen = false;
+                ClearNotice();
             if (_ownedRunKinds.GetValueOrDefault(runId) == "provider.test")
                 await RefreshProviderStateAfterTestAsync();
             else if (_ownedRunKinds.GetValueOrDefault(runId) == "skills.install" && _currentPage == "ai")
@@ -1671,28 +1564,6 @@ public sealed partial class MainWindow : Window
 
     private static Style UiStyle(string key) => (Style)Application.Current.Resources[key];
 
-    private static StackPanel PagePanel() => new() { Spacing = 20, MaxWidth = 1120, HorizontalAlignment = HorizontalAlignment.Left };
-
-    private ScrollViewer Scroll(UIElement content)
-    {
-        var host = new Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
-        host.Children.Add(content);
-        host.SizeChanged += (_, args) =>
-        {
-            if (content is FrameworkElement element && args.NewSize.Width > 0)
-                element.Width = Math.Min(1120, args.NewSize.Width);
-        };
-        var scroll = new ScrollViewer
-        {
-            Content = host, Padding = new Thickness(24), HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto
-        };
-        var page = _currentPage;
-        scroll.Loaded += (_, _) => scroll.ChangeView(null, _pageOffsets.GetValueOrDefault(page), null, true);
-        _pageScroll = scroll;
-        return scroll;
-    }
-
     private static TextBlock PageTitle(string text) => new() { Text = text, Style = UiStyle("PageHeadingStyle") };
     private static TextBlock SectionHeading(string text) => new() { Text = text, Style = UiStyle("SectionHeadingStyle") };
     private static TextBlock Body(string text) => new() { Text = text, Style = UiStyle("BodyCopyStyle") };
@@ -1784,6 +1655,8 @@ public sealed partial class MainWindow : Window
         if (primary) button.Style = UiStyle("AccentButtonStyle");
         var binding = new ActionBinding(dynamicKey ?? (() => operationKey ?? text), label ?? (() => text), busyText);
         _actionButtons[button] = binding;
+        button.Loaded += (_, _) => { _actionButtons[button] = binding; UpdateActionButton(button, binding); };
+        button.Unloaded += (_, _) => _actionButtons.Remove(button);
         UpdateActionButton(button, binding);
         button.Click += async (_, _) => await RunOperationAsync(binding.Key(), action);
         return button;
@@ -2333,14 +2206,6 @@ public sealed partial class MainWindow : Window
         OperationCanceledException => L("本地后端在 30 秒内没有响应。请检查后端后手动重试。"),
         _ => L("操作未完成。请检查连接或文件权限后重试。")
     };
-
-    private void ShowNotice(string title, string message, InfoBarSeverity severity)
-    {
-        NoticeBar.Title = title;
-        NoticeBar.Message = message;
-        NoticeBar.Severity = severity;
-        NoticeBar.IsOpen = true;
-    }
 
     private static void CopyText(string text)
     {
