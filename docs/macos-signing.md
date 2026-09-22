@@ -68,7 +68,7 @@ Run the workflow with `sign_macos=true`, `windows_only=false`, and an empty `rel
 
 填写 `release_tag` 时强制使用作者的 macOS 证书、Windows 证书及 Sparkle 更新密钥。开启 `sign_macos_updates` 同样要求正式 macOS 证书。缺少 Secrets、密码错误、指纹不符、签名/验签失败均中止，不降级为 ad-hoc 或自动生成测试身份。先配置作者证书，再启用新的发布流程。
 
-普通 PR 和未开启正式签名的手动构建使用临时测试证书，文件名为 `-self-signed-test.dmg`。测试证书不跨运行复用，不进入 Secrets 或 artifact。它只证明实现能够正确签名与验证，不能作为正式身份的验收。普通本地 `mise run desktop:macos:build --architecture arm64` 仍默认 ad-hoc，并生成 `-unsigned-test.dmg`。
+普通 PR 和未开启正式签名的手动构建使用临时测试证书，文件名为 `-self-signed-test.dmg`。测试身份不跨运行复用；测试私钥、P12 和临时钥匙串不进入 Secrets 或 artifact，公开测试证书会嵌入签名并随候选产物分发。它只证明实现能够正确签名与验证，不能作为正式身份的验收。普通本地 `mise run desktop:macos:build --architecture arm64` 仍默认 ad-hoc，并生成 `-unsigned-test.dmg`。
 
 Release mode requires the maintainer's Mac certificate as well as the existing Windows and Sparkle keys. Missing or invalid configuration stops the release. Secret-free PR/manual candidates use `-self-signed-test.dmg`; local ad-hoc builds use `-unsigned-test.dmg`. Neither is accepted by the signed release-asset gate.
 
