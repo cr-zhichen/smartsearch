@@ -43,15 +43,19 @@ Codex, Claude Code, Cursor, Copilot, Gemini, OpenCode, Cline, Roo Code and the o
 
 ## Manage the independent CLI
 
-Overview starts with CLI installation, current version, connection and updates. Continue with providers, then Skills. Open **CLI settings** for the management dialog.
+Overview is the single **Local environment** entry for installation, version, connection and updates. Follow its steps to prepare the environment, configure providers, test the connection, then optionally connect Skills. Open **Environment details…** for paths, ownership and update preferences.
 
-Automatic discovery checks PATH, common Node.js directories, mise, nvm and Volta. Open **CLI settings** to select npm manually; an empty path restores automatic discovery. Invalid manual paths never fall back to another npm. All operations use the selected Node/npm and its original global prefix. Switching npm does not move or remove another installation or adopt a pip/uv development CLI from PATH.
+Automatic discovery checks PATH, common Node.js directories, mise, nvm and Volta, including the separate Smart Search tool resolved through global mise. Select an installation or specify npm in **Environment details…**. A missing selected path never silently switches installations. npm operations retain their original prefix; mise updates retain mise ownership and recognized options. Complex mise settings require updating from the original terminal. Changing the selection does not move or remove another installation or adopt a pip/uv development CLI.
 
 CLI updates are checked at App startup and every 24 hours while running. Checks notify; installation is manual. Preferences and timestamps persist independently, and failed checks retain the last success with a retry delay. App updates remain separate in Sparkle / Velopack.
 
 Configuration and Skills survive CLI repair, updates and removal. The npm prefix must be writable; the App does not elevate permissions, edit global npm settings or alter PATH. Add the selected npm global command directory to your terminal PATH when using short commands; Skills use the full invocation. Compatibility follows the protocol version, not matching product versions.
 
-Published npm 0.1.24 and earlier do not contain the self-contained runtime. Until the new version is published, the App reports this instead of installing a package that requires user Python.
+Published npm 0.1.24 and earlier do not contain a compatible independent CLI. Until a compatible release is available, the App explains the limitation and never runs the old wrapper’s Python installer. You can also look for a standalone CLI ZIP on the release page. If no compatible download is available, wait for a new release or select an existing compatible bundle.
+
+Extract the complete standalone ZIP, then choose **Select existing CLI…** in Overview and select `smart-search.exe` (Windows) or `smart-search` (macOS). Keep its runtime files in the same directory. The App verifies its version and protocol before connecting. This option needs no Node/npm; you manage its updates. Moving or removing the directory requires selecting it again.
+
+Skills synced from a manual CLI include its full invocation path and configuration directory, with instructions to replace the bare `smart-search` command. No PATH is changed. In the Agent, use that full invocation with `--version`, then `agent-guide`. Skill file status and actual Agent invocation are separate checks.
 
 ## Everyday pages
 
@@ -88,7 +92,7 @@ Activity refreshes every two seconds and observes only the current or explicitly
 
 Closing the window with a running App task offers continuing in the background, cancelling App tasks and exiting, or returning. Restore the background App from its tray/menu icon; launching it again restores the same window. Independent CLI tasks started by a terminal or AI are not cancelled by the App.
 
-In Settings & about, App updates use Velopack on Windows and Sparkle on macOS. Automatic checks run on every launch and every 24 hours while the App remains open; the switch stops future automatic checks and leaves manual checks available. A check downloads only metadata. Choose Update, Later or Skip this version when prompted. Skips persist across restarts; a newer version prompts again, and manual checks can rediscover a skipped release; downloads and installation require your action. Errors remain errors, rather than being shown as “up to date”.
+In Settings & about, App updates use Velopack on Windows and Sparkle on macOS. When enabled, automatic checks run at each new App process launch; there is no 24-hour polling while it stays open. Restoring an existing window is not a new launch. Manual checks remain available when automatic checks are disabled. The primary button changes from **Check for updates** to **Download update**, with retry on failure and download progress/cancellation retained. macOS confirmation and installation progress use Sparkle’s native window. Errors are never reported as “up to date”.
 
 The frameworks download, verify and install the App independently, using a delta when applicable and a verified full package as fallback. Before restart, finish App tasks, CLI/environment/Skills writes and handle unsaved drafts. The App never cancels independent CLI tasks. A completed download is not a completed installation; check the actual version after restart.
 

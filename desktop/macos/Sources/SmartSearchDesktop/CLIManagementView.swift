@@ -6,11 +6,13 @@ struct CLIManagementView: View {
     @ObservedObject private var manager: CLIInstallationManager
     var firstStep: Bool
     @State private var npmPath = ""
+    @State private var selectedID = ""
     @State private var showingSettings = false
     @State private var pendingAction: SettingsAction?
 
     private enum SettingsAction {
-        case install, uninstall, reconnect
+        case install, uninstall, reconnect, chooseCLI
+        case selectCLI(String)
         case npmPath(String)
     }
 
@@ -22,20 +24,29 @@ struct CLIManagementView: View {
 
     var body: some View {
         DesktopPanel {
-            DesktopStepHeader(title: firstStep ? L("1. 安装 CLI") : L("独立 CLI"), subtitle: status) {
+            DesktopStepHeader(title: firstStep ? L("1. 准备本地环境") : L("本地环境"), subtitle: model.environmentStatus) {
                 if manager.busy || manager.checking { ProgressView().controlSize(.small) }
-                if manager.npm == nil {
+                if manager.npm == nil && manager.selected == nil {
                     Link(L("安装 Node.js"), destination: URL(string: "https://nodejs.org/en/download")!)
                         .buttonStyle(.borderedProminent)
-                } else if manager.selected?.compatible != true || manager.updateAvailable {
+                } else if manager.canInstall && (manager.selected?.compatible != true || manager.updateAvailable) {
                     Button(installTitle) { Task { await model.manageCLI() } }
                         .buttonStyle(.borderedProminent).disabled(blocked || releaseUnavailable)
-                } else if model.connection != .ready {
+                }
+                if model.connection != .ready {
                     Button(L("重新检测")) { Task { await model.reconnect() } }.disabled(blocked)
                 }
-                Button(L("CLI 设置…")) {
+                Button(L("环境详情…")) {
                     npmPath = manager.manualNpmPath
+                    selectedID = manager.selected?.id ?? ""
                     showingSettings = true
+                }
+            }
+            Text(model.environmentExplanation).font(.callout).foregroundStyle(.secondary)
+            if manager.selected?.compatible != true {
+                HStack {
+                    Link(L("手动下载 CLI"), destination: URL(string: "https://github.com/konbakuyomu/smartsearch/releases/latest")!)
+                    Button(L("选择已有 CLI…")) { chooseCLI() }.disabled(blocked)
                 }
             }
             if !manager.message.isEmpty {
@@ -46,12 +57,24 @@ struct CLIManagementView: View {
             }
         }
         .sheet(isPresented: $showingSettings, onDismiss: performPendingAction) {
-            DetailSheet(L("CLI 设置")) {
-                DesktopStepHeader(title: L("独立 CLI"), subtitle: status) {
+            DetailSheet(L("本地环境")) {
+                DesktopStepHeader(title: L("Smart Search CLI"), subtitle: model.environmentStatus) {
                     Button(L("重新检测")) { deferAction(.reconnect) }.disabled(blocked)
                     Button(L("检查更新")) { Task { await manager.checkVersion() } }
                         .disabled(manager.npm == nil || blocked)
                 }
+                if !manager.installations.isEmpty {
+                    Picker(L("已发现的安装"), selection: $selectedID) {
+                        ForEach(manager.installations) { item in Text(item.title).tag(item.id) }
+                    }.disabled(blocked)
+                    Button(L("使用所选安装")) { deferAction(.selectCLI(selectedID)) }.disabled(blocked || selectedID.isEmpty)
+                }
+                HStack {
+                    Button(L("选择已有 CLI…")) { deferAction(.chooseCLI) }.disabled(blocked)
+                    Link(L("手动下载 CLI"), destination: URL(string: "https://github.com/konbakuyomu/smartsearch/releases/latest")!)
+                }
+                Text(L("独立下载包解压后选择 smart-search 可执行文件，并保留同目录的运行文件。手动安装由你自行更新。"))
+                    .font(.callout).foregroundStyle(.secondary)
                 Divider()
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L("npm 环境")).font(.headline)
@@ -83,8 +106,8 @@ struct CLIManagementView: View {
                 Divider()
                 HStack(spacing: 8) {
                     Button(installTitle) { deferAction(.install) }
-                        .disabled(manager.npm == nil || blocked || releaseUnavailable)
-                    if manager.selected != nil {
+                        .disabled(!manager.canInstall || blocked || releaseUnavailable)
+                    if manager.selected?.source == "npm" {
                         Spacer()
                         Button(L("卸载 CLI"), role: .destructive) { deferAction(.uninstall) }.disabled(blocked)
                     }
@@ -105,18 +128,6 @@ struct CLIManagementView: View {
         if manager.updateAvailable { return L("更新 CLI") }
         return L("修复 CLI")
     }
-    private var status: String {
-        if manager.busy { return L("处理中…") }
-        guard manager.npm != nil else { return L("未找到 npm") }
-        guard let installation = manager.selected else {
-            return releaseUnavailable ? L("暂时无法安装，请稍后重试。") : L("尚未安装")
-        }
-        if !installation.compatible { return L("{0} · 需要修复", installation.version) }
-        if manager.updateAvailable { return L("{0} · 可更新至 {1}", installation.version, manager.latestVersion) }
-        if model.connection == .ready { return L("{0} · 已就绪", installation.version) }
-        return L("{0} · 尚未连接", installation.version)
-    }
-
     private func deferAction(_ action: SettingsAction) {
         pendingAction = action
         showingSettings = false
@@ -131,8 +142,19 @@ struct CLIManagementView: View {
             case .uninstall: await model.manageCLI(remove: true)
             case .reconnect: await model.reconnect()
             case .npmPath(let path): await model.setNpmPath(path)
+            case .selectCLI(let id): await model.selectCLI(id)
+            case .chooseCLI: chooseCLI()
             }
         }
+    }
+
+    private func chooseCLI() {
+        guard !blocked else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.message = L("请选择独立下载包中的 smart-search 可执行文件。")
+        if panel.runModal() == .OK, let path = panel.url?.path { Task { await model.selectCLI(path, manual: true) } }
     }
 
     private func chooseNpm() {

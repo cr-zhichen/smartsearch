@@ -363,10 +363,15 @@ public sealed partial class MainWindow
         if (!secret) details.Children.Add(KeyValue(L("当前生效"), initialValue));
         if (clear is not null) details.Children.Add(SettingRow(secret ? L("清除已保存的密钥") : L("恢复默认值"), L("保存更改后生效。"), clear));
         if (locked) details.Children.Add(Secondary(L("由环境变量提供，在此处只读。")));
-        var info = new Button { Content = new FontIcon { Glyph = "\uE946", FontSize = 14 }, Style = UiStyle("FieldHelpButtonStyle"),
+        var info = new Button { Content = new FontIcon { Glyph = "\uE897", FontSize = 14 }, Style = UiStyle("FieldHelpButtonStyle"),
             Flyout = new Flyout { Content = new ScrollViewer { Content = details, MaxHeight = 360, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } } };
         AutomationProperties.SetName(info, L("字段说明：{0}", Label(field)));
-        ToolTipService.SetToolTip(info, L("字段说明：{0}", Label(field)));
+        AutomationProperties.SetHelpText(info, help);
+        var tooltip = new ToolTip { Content = Body(help), MaxWidth = 360 };
+        ToolTipService.SetToolTip(info, tooltip);
+        info.GotFocus += (_, _) => { if (info.FocusState == FocusState.Keyboard) tooltip.IsOpen = true; };
+        info.LostFocus += (_, _) => tooltip.IsOpen = false;
+        info.Click += (_, _) => tooltip.IsOpen = false;
         var title = new Grid { ColumnSpacing = 12 };
         title.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         title.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });

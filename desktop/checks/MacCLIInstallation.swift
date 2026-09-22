@@ -17,6 +17,7 @@ import Foundation
         let manager = CLIInstallationManager(searchPath: search, preferences: preferences, versionLoader: load, clock: { now })
         await manager.discover()
         try expect(manager.npm?.prefix == first.path && manager.selected?.compatible == false && manager.selected?.canManage == true, "Legacy npm installation must remain manageable without executing its Python wrapper")
+        try expect(manager.installations.count == 2, "Every npm prefix must be detected")
         try expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("legacy-executed").path), "Legacy wrapper was executed")
         manager.setNpmPath(root.appendingPathComponent("missing/npm").path)
         await manager.discover()
@@ -55,7 +56,26 @@ import Foundation
         let args = try JSONDecoder().decode([String].self, from: operations)
         try expect(args == ["uninstall", "--global", "--prefix", second.path, "@konbakuyomu/smart-search"], "npm prefix/argument boundary changed")
         try expect(FileManager.default.fileExists(atPath: first.appendingPathComponent("lib/node_modules/@konbakuyomu/smart-search/package.json").path), "Another npm installation was changed")
-        print("PASS: npm discovery, manual override, legacy isolation, scoped update/uninstall, protocol, startup/24h checks, failure backoff and persisted preferences")
+        let oldGlobal = ProcessInfo.processInfo.environment["MISE_GLOBAL_CONFIG_FILE"]
+        setenv("MISE_GLOBAL_CONFIG_FILE", root.appendingPathComponent("global.toml").path, 1)
+        defer { if let oldGlobal { setenv("MISE_GLOBAL_CONFIG_FILE", oldGlobal, 1) } else { unsetenv("MISE_GLOBAL_CONFIG_FILE") } }
+        preferences.removeObject(forKey: "SmartSearchDesktop.npmPath")
+        preferences.removeObject(forKey: "SmartSearchDesktop.selectedCLI")
+        let mise = CLIInstallationManager(searchPath: root.appendingPathComponent("mise bin").path + ":" + search, preferences: preferences, versionLoader: load)
+        await mise.discover()
+        try expect(mise.selected?.source == "mise" && mise.selected?.compatible == true && mise.selected?.canManage == true, "Active mise tool outside npm prefix must be selected: " + mise.message)
+        try expect(mise.selected?.managerOptions == ["--tool-option", "allow_low_downloads=\"true\""], "Preserve mise options")
+        await mise.checkVersion()
+        try await mise.installOrRepair(expectedVersion: "1.2.4")
+        try expect(mise.selected?.version == "1.2.4" && mise.selected?.source == "mise", "Keep mise ownership after update")
+        let use = try JSONDecoder().decode([String].self, from: Data(contentsOf: root.appendingPathComponent("mise-operations.json")))
+        try expect(use == ["use", "--global", "--pin", "--tool-option", "allow_low_downloads=\"true\"", "npm:@konbakuyomu/smart-search@1.2.4"], "Update through original manager")
+        mise.setCliPath(root.appendingPathComponent("missing/smart-search").path)
+        await mise.discover()
+        try expect(mise.selected == nil && !mise.canInstall && !mise.message.isEmpty, "Missing explicit CLI must not silently switch")
+        try expect(CLIInstallationManager.miseOptions("version = \"1.2.3\"\npostinstall = \"custom\"", requested: "1.2.3") == nil, "Complex mise options stay read-only")
+        try expect(CLIInstallationManager.miseOptions("version = \"^1\"", requested: "^1") == nil, "Mise version constraints stay intact")
+        print("PASS: npm/mise discovery and ownership, manual selection, legacy isolation, scoped updates, startup/24h checks and persistence")
     }
     static func expect(_ condition: Bool, _ message: String) throws { if !condition { throw CheckFailure.failed(message) } }
 }
