@@ -86,3 +86,5 @@ jobs:
     uses: ./.github/workflows/npm-binaries.yml
     with:
       ref: ${{ github.sha }}
+      # Exercise the beta release path, including Python metadata normalization.
+      version: "0.0.0-beta.1"

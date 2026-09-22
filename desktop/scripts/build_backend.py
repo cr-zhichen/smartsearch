@@ -19,6 +19,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from packaging.version import Version
+
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_ENTRY = Path("src/smart_search/desktop_entry.py")
@@ -194,7 +196,7 @@ def main() -> int:
     args = parse_args()
     project_version = re.search(r'^version = "([^"]+)"',
         (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8"), re.MULTILINE).group(1)
-    if importlib.metadata.version(PACKAGE_NAME) != project_version:
+    if Version(importlib.metadata.version(PACKAGE_NAME)) != Version(project_version):
         raise RuntimeError("Installed package metadata is stale; install this checkout into the build Python before packaging.")
     entry = repository_path(args.entry)
     output_root = repository_path(args.output_root)

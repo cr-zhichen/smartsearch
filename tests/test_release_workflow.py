@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import re
 import subprocess
@@ -13,6 +14,33 @@ WORKFLOW = ROOT / ".github" / "workflows" / "publish-npm.yml"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
 TARBALL_SMOKE = ROOT / "npm" / "scripts" / "smoke-packed-install.js"
 SKILL_PARITY_CHECK = ROOT / "npm" / "scripts" / "check-skill-parity.js"
+
+
+@pytest.mark.parametrize("declared,installed,error", [
+    ("0.1.24", "0.1.24", "desktop entry is not available"),
+    ("0.1.24-alpha.1", "0.1.24a1", "desktop entry is not available"),
+    ("0.1.24-beta.2", "0.1.24b2", "desktop entry is not available"),
+    ("0.1.24-rc.3", "0.1.24rc3", "desktop entry is not available"),
+    ("0.1.24-dev.4", "0.1.24.dev4", "desktop entry is not available"),
+    ("0.1.24-beta.2", "0.1.24b1", "metadata is stale"),
+    ("0.1.24-beta.2", "0.1.24rc2", "metadata is stale"),
+    ("0.1.24-beta.2", "0.1.24", "metadata is stale"),
+    ("0.1.24-beta.2", "0.1.25b2", "metadata is stale"),
+    ("invalid", "0.1.24", "Invalid version"),
+    ("0.1.24", "invalid", "Invalid version"),
+])
+def test_backend_build_accepts_equivalent_versions_but_rejects_stale_metadata(tmp_path, monkeypatch, declared, installed, error):
+    spec = importlib.util.spec_from_file_location("build_backend", ROOT / "desktop/scripts/build_backend.py")
+    backend = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(backend)
+    (tmp_path / "pyproject.toml").write_text(f'[project]\nversion = "{declared}"\n', encoding="utf-8")
+    monkeypatch.setattr(backend, "REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setattr(backend.importlib.metadata, "version", lambda _: installed)
+    monkeypatch.setattr(sys, "argv", ["build_backend.py", "--entry", "missing.py"])
+    # A missing entry stops accepted versions before PyInstaller or artifact writes.
+    with pytest.raises((RuntimeError, ValueError), match=error):
+        backend.main()
+    assert not (tmp_path / ".desktop-artifacts").exists()
 
 
 def read_reference_tree(skill_dir: Path) -> str:
