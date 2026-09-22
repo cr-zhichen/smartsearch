@@ -59,7 +59,7 @@ mise run desktop:macos:universal \
   --sparkle-tools /path/to/arm64/sparkle-tools
 ```
 
-通用版通过 `lipo` 合并 Swift 主程序，验证 framework/helper 的双架构后重新签名和生成 DMG。CLI 的 ZIP 可用于独立验收；App 安装统一通过用户 npm，由 npm 选择与 Node.js 进程架构匹配的平台包。
+通用版通过 `lipo` 合并 Swift 主程序，验证 framework/helper 的双架构后重新签名和生成 DMG。CLI 的 ZIP 可独立运行并由 App 手动选择；自动安装沿用已发现的 mise 或 npm，npm 会选择与 Node.js 进程架构匹配的平台包。
 
 构建原生界面需要选中带 macOS SDK 26 或更新版本的 Xcode，最低运行版本仍是 macOS 13。`compile-macos.sh` 将同一个实际 SDK 路径/版本同时传入编译和链接，避免 SwiftPM 将最低系统版本误记为 linked-on SDK，导致新版 macOS 仍显示旧控件样式。打包验证会读取真实 Mach-O 的 SDK 和最低版本，并拒绝旧 SDK 或与构建 SDK 不一致的产物。
 
@@ -96,21 +96,21 @@ Windows 新构建统一使用 `windows-Setup-{架构}.exe`，不以文件名判�
 
 ## App 和 CLI 更新
 
-设置分别显示 App 更新与独立 CLI 管理。App 使用 Sparkle / Velopack，启用自动检查时每次启动检查，保持运行时每 24 小时再检查。发现版本可更新、稍后或跳过；跳过记录跨重启保留，手动检查仍能查看该版本。CLI 缺失或损坏不影响 App 检查更新。
+设置只管理 App 更新，本地环境统一进入概览。App 使用 Sparkle / Velopack，启用自动检查时每次进程启动检查，不再周期轮询。主要按钮从“检查更新”变为“下载更新”；下载进度、取消、原生安装确认和草稿保护保留。macOS 启动检查使用 Sparkle 信息探针，手动操作沿用框架交互。CLI 缺失或损坏不影响 App 检查更新。
 
 App 更新由 SDK 下载和校验，优先使用适用差分，失败时按框架规则回退完整包。安装前保护草稿、自有任务和 CLI/Skills 写入，关闭 App 自己的协议进程后安装重启。App 更新不替换独立 CLI。
 
-CLI 安装管理由 App 原生代码调用用户 npm 执行，CLI 不可用时仍可操作。自动检测和手动路径选择都会固定配套 Node.js、npm 和原全局 prefix，不接管 pip/uv 开发版。首页始终显示安装、连接与更新状态；CLI 默认启动时及每 24 小时检查，只提示，不自动安装。配置和 Skills 保留。
+CLI 不可用时，App 原生环境管理仍可操作。自动检测枚举 npm prefix，并通过 mise 的全局解析找到独立工具安装；固定所选安装、Node 和原管理器，多安装不静默切换。mise 更新保留简单工具选项，复杂约束转为原终端手动更新，不接管 pip/uv 开发版。CLI 默认启动时及每 24 小时检查，只提示，不自动安装。配置和 Skills 保留。
 
 ## 环境准备与 App/CLI 解耦
 
-App 不内置 CLI，也不负责搜索或 Skill 规则。首页第一步查找用户的 Node.js 18+ / npm；环境路径和更新偏好集中在 CLI 设置弹窗中。缺失时提供安装 Node.js 与手动指定 npm 路径的入口。CLI 平台包自带 Python 解释器和依赖，并隔离用户 Python 环境；App 不下载或配置 Node/Python。
+App 不内置 CLI，也不负责搜索或 Skill 规则。概览按“本地环境 → 服务商 → 测试 → 可选 Skills”引导；先复用已发现的安装，环境路径和更新偏好集中在“环境详情”中。缺失时提供 Node.js 下载、重新检测、手动指定 npm 和选择独立 CLI 的入口。独立 ZIP 解压后保留完整目录，再选择 smart-search 可执行文件；这条路径不依赖 Node/npm，由用户管理更新。CLI 平台包自带 Python 解释器和依赖，并隔离用户 Python 环境；App 不下载或配置 Node/Python。
 
 `npm-binaries.yml` 为 macOS、Windows、Linux 的 x64/arm64 构建平台包，真实执行 npm tarball 安装与无 Python 环境验证。发布管线待六个平台通过后，先发布平台包，再发布 npm 主包。首次发布需要在 npm 为六个 scoped 平台包配置发布权限/可信发布者；旧 0.1.24 不能覆盖，需使用新版本号。
 
 本地通过 `mise run desktop:cli:build --result-file <manifest>` 构建 CLI，再用 `mise run npm:binary:package --manifest <manifest> --output <新目录>` 和 `mise run npm:binary:smoke <新目录>` 检查 npm 分发。
 
-CLI 安装在所选 npm 的全局 prefix 中，由 npm 创建命令入口。App 不修改 PATH 或 npm 配置；卸载 App 不影响 CLI、搜索配置和已接入的 Skills。历史 SmartSearchTools 目录保留，不自动迁移或删除。
+普通 npm 安装写入所选全局 prefix；mise 安装由 mise 管理。CLI 入口由原管理器创建。App 不修改 PATH 或 npm 配置；卸载 App 不影响 CLI、搜索配置和已接入的 Skills。历史 SmartSearchTools 目录保留，不自动迁移或删除。
 
 “更新 Skills”的清单、内容、状态、写入、备份和移除全部来自当前 CLI。安装的 Skill 是短入口，通过 `smart-search agent-guide [relative-path]` 获取当前 CLI 的完整说明。手动同步只处理确认的目标；默认自动维护已接入目标，在 CLI 升级后的首次使用及后续每日检查执行，不依赖 App 打开。个人修改和额外文件保留；缺失文件或冲突需要手动处理。移除先备份并取消维护。
 

@@ -25,16 +25,22 @@ public sealed partial class MainWindow
         if (_nativeCliState is null) return;
         var state = new StackPanel { Spacing = 12 };
         var actions = new List<UIElement>();
-        if (_cliManager.Npm is null)
+        if (_cliManager.Npm is null && _cliManager.Selected is null)
             actions.Add(ActionButton(L("安装 Node.js"), async () =>
                 { await Windows.System.Launcher.LaunchUriAsync(new Uri("https://nodejs.org/en/download")); }, primary: true));
-        else if (_cliManager.Selected?.Compatible != true || _cliManager.UpdateAvailable)
+        else if (_cliManager.CanInstall && (_cliManager.Selected?.Compatible != true || _cliManager.UpdateAvailable))
             actions.Add(ActionButton(CliInstallTitle(), () => ManageNativeCliAsync(remove: false), primary: true,
                 operationKey: "native-cli-install", busyText: L("处理中…"), enabled: () => !CliBlocked && !CliReleaseUnavailable));
-        else if (!_backend.IsConnected)
+        if (!_backend.IsConnected)
             actions.Add(ActionButton(L("重新检测"), ConnectAsync, operationKey: "connect", enabled: () => !CliBlocked));
-        actions.Add(ActionButton(L("CLI 设置…"), ShowCliSettingsAsync));
-        state.Children.Add(StepHeader(_cliFirstStep ? L("1. 安装 CLI") : L("独立 CLI"), CliStatus(), actions.ToArray()));
+        actions.Add(ActionButton(L("环境详情…"), ShowCliSettingsAsync));
+        if (_cliManager.Selected?.Compatible != true)
+        {
+            actions.Add(new HyperlinkButton { Content = L("手动下载 CLI"), NavigateUri = new Uri("https://github.com/konbakuyomu/smartsearch/releases/latest") });
+            actions.Add(ActionButton(L("选择已有 CLI…"), ChooseCliAsync, enabled: () => !CliBlocked));
+        }
+        state.Children.Add(StepHeader(_cliFirstStep ? L("1. 准备本地环境") : L("本地环境"), CliStatus(), actions.ToArray()));
+        state.Children.Add(Secondary(CliExplanation()));
         if (_cliManager.Checking || _cliManager.Busy) state.Children.Add(new ProgressBar { IsIndeterminate = true });
         if (_cliManager.Message.Length > 0) state.Children.Add(Secondary(_cliManager.Message));
         if (_cliManager.CheckError.Length > 0) state.Children.Add(Secondary(L("检查更新失败，请稍后重试。")));
@@ -49,7 +55,7 @@ public sealed partial class MainWindow
         var dialog = new ContentDialog
         {
             XamlRoot = DialogRoot, RequestedTheme = ((FrameworkElement)Content).ActualTheme,
-            Title = L("CLI 设置"), CloseButtonText = L("完成")
+            Title = L("本地环境"), CloseButtonText = L("完成")
         };
         Button DeferredAction(string title, Func<Task> action, bool enabled = true)
         {
@@ -58,9 +64,26 @@ public sealed partial class MainWindow
             return button;
         }
         var content = new StackPanel { Spacing = 16 };
-        content.Children.Add(Section(L("独立 CLI"), [Secondary(CliStatus()), ActionRow(
+        content.Children.Add(Section(L("Smart Search CLI"), [Secondary(CliStatus()), ActionRow(
             DeferredAction(L("重新检测"), ConnectAsync, !blocked),
             DeferredAction(L("检查更新"), CheckCliVersionAsync, _cliManager.Npm is not null && !blocked))]));
+        if (_cliManager.Installations.Count > 0)
+        {
+            var installations = new ComboBox { ItemsSource = _cliManager.Installations, DisplayMemberPath = "Title",
+                SelectedItem = _cliManager.Selected, HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = !blocked };
+            content.Children.Add(Section(L("已发现的安装"), [installations,
+                DeferredAction(L("使用所选安装"), async () =>
+                {
+                    if (installations.SelectedItem is CLIInstallation selected)
+                    {
+                        _cliManager.SelectInstallation(selected.Id);
+                        await ConnectAsync();
+                    }
+                }, !blocked)]));
+        }
+        content.Children.Add(ActionRow(DeferredAction(L("选择已有 CLI…"), ChooseCliAsync, !blocked),
+            new HyperlinkButton { Content = L("手动下载 CLI"), NavigateUri = new Uri("https://github.com/konbakuyomu/smartsearch/releases/latest") }));
+        content.Children.Add(Secondary(L("独立下载包解压后选择 smart-search 可执行文件，并保留同目录的运行文件。手动安装由你自行更新。")));
         var environment = new StackPanel { Spacing = 8 };
         environment.Children.Add(SectionHeading(L("npm 环境")));
         if (_cliManager.Npm is { } npm)
@@ -95,9 +118,9 @@ public sealed partial class MainWindow
             content.Children.Add(Secondary(L("上次检查：{0}", date.ToLocalTime().ToString("g"))));
         var maintenance = new List<UIElement>
         {
-            DeferredAction(CliInstallTitle(), () => ManageNativeCliAsync(remove: false), _cliManager.Npm is not null && !blocked && !CliReleaseUnavailable)
+            DeferredAction(CliInstallTitle(), () => ManageNativeCliAsync(remove: false), _cliManager.CanInstall && !blocked && !CliReleaseUnavailable)
         };
-        if (_cliManager.Selected is not null)
+        if (_cliManager.Selected?.Source == "npm")
             maintenance.Add(DeferredAction(L("卸载 CLI"), () => ManageNativeCliAsync(remove: true), !blocked && _cliManager.Selected.CanManage));
         content.Children.Add(ActionRow(maintenance.ToArray()));
         if (_cliManager.CheckError.Length > 0)
@@ -122,12 +145,34 @@ public sealed partial class MainWindow
 
     private string CliStatus()
     {
-        if (_cliManager.Busy) return L("处理中…");
-        if (_cliManager.Npm is null) return L("未找到 npm");
-        if (_cliManager.Selected is not { } installation) return CliReleaseUnavailable ? L("暂时无法安装，请稍后重试。") : L("尚未安装");
-        if (!installation.Compatible) return L("{0} · 需要修复", installation.Version);
+        if (_cliManager.Busy || _connecting) return L("正在检测本地环境…");
+        if (_cliManager.Selected is not { } installation)
+            return _cliManager.Npm is null ? L("尚未找到 Node.js/npm 或可用的 Smart Search CLI") : L("Node.js/npm 已就绪，等待准备 Smart Search CLI");
+        if (!installation.Compatible) return L("{0} · {1} · 需要更新或修复", installation.Source, installation.Version);
         if (_cliManager.UpdateAvailable) return L("{0} · 可更新至 {1}", installation.Version, _cliManager.LatestVersion);
         return _backend.IsConnected ? L("{0} · 已就绪", installation.Version) : L("{0} · 尚未连接", installation.Version);
+    }
+
+    private string CliExplanation()
+    {
+        if (_cliManager.Selected is { Compatible: false } selected) return selected.Note +
+            (CliReleaseUnavailable ? "\n" + L("npm 上尚未发布兼容版本。可手动下载独立 CLI，或稍后重新检查。") : "");
+        if (_cliManager.Message.Length > 0) return _cliManager.Message;
+        if (_cliManager.Selected is { Note.Length: > 0 } installation) return installation.Note;
+        if (_connectionFailed) return L("Smart Search CLI 已找到，但连接失败。请重新检测；错误详情显示在上方。");
+        if (CliReleaseUnavailable && _cliManager.Selected is null) return L("npm 上尚未发布兼容版本。可手动下载独立 CLI，或稍后重新检查。");
+        return L("App 通过本机独立安装的 Smart Search CLI 读取配置并运行搜索，两者分别安装和更新。检测会复用已有的 mise 或 npm 安装。");
+    }
+
+    private async Task ChooseCliAsync()
+    {
+        if (CliBlocked) return;
+        var picker = new FileOpenPicker();
+        picker.FileTypeFilter.Add(".exe");
+        InitializeWithWindow.Initialize(picker, _windowHandle);
+        if (await picker.PickSingleFileAsync() is not { } file) return;
+        _cliManager.SetCliPath(file.Path);
+        await ConnectAsync();
     }
 
     private string CliInstallTitle()

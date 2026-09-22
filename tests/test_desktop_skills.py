@@ -44,6 +44,27 @@ def test_catalog_is_readonly_local_and_uses_custom_claude_root(tmp_path, monkeyp
     assert not list(tmp_path.iterdir()), "Reading the current CLI needs neither a remote package nor filesystem writes"
 
 
+def test_manual_standalone_skill_uses_selected_executable_without_path(tmp_path, monkeypatch):
+    import sys
+    from smart_search import desktop_cli
+    from smart_search.config import config
+
+    executable = tmp_path / "手动 CLI & space" / ("smart-search.exe" if os.name == "nt" else "smart-search")
+    monkeypatch.delenv("SMART_SEARCH_PACKAGE_ROOT", raising=False)
+    monkeypatch.delenv("SMART_SEARCH_NODE_PATH", raising=False)
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(executable))
+    monkeypatch.setattr(desktop_cli, "tools_directory", lambda: tmp_path / "tools")
+    with config.snapshot(directory=str(tmp_path / "config")):
+        document = dict(skills._local_skill_files(None))["SKILL.md"]
+    body, note = skills.split_local_note(document)
+    assert b"smart-search agent-guide" in body
+    assert str(executable).encode() in note
+    assert str(tmp_path / "config").encode() in note
+    assert b"Replace the `smart-search` command" in note and b"--version" in note
+    assert not list(tmp_path.iterdir()), "Generating invocation guidance must not install a shim or Skill"
+
+
 @pytest.mark.asyncio
 async def test_sync_is_explicit_scoped_backed_up_and_registered(tmp_path, monkeypatch):
     manager, _ = isolated(tmp_path, monkeypatch)

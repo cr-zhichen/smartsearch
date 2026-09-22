@@ -11,8 +11,10 @@ struct CLIInstallation: Identifiable, Codable, Equatable, Sendable {
     var manager: [String] = []
     var prefix: String = ""
     var environment: [String: String] = [:]
-    var canManage: Bool { source == "npm" && !manager.isEmpty }
-    var title: String { "npm · \(version.isEmpty ? L("版本未知") : version) · \(id)" }
+    var note = ""
+    var managerOptions: [String] = []
+    var canManage: Bool { ["npm", "mise"].contains(source) && !manager.isEmpty }
+    var title: String { "\(source) · \(version.isEmpty ? L("版本未知") : version) · \(id)" }
 }
 
 struct NpmEnvironment: Equatable, Sendable {
@@ -52,7 +54,10 @@ final class CLIInstallationManager: ObservableObject {
         didSet { preferences.set(automaticallyChecks, forKey: "SmartSearchDesktop.cliAutoCheck") }
     }
     @Published private(set) var manualNpmPath: String
-    var selected: CLIInstallation? { installations.first }
+    @Published private(set) var selectedID: String
+    @Published private(set) var manualCliPath: String
+    var selected: CLIInstallation? { selectedID.isEmpty ? installations.first : installations.first { $0.id == selectedID } }
+    var canInstall: Bool { selected.map(\.canManage) ?? (npm != nil && selectedID.isEmpty) }
     var latestVersion: String { update.latestVersion }
     var latestSupportsBinary: Bool { update.supportsBinary }
     var checkedAt: Date? { update.checkedAt }
@@ -73,6 +78,8 @@ final class CLIInstallationManager: ObservableObject {
         self.preferences = preferences
         self.initialSearchPath = searchPath
         self.manualNpmPath = preferences.string(forKey: "SmartSearchDesktop.npmPath") ?? ""
+        self.selectedID = preferences.string(forKey: "SmartSearchDesktop.selectedCLI") ?? ""
+        self.manualCliPath = preferences.string(forKey: "SmartSearchDesktop.manualCLI") ?? ""
         self.automaticallyChecks = preferences.object(forKey: "SmartSearchDesktop.cliAutoCheck") as? Bool ?? true
         self.versionLoader = versionLoader
         self.clock = clock
@@ -85,6 +92,20 @@ final class CLIInstallationManager: ObservableObject {
     func setNpmPath(_ path: String) {
         manualNpmPath = (path as NSString).expandingTildeInPath.trimmingCharacters(in: .whitespacesAndNewlines)
         preferences.set(manualNpmPath, forKey: "SmartSearchDesktop.npmPath")
+        setCliPath("")
+    }
+
+    func selectInstallation(_ id: String) {
+        guard installations.contains(where: { $0.id == id }) else { return }
+        selectedID = id
+        preferences.set(id, forKey: "SmartSearchDesktop.selectedCLI")
+    }
+
+    func setCliPath(_ path: String) {
+        manualCliPath = (path as NSString).expandingTildeInPath.trimmingCharacters(in: .whitespacesAndNewlines)
+        selectedID = manualCliPath
+        preferences.set(manualCliPath, forKey: "SmartSearchDesktop.manualCLI")
+        preferences.set(selectedID, forKey: "SmartSearchDesktop.selectedCLI")
     }
 
     func startAutomaticChecks() {
@@ -119,12 +140,25 @@ final class CLIInstallationManager: ObservableObject {
             searchPath = loginPath.trimmingCharacters(in: .whitespacesAndNewlines) + ":" + searchPath
         }
         let paths = manualNpmPath.isEmpty ? npmCandidates(searchPath: searchPath) : [manualNpmPath]
+        var seen = Set<String>()
+        var npmEnvironments: [NpmEnvironment] = []
         for path in paths {
-            do { npm = try await resolveNpm(path, searchPath: searchPath); break }
+            do {
+                let candidate = try await resolveNpm(path, searchPath: searchPath)
+                if npm == nil { npm = candidate }
+                if seen.insert(candidate.identity).inserted { npmEnvironments.append(candidate); await addInstallation(candidate) }
+            }
             catch { if !manualNpmPath.isEmpty { message = error.localizedDescription } }
         }
+        if manualNpmPath.isEmpty { await discoverMise(searchPath: searchPath) }
+        if !manualCliPath.isEmpty { await discoverManual() }
+        if !selectedID.isEmpty && selected == nil { message = L("所选安装已不可用，请重新检测或选择其他安装。") }
+        if selectedID.isEmpty, let selected { selectInstallation(selected.id) }
+        if let selected {
+            npm = npmEnvironments.first { selected.source == "npm" ? $0.prefix == selected.prefix && $0.command == selected.manager : $0.nodePath == selected.executable } ?? npm
+        }
         guard let npm else {
-            if message.isEmpty { message = L("未找到可用的 npm。请先安装 Node.js，或手动指定 npm 路径。") }
+            if message.isEmpty && selected == nil { message = L("未找到可用的 npm。请先安装 Node.js，或手动指定 npm 路径。") }
             return
         }
         if update.identity != npm.identity {
@@ -133,7 +167,6 @@ final class CLIInstallationManager: ObservableObject {
             checkError = ""
             saveUpdateState()
         }
-        await refreshInstallation(npm)
     }
 
     private func npmCandidates(searchPath: String) -> [String] {
@@ -190,9 +223,9 @@ final class CLIInstallationManager: ObservableObject {
         return NpmEnvironment(npmPath: path, nodePath: actualNode, version: version, prefix: prefix, modules: modules, command: command, environment: environment)
     }
 
-    private func refreshInstallation(_ npm: NpmEnvironment) async {
-        installations = []
-        let root = URL(fileURLWithPath: npm.modules).appendingPathComponent(Self.package)
+    private func addInstallation(_ npm: NpmEnvironment, packageRoot: URL? = nil, source: String = "npm",
+                                 manager: [String]? = nil, note: String = "", options: [String] = []) async {
+        let root = packageRoot ?? URL(fileURLWithPath: npm.modules).appendingPathComponent(Self.package)
         guard let data = try? Data(contentsOf: root.appendingPathComponent("package.json")),
               let package = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               package["name"] as? String == Self.package else { return }
@@ -200,14 +233,93 @@ final class CLIInstallationManager: ObservableObject {
         environment["SMART_SEARCH_PACKAGE_ROOT"] = root.path
         environment["SMART_SEARCH_NODE_PATH"] = npm.nodePath
         var installed = CLIInstallation(id: root.path, executable: npm.nodePath, arguments: [root.appendingPathComponent("npm/bin/smart-search.js").path],
-            version: package["version"] as? String ?? "", source: "npm", manager: npm.command, prefix: npm.prefix, environment: environment)
+            version: package["version"] as? String ?? "", source: source, manager: manager ?? npm.command, prefix: npm.prefix, environment: environment, note: note, managerOptions: options)
         // Never execute a legacy wrapper during detection: it may install Python.
         if package["smartSearchBinary"] as? Bool == true,
            let output = try? await Self.command([installed.executable] + installed.arguments + ["--desktop-capabilities"], environment: environment, timeout: 45),
            let info = try? JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any] {
             installed.compatible = info["product"] as? String == "smart-search" && info["desktop_protocol_version"] as? Int == 1 && info["version"] as? String == installed.version
         }
-        installations = [installed]
+        if !installed.compatible && installed.note.isEmpty {
+            installed.note = L("已找到 Smart Search CLI，但此版本不支持当前 App。请更新 CLI，或选择兼容的独立下载版。")
+        }
+        installations.removeAll { $0.id == root.path }
+        installations.append(installed)
+    }
+
+    private func discoverMise(searchPath: String) async {
+        let directories = searchPath.split(separator: ":").map(String.init)
+        guard let mise = directories.map({ $0 + "/mise" }).first(where: { $0.hasPrefix("/") && FileManager.default.isExecutableFile(atPath: $0) }) else { return }
+        do {
+            let tool = "npm:" + Self.package
+            var environment = ["PATH": searchPath]
+            let output = try await Self.command([mise, "ls", "--global", "--json", tool], environment: environment)
+            let data = try JSONSerialization.jsonObject(with: Data(output.utf8))
+            let rows = (data as? [[String: Any]]) ?? ((data as? [String: Any])?[tool] as? [[String: Any]]) ?? []
+            if rows.isEmpty { return }
+            guard try await Self.command([mise, "which", "--plugin", "smart-search"], environment: environment).trimmingCharacters(in: .whitespacesAndNewlines) == tool else { return }
+            let entry = try await Self.command([mise, "which", "smart-search"], environment: environment).trimmingCharacters(in: .whitespacesAndNewlines)
+            for row in rows {
+                guard entry.hasPrefix("/"), row["active"] as? Bool == true, row["installed"] as? Bool == true,
+                      let install = row["install_path"] as? String, install.hasPrefix("/"),
+                      URL(fileURLWithPath: entry).standardized.path.hasPrefix(URL(fileURLWithPath: install).standardized.path + "/") else { continue }
+                var node = try await Self.command([mise, "which", "node"], environment: environment).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard node.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: node) else { continue }
+                node = try await Self.command([node, "-p", "process.execPath"], environment: environment).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard node.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: node) else { continue }
+                let version = try await Self.command([node, "-p", "process.versions.node"], environment: environment).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard (Int(version.split(separator: ".").first ?? "") ?? 0) >= 18 else { continue }
+                environment["PATH"] = URL(fileURLWithPath: node).deletingLastPathComponent().path + ":" + searchPath
+                let owner = row["source"] as? [String: String] ?? [:]
+                let processEnv = ProcessInfo.processInfo.environment
+                let global = processEnv["MISE_GLOBAL_CONFIG_FILE"] ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".config/mise/config.toml").path
+                let owned = owner["type"] == "mise.toml" && owner["path"].map { URL(fileURLWithPath: $0).standardized.path } == URL(fileURLWithPath: global).standardized.path &&
+                    (processEnv["MISE_CONFIG_FILE"] ?? "").isEmpty && (processEnv["MISE_ENV"] ?? "").isEmpty
+                var options: [String]?
+                if owned {
+                    let config = try await Self.command([mise, "config", "get", "--global", "tools." + tool], environment: environment).trimmingCharacters(in: .whitespacesAndNewlines)
+                    options = Self.miseOptions(config, requested: row["requested_version"] as? String ?? "")
+                }
+                let modules = URL(fileURLWithPath: install).appendingPathComponent("node_modules")
+                let context = NpmEnvironment(npmPath: "", nodePath: node, version: "", prefix: install, modules: modules.path, command: [], environment: environment)
+                await addInstallation(context, packageRoot: modules.appendingPathComponent(Self.package), source: "mise", manager: options == nil ? [] : [mise],
+                    note: options == nil ? L("此 mise 安装有环境覆盖或复杂版本约束，请在原终端更新。") : "", options: options ?? [])
+                if let index = installations.firstIndex(where: { $0.source == "mise" }) { let chosen = installations.remove(at: index); installations.insert(chosen, at: 0) }
+            }
+        } catch { message = L("mise 环境检测未完成，请重新检测或手动选择 CLI。") + "\n" + error.localizedDescription }
+    }
+
+    static func miseOptions(_ config: String, requested: String) -> [String]? {
+        guard validVersion(requested) || requested == "latest" else { return nil }
+        if config == requested || config == "\"" + requested + "\"" { return [] }
+        let lines = config.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        guard lines.contains("version = \"" + requested + "\"") else { return nil }
+        var options: [String] = []
+        for line in lines where !line.hasPrefix("version = ") {
+            guard line.range(of: #"^allow_low_downloads = (true|false|"true"|"false")$"#, options: .regularExpression) != nil else { return nil }
+            options += ["--tool-option", "allow_low_downloads=" + String(line.dropFirst("allow_low_downloads = ".count))]
+        }
+        return options
+    }
+
+    private func discoverManual() async {
+        do {
+            guard manualCliPath.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: manualCliPath) else {
+                throw CLIManagementError.failed(L("请选择独立下载包中的 smart-search 可执行文件。"))
+            }
+            let root = URL(fileURLWithPath: manualCliPath).deletingLastPathComponent()
+            let data = try Data(contentsOf: root.appendingPathComponent("package.json"))
+            guard let manifest = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  manifest["name"] as? String == Self.package, FileManager.default.fileExists(atPath: root.appendingPathComponent("_internal").path) else {
+                throw CLIManagementError.failed(L("请选择完整独立下载包中的 CLI，不要选择全局 shim 或脚本。"))
+            }
+            let output = try await Self.command([manualCliPath, "--desktop-capabilities"], timeout: 45)
+            guard let info = try JSONSerialization.jsonObject(with: Data(output.utf8)) as? [String: Any],
+                  info["product"] as? String == "smart-search", info["desktop_protocol_version"] as? Int == 1, info["version"] as? String == manifest["version"] as? String else {
+                throw CLIManagementError.failed(L("所选 CLI 与当前 App 不兼容。"))
+            }
+            installations.append(CLIInstallation(id: manualCliPath, executable: manualCliPath, version: info["version"] as? String ?? "", source: "manual", compatible: true))
+        } catch { message = error.localizedDescription }
     }
 
     func checkVersion() async {
@@ -242,16 +354,30 @@ final class CLIInstallationManager: ObservableObject {
     }
 
     func installOrRepair(expectedVersion: String) async throws {
-        guard let npm, !busy, !checking else { throw CLIManagementError.failed(L("请先检测或指定 npm。")) }
+        guard !busy, !checking else { return }
+        let previous = selected
+        await discover()
+        if let previous, previous.id != selected?.id || previous.source != selected?.source || previous.version != selected?.version || previous.manager != selected?.manager || previous.managerOptions != selected?.managerOptions {
+            throw CLIManagementError.failed(L("CLI 来源或版本刚刚发生变化，请重新检查后再更新。"))
+        }
+        guard canInstall else { throw CLIManagementError.failed(L("请在原管理器中更新，或选择其他安装。")) }
         guard Self.validVersion(expectedVersion), expectedVersion == latestVersion, checkError.isEmpty else {
             throw CLIManagementError.failed(L("请先成功检查 CLI 更新。"))
         }
         guard latestSupportsBinary else { throw CLIManagementError.failed(L("npm 上尚未发布自带运行时的 CLI，请等待新版发布后再安装。")) }
         busy = true
-        message = L("正在通过 npm 安装 CLI…")
+        message = L("正在通过原管理器安装或更新 CLI…")
         defer { busy = false }
-        _ = try await Self.command(npm.command + ["install", "--global", "--prefix", npm.prefix, "--include=optional", Self.package + "@" + expectedVersion], environment: npm.environment, timeout: 1800)
-        await refreshInstallation(npm)
+        if let selected, selected.source == "mise" {
+            _ = try await Self.command(selected.manager + ["use", "--global", "--pin"] + selected.managerOptions + ["npm:" + Self.package + "@" + expectedVersion], environment: selected.environment, timeout: 1800)
+            selectedID = ""
+        } else {
+            let command = selected?.manager ?? npm!.command
+            let prefix = selected?.prefix ?? npm!.prefix
+            _ = try await Self.command(command + ["install", "--global", "--prefix", prefix, "--include=optional", Self.package + "@" + expectedVersion], environment: selected?.environment ?? npm!.environment, timeout: 1800)
+        }
+        busy = false
+        await discover()
         guard selected?.version == expectedVersion, selected?.compatible == true else {
             throw CLIManagementError.failed(L("CLI 已安装，但运行验证未通过，请更新或修复。"))
         }
@@ -259,11 +385,13 @@ final class CLIInstallationManager: ObservableObject {
     }
 
     func uninstall() async throws {
-        guard let selected, selected.canManage, !busy, !checking else { return }
+        guard let selected, selected.canManage, selected.source == "npm", !busy, !checking else { return }
         busy = true
         defer { busy = false }
         _ = try await Self.command(selected.manager + ["uninstall", "--global", "--prefix", selected.prefix, Self.package], environment: selected.environment, timeout: 600)
         installations = []
+        selectedID = ""
+        preferences.set(selectedID, forKey: "SmartSearchDesktop.selectedCLI")
         message = L("CLI 已卸载，配置和 Skills 已保留。")
     }
 

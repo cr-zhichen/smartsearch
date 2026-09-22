@@ -237,7 +237,12 @@ private struct BackendUnavailableView: View {
     var body: some View {
         VStack(spacing: 16) {
             if model.connection == .connecting { ProgressView().controlSize(.large) }
-            CLIManagementView(model: model)
+            DesktopPanel {
+                Text(L("先准备本地环境")).font(.headline)
+                Text(model.environmentStatus)
+                Text(model.environmentExplanation).font(.callout).foregroundStyle(.secondary)
+                Button(L("准备环境")) { model.selectedDestination = .overview }.buttonStyle(.borderedProminent)
+            }
         }
         .padding(DesktopMetrics.pagePadding)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -304,7 +309,12 @@ private struct OverviewView: View {
                     }
                 }
                 DesktopPanel {
-                    DesktopStepHeader(title: L("3. 接入 Skills"), subtitle: L("添加 Skills，让 Agent 使用搜索。")) {
+                    DesktopStepHeader(title: L("3. 测试连接"), subtitle: L("在服务商页面点击“测试”，确认地址和密钥可用后开始搜索。")) {
+                        Button(L("去测试服务商")) { configureProviders(nil) }.disabled(model.state == nil)
+                    }
+                }
+                DesktopPanel {
+                    DesktopStepHeader(title: L("4. 接入 Skills（可选）"), subtitle: L("添加 Skills，让 Agent 使用搜索。")) {
                         Button(L("管理 Skills")) { model.selectedDestination = .integration }
                             .disabled(model.state == nil)
                     }
@@ -1044,8 +1054,9 @@ private struct ConfigFieldEditor: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(field.label).fontWeight(.medium)
                 Spacer()
-                Button { showingInfo = true } label: { Image(systemName: "info.circle") }
-                    .buttonStyle(.borderless).help(L("字段说明"))
+                Button { showingInfo = true } label: { Image(systemName: "questionmark.circle") }
+                    .buttonStyle(.borderless).help(field.help)
+                    .accessibilityLabel(L("字段说明：{0}", field.label)).accessibilityHint(field.help)
                     .popover(isPresented: $showingInfo) { fieldDetails.padding(20).frame(width: 360) }
             }
             Text(model.draftStatus(for: field)).font(.caption).foregroundStyle(.secondary)
@@ -1099,11 +1110,13 @@ private struct ConfigFieldEditor: View {
             if !field.help.isEmpty { Text(field.help).font(.callout) }
             Text(field.key).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
             KeyValueLine(label: L("来源"), value: state.statusLabels[state.source(for: field)] ?? L("未知来源"))
-            Text(L("有效值：{0}", state.effectiveValue(for: field).isEmpty ? L("未设置") : state.effectiveValue(for: field)))
-                .font(.caption).textSelection(.enabled)
-            if state.savedValue(for: field) != state.effectiveValue(for: field) {
-                Text(L("配置文件：{0}", state.savedValue(for: field).isEmpty ? L("未设置") : state.savedValue(for: field)))
+            if !field.isSecret {
+                Text(L("有效值：{0}", state.effectiveValue(for: field).isEmpty ? L("未设置") : state.effectiveValue(for: field)))
                     .font(.caption).textSelection(.enabled)
+                if state.savedValue(for: field) != state.effectiveValue(for: field) {
+                    Text(L("配置文件：{0}", state.savedValue(for: field).isEmpty ? L("未设置") : state.savedValue(for: field)))
+                        .font(.caption).textSelection(.enabled)
+                }
             }
             if let docs = field.docsURL, let url = URL(string: docs) { Link(L("文档"), destination: url) }
         }
@@ -1595,17 +1608,6 @@ private struct IntegrationView: View {
                         Text(compatibility).font(.callout).foregroundStyle(.secondary)
                     }
                 }
-                DesktopPanel(compact: true) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(L("运行环境")).font(.headline)
-                            Text(L("所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。"))
-                                .font(.callout).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Button(L("管理 CLI…")) { model.selectedDestination = .settings }
-                    }
-                }
                 VStack(alignment: .leading, spacing: 8) {
                     Text(L("选择 Agent")).font(.headline)
                     Text(L("状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。"))
@@ -1742,11 +1744,8 @@ private struct SettingsAboutView: View {
                 settingsSection(L("App 更新"), subtitle: L("独立更新 App，不改变 CLI 安装。")) {
                     AppUpdatesView(model: model)
                 }
-                settingsSection(L("独立 CLI"), subtitle: L("管理独立安装的命令行工具。")) {
-                    CLIManagementView(model: model)
-                }
                 settingsSection(L("高级"), subtitle: L("配置连接参数和诊断选项。")) {
-                    advancedSettings
+                    DisclosureGroup(L("诊断与维护")) { advancedSettings }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1830,6 +1829,8 @@ private struct SettingsAboutView: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("当前配置目录")).fontWeight(.medium)
+                    Text(L("保存服务商配置和本地记录的文件夹；移动 App 不会改变此目录。"))
+                        .font(.callout).foregroundStyle(.secondary)
                     Text(model.state?.configDirectory ?? L("后端尚未提供"))
                         .font(.system(.callout, design: .monospaced))
                         .foregroundStyle(.secondary).textSelection(.enabled)
@@ -1838,10 +1839,9 @@ private struct SettingsAboutView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 HStack(spacing: 8) {
                     Button(model.isBusy.contains("profile") ? L("切换中…") : L("选择配置目录…"), action: model.chooseConfigDirectory)
-                    Button(L("恢复默认配置目录")) {
-                        Task { await model.restoreDefaultConfigDirectory() }
+                    if model.state?.defaultConfigDirectory != nil && model.state?.isDefaultConfigDirectory == false {
+                        Button(L("恢复默认配置目录")) { Task { await model.restoreDefaultConfigDirectory() } }
                     }
-                    .disabled(model.state?.defaultConfigDirectory == nil || model.state?.isDefaultConfigDirectory == true)
                 }
                 .fixedSize()
                 .frame(minWidth: 168, alignment: .trailing)

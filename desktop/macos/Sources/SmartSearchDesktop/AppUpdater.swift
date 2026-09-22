@@ -4,11 +4,11 @@ import Foundation
 import Sparkle
 
 @MainActor
-final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
+final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate {
     enum Phase { case idle, checking, available, upToDate, skipped, downloading, ready, failed }
 
     @Published private(set) var started = false
-    @Published private(set) var automaticallyChecks = UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") as? Bool ?? true
+    @Published private(set) var automaticallyChecks = UserDefaults.standard.object(forKey: "SmartSearchDesktop.appAutoCheck") as? Bool ?? UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") as? Bool ?? true
     @Published private(set) var phase: Phase = .idle
     @Published private(set) var latestVersion = ""
     @Published private(set) var waitingToRestart = false
@@ -23,9 +23,7 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
     private var resumeInstallation: (() -> Void)?
     private var preparing = false
     private var prepared = false
-    private var deferredPrompt = false
-    private var shownVersions: Set<String> = []
-    private lazy var driver = SPUStandardUserDriver(hostBundle: .main, delegate: self)
+    private lazy var driver = SPUStandardUserDriver(hostBundle: .main, delegate: nil)
     private lazy var updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
 
     var currentVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" }
@@ -55,9 +53,10 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
             unavailableReason = "此副本尚未配置自动更新，请安装正式版。"
             return
         }
-        updater.automaticallyChecksForUpdates = automaticallyChecks
+        // App owns the launch-only preference; Sparkle still owns verified installation.
+        UserDefaults.standard.set(automaticallyChecks, forKey: "SmartSearchDesktop.appAutoCheck")
+        updater.automaticallyChecksForUpdates = false
         updater.automaticallyDownloadsUpdates = false
-        updater.updateCheckInterval = 86400
         do { try updater.start(); started = true }
         catch { unavailableReason = "App 更新配置无效，请安装正式版后重试。"; return }
         observations = [
@@ -67,25 +66,22 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
             updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] _, _ in
                 Task { @MainActor in self?.refreshAvailability() }
             },
-            updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] _, _ in
-                Task { @MainActor in self?.refreshAvailability() }
-            },
         ]
-        // Check on every launch; Sparkle owns subsequent scheduling and skipped versions.
-        if automaticallyChecks { updater.checkForUpdatesInBackground() }
+        // A silent probe updates this App’s button without a scheduled prompt.
+        if automaticallyChecks { updater.checkForUpdateInformation() }
         refreshAvailability()
     }
 
     func setAutomaticallyChecks(_ value: Bool) {
         guard started else { return }
-        updater.automaticallyChecksForUpdates = value
         automaticallyChecks = value
+        UserDefaults.standard.set(value, forKey: "SmartSearchDesktop.appAutoCheck")
+        if value && canCheck { updater.checkForUpdateInformation() }
     }
 
     private func refreshAvailability() {
         sessionInProgress = updater.sessionInProgress
         canShowUpdate = updater.canCheckForUpdates
-        automaticallyChecks = updater.automaticallyChecksForUpdates
     }
 
     func check() {
@@ -105,13 +101,6 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
 
     func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
         phase = .checking
-    }
-
-    func resumePromptIfPossible() {
-        guard deferredPrompt, started, updater.automaticallyChecksForUpdates, canInstall() else { return }
-        deferredPrompt = false
-        shownVersions.insert(latestVersion)
-        updater.checkForUpdates() // Brings the already-fetched scheduled update into focus.
     }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
@@ -138,24 +127,6 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
         phase = .ready
     }
 
-    func updater(_ updater: SPUUpdater, shouldProceedWithUpdate item: SUAppcastItem, updateCheck: SPUUpdateCheck) throws {
-        if updateCheck == .updatesInBackground && shownVersions.contains(item.displayVersionString) {
-            // SUNoUpdateError: a dismissed version is silent until a manual check or next launch.
-            throw NSError(domain: SUSparkleErrorDomain, code: 1001, userInfo: [NSLocalizedDescriptionKey: L("稍后可在设置中更新。")])
-        }
-    }
-
-    var supportsGentleScheduledUpdateReminders: Bool { true }
-
-    func standardUserDriverShouldHandleShowingScheduledUpdate(_ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool) -> Bool {
-        canInstall()
-    }
-
-    func standardUserDriverWillHandleShowingUpdate(_ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState) {
-        deferredPrompt = !handleShowingUpdate
-        if handleShowingUpdate { shownVersions.insert(update.displayVersionString) }
-    }
-
     func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem, untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
         resumeInstallation = installHandler
         waitingToRestart = true
@@ -177,7 +148,6 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
     }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
-        deferredPrompt = false
         if let error = error as NSError?, !(error.domain == SUSparkleErrorDomain && error.code == 1001) {
             phase = .failed
             resumeInstallation = nil

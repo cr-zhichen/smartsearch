@@ -12,7 +12,7 @@ enum BackendClientError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case let .backendNotFound(path):
-            return L("找不到所选 CLI：{0}。请在设置中安装或修复 CLI。", path)
+            return L("找不到所选 CLI：{0}。请打开概览的本地环境，重新检测或选择已有 CLI。", path)
         case .notConnected:
             return L("后端尚未连接。")
         case .incompatibleProtocol:

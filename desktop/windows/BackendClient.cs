@@ -45,7 +45,7 @@ internal sealed class BackendClient : IAsyncDisposable
         await StopAsync(sendShutdown: false);
         BackendPath = ResolveBackendPath();
         if (!File.Exists(BackendPath))
-            throw new BackendDisconnectedException(L("找不到所选 CLI：{0}。请在设置中安装或修复 CLI。", BackendPath));
+            throw new BackendDisconnectedException(L("找不到所选 CLI：{0}。请打开概览的本地环境，重新检测或选择已有 CLI。", BackendPath));
 
         var startInfo = new ProcessStartInfo
         {

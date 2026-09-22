@@ -6,10 +6,11 @@ using static SmartSearch.Desktop.Localization;
 namespace SmartSearch.Desktop;
 
 internal sealed record CLIInstallation(string Id, string Executable, string[] Arguments, string Version, string Source,
-    bool Compatible, string[] Manager, string Prefix, Dictionary<string, string> Environment)
+    bool Compatible, string[] Manager, string Prefix, Dictionary<string, string> Environment,
+    string Note = "", string[]? ManagerOptions = null)
 {
-    internal bool CanManage => Source == "npm" && Manager.Length > 0;
-    public string Title => $"npm · {Version} · {Id}";
+    internal bool CanManage => Source is "npm" or "mise" && Manager.Length > 0;
+    public string Title => $"{Source} · {Version} · {Id}";
 }
 
 internal sealed record NpmEnvironment(string NpmPath, string NodePath, string Version, string Prefix, string Modules,
@@ -28,7 +29,8 @@ internal sealed class CLIInstallationManager
     private readonly Func<DateTimeOffset> _clock;
     private bool _checkedAtLaunch;
     private sealed record UpdateRecord(string Identity = "", string LatestVersion = "", bool SupportsBinary = false,
-        DateTimeOffset? CheckedAt = null, DateTimeOffset? AttemptedAt = null, bool AutomaticallyChecks = true, string ManualNpmPath = "");
+        DateTimeOffset? CheckedAt = null, DateTimeOffset? AttemptedAt = null, bool AutomaticallyChecks = true, string ManualNpmPath = "",
+        string SelectedId = "", string ManualCliPath = "");
     private UpdateRecord _update = new();
 
     internal CLIInstallationManager(string? toolsDirectory = null, string? searchPath = null,
@@ -46,9 +48,12 @@ internal sealed class CLIInstallationManager
     }
 
     internal List<CLIInstallation> Installations { get; private set; } = [];
-    internal CLIInstallation? Selected => Installations.FirstOrDefault();
+    internal CLIInstallation? Selected => _update.SelectedId.Length > 0
+        ? Installations.FirstOrDefault(item => item.Id.Equals(_update.SelectedId, StringComparison.OrdinalIgnoreCase)) : Installations.FirstOrDefault();
     internal NpmEnvironment? Npm { get; private set; }
     internal string ManualNpmPath => _update.ManualNpmPath;
+    internal string ManualCliPath => _update.ManualCliPath;
+    internal bool CanInstall => Selected is { } selected ? selected.CanManage : Npm is not null && _update.SelectedId.Length == 0;
     internal string LatestVersion => _update.LatestVersion;
     internal bool LatestSupportsBinary => _update.SupportsBinary;
     internal DateTimeOffset? CheckedAt => _update.CheckedAt;
@@ -62,7 +67,21 @@ internal sealed class CLIInstallationManager
 
     internal void SetNpmPath(string path)
     {
-        _update = _update with { ManualNpmPath = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"')) };
+        _update = _update with { ManualNpmPath = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"')), SelectedId = "", ManualCliPath = "" };
+        SaveUpdateState();
+    }
+
+    internal void SelectInstallation(string id)
+    {
+        if (!Installations.Any(item => item.Id == id)) throw new InvalidOperationException(L("所选安装已不可用，请重新检测。"));
+        _update = _update with { SelectedId = id };
+        SaveUpdateState();
+    }
+
+    internal void SetCliPath(string path)
+    {
+        path = Environment.ExpandEnvironmentVariables(path.Trim().Trim('"'));
+        _update = _update with { ManualCliPath = path, SelectedId = path };
         SaveUpdateState();
     }
 
@@ -79,25 +98,40 @@ internal sealed class CLIInstallationManager
                 Environment.GetEnvironmentVariable("PATH"), Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.User),
                 Environment.GetEnvironmentVariable("PATH", EnvironmentVariableTarget.Machine));
             var paths = ManualNpmPath.Length > 0 ? [ManualNpmPath] : NpmCandidates(searchPath);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var npmEnvironments = new List<NpmEnvironment>();
             foreach (var path in paths)
             {
-                try { Npm = await ResolveNpmAsync(path, searchPath); break; }
+                try
+                {
+                    var npm = await ResolveNpmAsync(path, searchPath);
+                    Npm ??= npm;
+                    if (seen.Add(npm.Identity)) { npmEnvironments.Add(npm); await AddInstallationAsync(npm); }
+                }
                 catch (Exception error) when (error is IOException or InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception)
                 { if (ManualNpmPath.Length > 0) Message = error.Message; }
             }
-            if (Npm is not { } npm)
+            if (ManualNpmPath.Length == 0) await DiscoverMiseAsync(searchPath);
+            if (ManualCliPath.Length > 0) await DiscoverManualAsync();
+            if (_update.SelectedId.Length > 0 && Selected is null)
+                Message = L("所选安装已不可用，请重新检测或选择其他安装。");
+            if (_update.SelectedId.Length == 0 && Selected is { } first) SelectInstallation(first.Id);
+            if (Selected is { } chosen)
+                Npm = npmEnvironments.FirstOrDefault(item => chosen.Source == "npm"
+                    ? item.Prefix == chosen.Prefix && item.Command.SequenceEqual(chosen.Manager)
+                    : item.NodePath == chosen.Executable) ?? Npm;
+            if (Npm is not { } selectedNpm)
             {
-                if (Message.Length == 0) Message = L("未找到可用的 npm。请先安装 Node.js，或手动指定 npm 路径。");
+                if (Message.Length == 0 && Selected is null) Message = L("未找到可用的 npm。请先安装 Node.js，或手动指定 npm 路径。");
                 return;
             }
-            if (_update.Identity != npm.Identity)
+            if (_update.Identity != selectedNpm.Identity)
             {
-                _update = new(Identity: npm.Identity, AutomaticallyChecks: AutomaticallyChecks, ManualNpmPath: ManualNpmPath);
+                _update = _update with { Identity = selectedNpm.Identity, LatestVersion = "", SupportsBinary = false, CheckedAt = null, AttemptedAt = null };
                 _checkedAtLaunch = false;
                 CheckError = "";
                 SaveUpdateState();
             }
-            await RefreshInstallationAsync(npm);
         }
         finally { Busy = false; }
     }
@@ -145,7 +179,8 @@ internal sealed class CLIInstallationManager
         var nodeVersion = (await CommandAsync([actualNode, "-p", "process.versions.node"], environment)).Trim();
         if (!Version.TryParse(nodeVersion, out var parsed) || parsed.Major < 18) throw new InvalidOperationException(L("请使用 Node.js 18 或更新版本。"));
         string[] command;
-        if (Path.GetExtension(path).Equals(".exe", StringComparison.OrdinalIgnoreCase)) command = [path];
+        var bundledNpm = Path.Combine(Path.GetDirectoryName(actualNode)!, "node_modules", "npm", "bin", "npm-cli.js");
+        if (File.Exists(bundledNpm) && !File.GetAttributes(bundledNpm).HasFlag(FileAttributes.ReparsePoint)) command = [actualNode, bundledNpm];
         else
         {
             // Do not run npm.cmd through cmd.exe. Fixed Node + trusted npm-cli.js
@@ -163,10 +198,10 @@ internal sealed class CLIInstallationManager
         return new(path, actualNode, version, prefix, modules, command, environment);
     }
 
-    private async Task RefreshInstallationAsync(NpmEnvironment npm)
+    private async Task AddInstallationAsync(NpmEnvironment npm, string? packageRoot = null, string source = "npm",
+        string[]? manager = null, string note = "", string[]? options = null)
     {
-        Installations = [];
-        var root = Path.Combine(npm.Modules, "@konbakuyomu", "smart-search");
+        var root = packageRoot ?? Path.Combine(npm.Modules, "@konbakuyomu", "smart-search");
         var manifest = Path.Combine(root, "package.json");
         if (!File.Exists(manifest)) return;
         try
@@ -176,7 +211,7 @@ internal sealed class CLIInstallationManager
             if (String(metadata, "name") != Package) return;
             var environment = new Dictionary<string, string>(npm.Environment, StringComparer.OrdinalIgnoreCase)
                 { ["SMART_SEARCH_PACKAGE_ROOT"] = root, ["SMART_SEARCH_NODE_PATH"] = npm.NodePath };
-            var installation = new CLIInstallation(root, npm.NodePath, [Path.Combine(root, "npm", "bin", "smart-search.js")], String(metadata, "version"), "npm", false, npm.Command, npm.Prefix, environment);
+            var installation = new CLIInstallation(root, npm.NodePath, [Path.Combine(root, "npm", "bin", "smart-search.js")], String(metadata, "version"), source, false, manager ?? npm.Command, npm.Prefix, environment, note, options);
             // Legacy wrappers can bootstrap Python as a side effect. Never probe them.
             if (metadata.TryGetProperty("smartSearchBinary", out var binary) && binary.ValueKind == JsonValueKind.True)
             {
@@ -189,9 +224,96 @@ internal sealed class CLIInstallationManager
                 }
                 catch (Exception error) when (error is IOException or JsonException or InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception) { }
             }
-            Installations = [installation];
+            if (!installation.Compatible && installation.Note.Length == 0)
+                installation = installation with { Note = L("已找到 Smart Search CLI，但此版本不支持当前 App。请更新 CLI，或选择兼容的独立下载版。") };
+            Installations.RemoveAll(item => item.Id.Equals(root, StringComparison.OrdinalIgnoreCase));
+            Installations.Add(installation);
         }
         catch (Exception error) when (error is IOException or JsonException or UnauthorizedAccessException) { Message = L("CLI 安装信息损坏，请更新或修复。"); }
+    }
+
+    private async Task DiscoverMiseAsync(string searchPath)
+    {
+        var mise = searchPath.Split(Path.PathSeparator).Where(Path.IsPathFullyQualified)
+            .Select(directory => Path.Combine(directory, "mise.exe")).FirstOrDefault(File.Exists);
+        if (mise is null) return;
+        try
+        {
+            const string tool = "npm:" + Package;
+            var env = new Dictionary<string, string> { ["PATH"] = searchPath };
+            using var installed = JsonDocument.Parse(await CommandAsync([mise, "ls", "--global", "--json", tool], env));
+            var rows = installed.RootElement.ValueKind == JsonValueKind.Array ? installed.RootElement : installed.RootElement.GetProperty(tool);
+            if (rows.GetArrayLength() == 0) return;
+            if ((await CommandAsync([mise, "which", "--plugin", "smart-search"], env)).Trim() != tool) return;
+            var entry = (await CommandAsync([mise, "which", "smart-search"], env)).Trim();
+            foreach (var row in rows.EnumerateArray())
+            {
+                if (!row.TryGetProperty("active", out var active) || active.ValueKind != JsonValueKind.True ||
+                    !row.TryGetProperty("installed", out var present) || present.ValueKind != JsonValueKind.True) continue;
+                var install = String(row, "install_path");
+                if (!Path.IsPathFullyQualified(install) || !Path.IsPathFullyQualified(entry) ||
+                    !Path.GetFullPath(entry).StartsWith(Path.GetFullPath(install) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) continue;
+                var node = (await CommandAsync([mise, "which", "node"], env)).Trim();
+                if (!Path.IsPathFullyQualified(node) || !File.Exists(node)) continue;
+                node = (await CommandAsync([node, "-p", "process.execPath"], env)).Trim();
+                if (!Path.IsPathFullyQualified(node) || !File.Exists(node)) continue;
+                var version = (await CommandAsync([node, "-p", "process.versions.node"], env)).Trim();
+                if (!Version.TryParse(version, out var nodeVersion) || nodeVersion.Major < 18) continue;
+                env["PATH"] = Path.GetDirectoryName(node) + Path.PathSeparator + searchPath;
+                var owner = row.GetProperty("source");
+                var global = Environment.GetEnvironmentVariable("MISE_GLOBAL_CONFIG_FILE") ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".config", "mise", "config.toml");
+                var owned = String(owner, "type") == "mise.toml" && Path.IsPathFullyQualified(String(owner, "path")) &&
+                    Path.GetFullPath(String(owner, "path")).Equals(Path.GetFullPath(global), StringComparison.OrdinalIgnoreCase) &&
+                    string.IsNullOrEmpty(Environment.GetEnvironmentVariable("MISE_CONFIG_FILE")) && string.IsNullOrEmpty(Environment.GetEnvironmentVariable("MISE_ENV"));
+                var options = owned ? MiseOptions((await CommandAsync([mise, "config", "get", "--global", "tools." + tool], env)).Trim(), String(row, "requested_version")) : null;
+                var modules = Path.Combine(install, "node_modules");
+                var context = new NpmEnvironment("", node, "", install, modules, [], env);
+                await AddInstallationAsync(context, Path.Combine(modules, "@konbakuyomu", "smart-search"), "mise", options is null ? [] : [mise],
+                    options is null ? L("此 mise 安装有环境覆盖或复杂版本约束，请在原终端更新。") : "", options);
+                // Prefer the active global mise tool over unrelated Node npm prefixes on first discovery.
+                var match = Installations.FindIndex(item => item.Source == "mise");
+                if (match >= 0) { var item = Installations[match]; Installations.RemoveAt(match); Installations.Insert(0, item); }
+            }
+        }
+        catch (Exception error) when (error is IOException or JsonException or InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception or KeyNotFoundException or ArgumentException)
+        { Message = L("mise 环境检测未完成，请重新检测或手动选择 CLI。") + "\n" + error.Message; }
+    }
+
+    internal static string[]? MiseOptions(string config, string requested)
+    {
+        if (!ValidVersion(requested) && requested != "latest") return null;
+        if (config == requested || config == "\"" + requested + "\"") return [];
+        var lines = config.Split('\n', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (!lines.Contains("version = \"" + requested + "\"")) return null;
+        var options = new List<string>();
+        foreach (var line in lines.Where(line => !line.StartsWith("version = ")))
+        {
+            var match = Regex.Match(line, "^allow_low_downloads = (true|false|\"true\"|\"false\")$");
+            if (!match.Success) return null;
+            options.AddRange(["--tool-option", "allow_low_downloads=" + match.Groups[1].Value]);
+        }
+        return options.ToArray();
+    }
+
+    private async Task DiscoverManualAsync()
+    {
+        try
+        {
+            if (!Path.IsPathFullyQualified(ManualCliPath) || !File.Exists(ManualCliPath) || !Path.GetExtension(ManualCliPath).Equals(".exe", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException(L("请选择独立下载包中的 smart-search.exe。"));
+            var root = Path.GetDirectoryName(ManualCliPath)!;
+            using var manifest = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(root, "package.json")));
+            if (String(manifest.RootElement, "name") != Package || !Directory.Exists(Path.Combine(root, "_internal")))
+                throw new InvalidOperationException(L("请选择完整独立下载包中的 CLI，不要选择全局 shim 或脚本。"));
+            using var result = JsonDocument.Parse(await CommandAsync([ManualCliPath, "--desktop-capabilities"], timeoutSeconds: 45));
+            var info = result.RootElement;
+            if (String(info, "product") != "smart-search" || String(info, "version") != String(manifest.RootElement, "version") ||
+                !info.TryGetProperty("desktop_protocol_version", out var protocol) || !protocol.TryGetInt32(out var number) || number != 1)
+                throw new InvalidOperationException(L("所选 CLI 与当前 App 不兼容。"));
+            Installations.Add(new(ManualCliPath, ManualCliPath, [], String(info, "version"), "manual", true, [], "", []));
+        }
+        catch (Exception error) when (error is IOException or JsonException or InvalidOperationException or TimeoutException or System.ComponentModel.Win32Exception)
+        { Message = error.Message; }
     }
 
     internal void SetAutomaticChecks(bool enabled)
@@ -248,15 +370,34 @@ internal sealed class CLIInstallationManager
 
     internal async Task InstallOrRepairAsync(string expectedVersion)
     {
-        if (Npm is not { } npm || Busy || Checking) throw new InvalidOperationException(L("请先检测或指定 npm。"));
+        if (Busy || Checking) return;
+        var previous = Selected;
+        await DiscoverAsync();
+        if (previous is not null && (Selected is not { } current || previous.Id != current.Id || previous.Source != current.Source ||
+            previous.Version != current.Version || !previous.Manager.SequenceEqual(current.Manager) ||
+            !(previous.ManagerOptions ?? []).SequenceEqual(current.ManagerOptions ?? [])))
+            throw new InvalidOperationException(L("CLI 来源或版本刚刚发生变化，请重新检查后再更新。"));
+        if (!CanInstall) throw new InvalidOperationException(L("请在原管理器中更新，或选择其他安装。"));
         if (!ValidVersion(expectedVersion) || expectedVersion != LatestVersion || CheckError.Length > 0) throw new InvalidOperationException(L("请先成功检查 CLI 更新。"));
         if (!LatestSupportsBinary) throw new InvalidOperationException(L("npm 上尚未发布自带运行时的 CLI，请等待新版发布后再安装。"));
         Busy = true;
-        Message = L("正在通过 npm 安装 CLI…");
+        Message = L("正在通过原管理器安装或更新 CLI…");
         try
         {
-            await CommandAsync([.. npm.Command, "install", "--global", "--prefix", npm.Prefix, "--include=optional", Package + "@" + expectedVersion], npm.Environment, 1800);
-            await RefreshInstallationAsync(npm);
+            var selected = Selected;
+            if (selected?.Source == "mise")
+            {
+                await CommandAsync([.. selected.Manager, "use", "--global", "--pin", .. selected.ManagerOptions ?? [], "npm:" + Package + "@" + expectedVersion], selected.Environment, 1800);
+                _update = _update with { SelectedId = "" };
+            }
+            else
+            {
+                var command = selected?.Manager ?? Npm!.Command;
+                var prefix = selected?.Prefix ?? Npm!.Prefix;
+                await CommandAsync([.. command, "install", "--global", "--prefix", prefix, "--include=optional", Package + "@" + expectedVersion], selected?.Environment ?? Npm!.Environment, 1800);
+            }
+            Busy = false;
+            await DiscoverAsync();
             if (Selected?.Version != expectedVersion || Selected?.Compatible != true) throw new InvalidOperationException(L("CLI 已安装，但运行验证未通过，请更新或修复。"));
             Message = L("CLI 安装完成，正在重新连接。");
         }
@@ -265,12 +406,14 @@ internal sealed class CLIInstallationManager
 
     internal async Task UninstallAsync()
     {
-        if (Busy || Checking || Selected is not { CanManage: true } selected) return;
+        if (Busy || Checking || Selected is not { CanManage: true, Source: "npm" } selected) return;
         Busy = true;
         try
         {
             await CommandAsync([.. selected.Manager, "uninstall", "--global", "--prefix", selected.Prefix, Package], selected.Environment, 600);
             Installations = [];
+            _update = _update with { SelectedId = "" };
+            SaveUpdateState();
             Message = L("CLI 已卸载，配置和 Skills 已保留。");
         }
         finally { Busy = false; }

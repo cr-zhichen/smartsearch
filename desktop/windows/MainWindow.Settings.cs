@@ -45,11 +45,13 @@ public sealed partial class MainWindow
         preferences.Children.Add(Divider());
         var directoryActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         directoryActions.Children.Add(ActionButton(L("选择配置目录…"), SelectConfigDirectoryAsync, operationKey: "profile", busyText: L("切换中…")));
-        directoryActions.Children.Add(ActionButton(L("恢复默认配置目录"), RestoreDefaultConfigDirectoryAsync,
+        if (Text(_state, "default_config_dir").Length > 0 && !Bool(_state, "is_default_config_dir"))
+            directoryActions.Children.Add(ActionButton(L("恢复默认配置目录"), RestoreDefaultConfigDirectoryAsync,
             operationKey: "profile", busyText: L("切换中…"),
             enabled: () => Text(_state, "default_config_dir").Length > 0 && !Bool(_state, "is_default_config_dir")));
         preferences.Children.Add(SettingRow(L("当前配置目录"), Text(_state, "config_dir", Text(_state, "config_path", L("未连接"))),
             directoryActions));
+        preferences.Children.Add(Secondary(L("保存服务商配置和本地记录的文件夹；移动 App 不会改变此目录。")));
         panel.Children.Add(SettingsSection(L("通用"), L("管理语言、外观和配置目录。"), Card(preferences)));
 
         _autoUpdateSwitch = CompactSwitch(L("自动检查更新"), AppAutoCheck);
@@ -61,57 +63,33 @@ public sealed partial class MainWindow
             if (AppAutoCheck) await CheckAppAutomaticallyAsync(onLaunch: true);
         };
         _appUpdateSummary = SectionHeading(string.Empty);
-        _appVersionValue = Body(_appUpdater.CurrentVersion);
-        _appLatestVersionValue = Body(string.Empty);
-        _appCheckedAtValue = Body(string.Empty);
         _appUpdateDetail = Secondary(string.Empty);
         _downloadProgress = new ProgressBar { Minimum = 0, Maximum = 100, Visibility = Visibility.Collapsed };
         var updates = new StackPanel { Spacing = 12 };
         updates.Children.Add(_appUpdateSummary);
-        updates.Children.Add(UpdateVersionRow(L("当前版本"), _appVersionValue));
-        updates.Children.Add(UpdateVersionRow(L("可安装版本"), _appLatestVersionValue));
-        updates.Children.Add(UpdateVersionRow(L("上次检查"), _appCheckedAtValue));
-        updates.Children.Add(Divider());
-        updates.Children.Add(SettingRow(L("自动检查更新"), L("启动时检查新版本，之后每 24 小时检查。确认后才下载。"), _autoUpdateSwitch));
+        updates.Children.Add(SettingRow(L("自动检查更新"), L("每次打开 App 时检查，确认后才下载。"), _autoUpdateSwitch));
         updates.Children.Add(_downloadProgress);
-        _appUpdateRecheck = ActionButton(L("重新检查"), CheckNativeAppAsync, operationKey: "updates-check", busyText: L("检查中…"));
         _appUpdateCancel = ActionButton(L("取消下载"), () => { _appDownloadCancellation?.Cancel(); return Task.CompletedTask; }, operationKey: "updates-cancel");
-        _appUpdateSkip = ActionButton(L("跳过此版本"), SkipAppUpdateAsync, operationKey: "updates-skip");
-        _appUpdateMigration = ActionRow(ActionButton(L("旧版迁移说明"), ShowMigrationAsync),
-            new HyperlinkButton { Content = L("下载正式版"), NavigateUri = new Uri("https://github.com/konbakuyomu/smartsearch/releases/latest") });
         updates.Children.Add(ActionRow(
-            ActionButton(L("检查更新"), () => AppUpdateOffered ? InstallUpdateAsync() : CheckNativeAppAsync(), primary: true,
-                dynamicKey: () => AppUpdateOffered ? "updates-install" : "updates-check",
-                label: AppUpdateActionTitle, busyText: L("处理中…")),
-            _appUpdateRecheck, _appUpdateSkip, _appUpdateCancel,
-            new HyperlinkButton { Content = L("查看版本说明"), NavigateUri = new Uri("https://github.com/konbakuyomu/smartsearch/releases") }));
-        updates.Children.Add(_appUpdateMigration);
+            ActionButton(L("检查更新"), async () =>
+            {
+                if (!_appUpdater.Installed) await Launcher.LaunchUriAsync(new Uri("https://github.com/konbakuyomu/smartsearch/releases/latest"));
+                else if (AppUpdateOffered) await InstallUpdateAsync();
+                else await CheckNativeAppAsync();
+            }, primary: true,
+                dynamicKey: () => !_appUpdater.Installed ? "updates-download-installer" : AppUpdateOffered ? "updates-install" : "updates-check",
+                label: AppUpdateActionTitle, busyText: L("处理中…")), _appUpdateCancel));
         updates.Children.Add(_appUpdateDetail);
         panel.Children.Add(SettingsSection(L("App 更新"), L("独立更新 App，不改变 CLI 安装。"), Card(updates)));
 
-        panel.Children.Add(SettingsSection(L("独立 CLI"), L("管理独立安装的命令行工具。"), BuildNativeCliPanel()));
-
         var diagnostics = new StackPanel { Spacing = 8 };
-        diagnostics.Children.Add(SectionHeading(L("引擎与诊断")));
-        diagnostics.Children.Add(ActionRow(DetailsButton(L("查看诊断信息"), () => ShowDetailsAsync(L("本地引擎"), Section(L("本地引擎"),
+        diagnostics.Children.Add(ActionRow(DetailsButton(L("查看诊断信息"), () => ShowDetailsAsync(L("Smart Search CLI"), Section(L("Smart Search CLI"),
             [KeyValue(L("协议"), Text(_state, "protocol_version", "1")), KeyValue(L("路径"), _backend.BackendPath ?? L("未启动"))]))),
             ActionButton(L("重置服务商健康记录"), ResetProvidersAsync, busyText: L("重置中…"))));
-        panel.Children.Add(SettingsSection(L("高级"), string.Empty, Card(diagnostics)));
+        panel.Children.Add(SettingsSection(L("高级"), string.Empty, Card(Disclosure("diagnostics", L("诊断与维护"), diagnostics))));
         RenderUpdateState();
         RefreshActionButtons();
         return Scroll(panel);
-    }
-
-    private static Grid UpdateVersionRow(string label, TextBlock value)
-    {
-        var row = new Grid { ColumnSpacing = 30 };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(130) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.Children.Add(Secondary(label));
-        value.IsTextSelectionEnabled = true;
-        Grid.SetColumn(value, 1);
-        row.Children.Add(value);
-        return row;
     }
 
     private ComboBox BuildLanguagePicker()

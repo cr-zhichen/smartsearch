@@ -177,7 +177,6 @@ final class AppModel: ObservableObject {
             let snapshot = try await backend.initialize(enableUpdateChecks: false, language: Localization.language, independentCLI: backendPathOverride.isEmpty)
             applyState(snapshot)
             connection = .ready
-            appUpdater.resumePromptIfPossible()
             connectionLog.info("Backend initialized in \(Int(Date().timeIntervalSince(started) * 1000), privacy: .public) ms")
             await refreshActivity()
             await refreshCLIStatus()
@@ -186,6 +185,39 @@ final class AppModel: ObservableObject {
             connectionLog.error("Backend initialization failed")
             present(error)
         }
+    }
+
+    var environmentStatus: String {
+        if cliManager.busy || connection == .connecting { return L("正在检测本地环境…") }
+        guard let installation = cliManager.selected else {
+            return cliManager.npm == nil ? L("尚未找到 Node.js/npm 或可用的 Smart Search CLI") : L("Node.js/npm 已就绪，等待准备 Smart Search CLI")
+        }
+        if !installation.compatible { return L("{0} · {1} · 需要更新或修复", installation.source, installation.version) }
+        if cliManager.updateAvailable { return L("{0} · 可更新至 {1}", installation.version, cliManager.latestVersion) }
+        return connection == .ready ? L("{0} · 已就绪", installation.version) : L("{0} · 尚未连接", installation.version)
+    }
+
+    var environmentExplanation: String {
+        let unavailable = !cliManager.latestVersion.isEmpty && !cliManager.latestSupportsBinary
+        if let selected = cliManager.selected, !selected.compatible {
+            return selected.note + (unavailable ? "\n" + L("npm 上尚未发布兼容版本。可手动下载独立 CLI，或稍后重新检查。") : "")
+        }
+        if !cliManager.message.isEmpty { return cliManager.message }
+        if let selected = cliManager.selected, !selected.note.isEmpty { return selected.note }
+        if connection == .failed { return L("Smart Search CLI 已找到，但连接失败。请重新检测；错误详情显示在上方。") }
+        if unavailable && cliManager.selected == nil { return L("npm 上尚未发布兼容版本。可手动下载独立 CLI，或稍后重新检查。") }
+        return L("App 通过本机独立安装的 Smart Search CLI 读取配置并运行搜索，两者分别安装和更新。检测会复用已有的 mise 或 npm 安装。")
+    }
+
+    func selectCLI(_ id: String, manual: Bool = false) async {
+        guard canInstallAppUpdate, !cliManager.busy, !cliManager.checking else { return }
+        intentionalShutdown = true
+        await backend.shutdown()
+        state = nil
+        if manual { cliManager.setCliPath(id) } else { cliManager.selectInstallation(id) }
+        backendPathOverride = ""
+        UserDefaults.standard.removeObject(forKey: DefaultsKey.backendPath)
+        await connect()
     }
 
     func setNpmPath(_ path: String) async {
@@ -955,7 +987,6 @@ final class AppModel: ObservableObject {
         case "updates":
             updateResult = event.data
         case "activity":
-            appUpdater.resumePromptIfPossible()
             Task { await reconcileRuns() }
             // Backend push events cover its active profile.  With user-added directories,
             // refresh the explicitly scoped aggregate instead of silently dropping rows.
@@ -1045,7 +1076,6 @@ final class AppModel: ObservableObject {
     private func end(_ identifier: String) {
         operations.endRequest(identifier)
         isBusy = operations.busyKeys
-        appUpdater.resumePromptIfPossible()
     }
 
     private func trackRun(_ runID: String, key: String) {

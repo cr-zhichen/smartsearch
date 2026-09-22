@@ -20,8 +20,7 @@ struct AppUpdatesView: View {
     private var actionTitle: String {
         if updater.waitingToRestart { return L("重启并完成更新") }
         if updateInProgress { return L("查看更新进度") }
-        if updater.available { return L("更新到 {0}", updater.latestVersion) }
-        if updater.phase == .failed { return L("重新检查") }
+        if updater.available { return L("下载更新") }
         return L("检查更新")
     }
     private var statusIcon: String {
@@ -47,19 +46,10 @@ struct AppUpdatesView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Grid(alignment: .leading, horizontalSpacing: 30, verticalSpacing: 10) {
-                versionRow(L("当前版本"), value: updater.currentVersion.isEmpty ? L("未知") : updater.currentVersion)
-                versionRow(L("可安装版本"), value: availableVersion)
-                versionRow(L("上次检查"), value: lastCheckText)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Divider()
-
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("自动检查更新"))
-                    Text(L("启动时检查新版本，之后每 24 小时检查。确认后才下载。"))
+                    Text(L("每次打开 App 时检查，确认后才下载。"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
@@ -72,19 +62,17 @@ struct AppUpdatesView: View {
             }
 
             HStack(spacing: 10) {
-                Button {
-                    if offersInstallation { updater.install() } else { updater.check() }
-                } label: {
-                    BusyLabel(text: actionTitle, busyText: L("检查中…"), busy: updater.checking)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!actionEnabled)
-                if updater.available && updater.canCheck {
-                    Button(L("重新检查")) { updater.check() }
-                }
-                Link(L("查看版本说明"), destination: URL(string: "https://github.com/konbakuyomu/smartsearch/releases")!)
                 if !updater.started && model.backendPathOverride.isEmpty {
                     Link(L("下载正式版"), destination: URL(string: "https://github.com/konbakuyomu/smartsearch/releases/latest")!)
+                        .buttonStyle(.borderedProminent)
+                } else {
+                    Button {
+                        if offersInstallation { updater.install() } else { updater.check() }
+                    } label: {
+                        BusyLabel(text: actionTitle, busyText: L("检查中…"), busy: updater.checking)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!actionEnabled)
                 }
             }
 
@@ -101,21 +89,4 @@ struct AppUpdatesView: View {
         }
     }
 
-    private var availableVersion: String {
-        if !updater.latestVersion.isEmpty { return updater.latestVersion }
-        if updater.checkedAt != nil { return updater.currentVersion }
-        return L("尚未检查")
-    }
-
-    private var lastCheckText: String {
-        guard let date = updater.checkedAt else { return L("尚未检查") }
-        return date.formatted(.dateTime.year().month(.abbreviated).day().hour().minute().locale(model.interfaceLocale))
-    }
-
-    private func versionRow(_ label: String, value: String) -> some View {
-        GridRow {
-            Text(label).foregroundStyle(.secondary)
-            Text(value).textSelection(.enabled)
-        }
-    }
 }

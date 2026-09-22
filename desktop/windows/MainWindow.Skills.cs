@@ -16,7 +16,7 @@ public sealed partial class MainWindow
         var panel = PagePanel();
         panel.Children.Add(PageTitle(L("更新 Skills")));
         panel.Children.Add(Secondary(L("Skills 由当前 CLI 提供；自动维护已接入目标，保留个人修改。")));
-        if (!_backend.IsConnected) { panel.Children.Add(BuildNativeCliPanel()); return Scroll(panel); }
+        if (!_backend.IsConnected) { panel.Children.Add(OfflineHint()); return Scroll(panel); }
         _skillSummary = Body(string.Empty);
         _skillResult = Body(string.Empty);
         _skillRows = new StackPanel { Spacing = 8 };
@@ -28,8 +28,6 @@ public sealed partial class MainWindow
             ActionButton(L("刷新 CLI 提供的 Skills"), () => SkillsRequestAsync("skills.check"), operationKey: "skills-check", busyText: L("检查中…")),
             DetailsButton(L("检查详情与偏好"), ShowSkillPreferencesAsync)));
         panel.Children.Add(Card(source));
-        panel.Children.Add(Card(SettingRow(L("运行环境"), L("所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。"),
-            ActionButton(L("管理 CLI…"), () => NavigateToAsync("settings")))));
         panel.Children.Add(SettingsSection(L("选择 Agent"), L("状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。"), Card(_skillRows)));
         panel.Children.Add(_skillResult);
         _skillSelectionSummary = Secondary(string.Empty);
