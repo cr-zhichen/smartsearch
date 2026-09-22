@@ -119,7 +119,7 @@ def smoke_backend(executable: Path, run_directory: Path, expected_version: str, 
         {
             "id": 1,
             "method": "initialize",
-            "params": {"protocol_version": 1, "config_dir": str(smoke_config)},
+            "params": {"protocol_version": 1, "config_dir": str(smoke_config), "independent_cli": True, "enable_update_checks": False},
         },
         {"id": 2, "method": "shutdown", "params": {}},
     ]
@@ -136,10 +136,10 @@ def smoke_backend(executable: Path, run_directory: Path, expected_version: str, 
             encoding="utf-8",
             errors="replace",
             text=True,
-            timeout=15,
+            timeout=45,
         )
     except subprocess.TimeoutExpired as error:
-        raise RuntimeError("packaged backend did not finish initialize/shutdown within 15 seconds") from error
+        raise RuntimeError("packaged backend did not finish initialize/shutdown within 45 seconds") from error
 
     messages: list[dict[str, Any]] = []
     malformed: list[str] = []

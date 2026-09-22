@@ -179,3 +179,45 @@ run = [
 description = "Build the Windows app and an installer when Inno Setup is available"
 raw_args = true
 run = 'powershell -NoProfile -ExecutionPolicy Bypass -File desktop/scripts/Build-Windows.ps1 -PythonPath "{{vars.python}}"'
+
+[tasks."desktop:cli:build"]
+description = "Build and verify the standalone CLI in an isolated artifact directory"
+raw_args = true
+run = '"{{vars.python}}" desktop/scripts/build_backend.py --smoke'
+
+[tasks."desktop:cli:package"]
+description = "Package a standalone CLI archive, separate from the native App"
+raw_args = true
+run = '"{{vars.python}}" desktop/scripts/package_cli.py'
+
+[tasks.node]
+description = "Run Node with the project toolchain"
+raw_args = true
+run = 'node'
+
+[tasks."npm:binary:package"]
+description = "Assemble the self-contained npm platform package"
+raw_args = true
+run = '"{{vars.python}}" desktop/scripts/package_npm_cli.py'
+
+[tasks."npm:binary:smoke"]
+description = "Install packed npm artifacts and verify runtime isolation"
+raw_args = true
+run = 'node npm/scripts/smoke-packed-install.js'
+
+[tasks."npm:test"]
+description = "Test the npm binary launcher"
+run = 'npm test'
+
+[tasks."npm:workflow:lint"]
+description = "Validate npm build and release workflows"
+run = 'actionlint .github/workflows/npm-binaries.yml .github/workflows/publish-npm.yml .github/workflows/ci.yml'
+
+[tasks."npm:binary:install"]
+description = "Install dependencies for the self-contained npm CLI build"
+run = '"{{vars.python}}" -m pip install --disable-pip-version-check . "pyinstaller==6.22.3"'
+
+[tasks."npm:pack"]
+description = "Pack npm release artifacts"
+raw_args = true
+run = 'npm pack'

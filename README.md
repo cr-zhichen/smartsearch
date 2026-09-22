@@ -65,7 +65,7 @@ npm install -g @konbakuyomu/smart-search@latest
 smart-search setup
 ```
 
-Manual CLI installation needs Node.js 18+ and Python 3.10+. See the [CLI guide](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/cli.md) for installation, language settings, commands, and examples.
+The new npm CLI requires Node.js 18+ / npm only. Its platform package includes the Python runtime and does not use a user-installed Python. See the [CLI guide](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/cli.md) for installation, language settings, commands, and examples.
 
 ## Need more detail?
 

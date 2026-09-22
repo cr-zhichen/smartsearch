@@ -65,7 +65,7 @@ npm install -g @konbakuyomu/smart-search@latest
 smart-search setup
 ```
 
-手动安装 CLI 需要 Node.js 18+ 和 Python 3.10+。安装方法、语言设置和命令示例见 [CLI 使用指南](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/zh-CN/cli.md)。
+新版 npm CLI 只需要 Node.js 18+ / npm；平台包自带 Python 运行时，不使用用户安装的 Python。安装方法、语言设置和命令示例见 [CLI 使用指南](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/zh-CN/cli.md)。
 
 ## 需要详细说明？
 
