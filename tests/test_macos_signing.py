@@ -139,6 +139,23 @@ def test_failed_import_does_not_change_keychains(identity, failure):
     assert signing.run(["/usr/bin/security", "list-keychains", "-d", "user"]) == before
 
 
+def test_certificate_name_cannot_replace_the_code_signing_usage(tmp_path):
+    password = secrets.token_hex(24)
+    env = {**os.environ, "SS_CERT_PASSWORD": password}
+    signing.run(["/usr/bin/openssl", "req", "-new", "-x509", "-newkey", "rsa:2048", "-sha256",
+                 "-days", "1", "-subj", "/CN=Smart Search macOS Code Signing",
+                 "-keyout", tmp_path / "key.pem", "-out", tmp_path / "certificate.pem",
+                 "-passout", "env:SS_CERT_PASSWORD"], env=env)
+    signing.run(["/usr/bin/openssl", "pkcs12", "-export", "-inkey", tmp_path / "key.pem",
+                 "-in", tmp_path / "certificate.pem", "-out", tmp_path / "identity.p12",
+                 "-passin", "env:SS_CERT_PASSWORD", "-passout", "env:SS_CERT_PASSWORD"], env=env)
+    der = signing.run(["/usr/bin/openssl", "x509", "-in", tmp_path / "certificate.pem", "-outform", "DER"])
+    digest = signing.hashlib.sha256(der).hexdigest()
+    with pytest.raises(ValueError, match="explicitly permit code signing"):
+        with signing.signing_identity((tmp_path / "identity.p12").read_bytes(), password, digest):
+            pytest.fail("A display name was accepted as a certificate purpose")
+
+
 def test_required_mode_never_falls_back_to_generated_identity(tmp_path):
     env = {key: value for key, value in os.environ.items() if not key.startswith(signing.PREFIX)}
     marker = tmp_path / "executed"

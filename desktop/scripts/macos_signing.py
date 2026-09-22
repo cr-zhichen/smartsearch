@@ -115,7 +115,8 @@ def signing_identity(p12: bytes, password: str, expected: str, *, kind="self-sig
                 raise ValueError("Imported macOS certificate does not match the pinned SHA-256")
             run(["/usr/bin/openssl", "x509", "-in", certificate, "-checkend", "0", "-noout"])
             description = run(["/usr/bin/openssl", "x509", "-in", certificate, "-text", "-noout"])
-            if b"Code Signing" not in description:
+            usage = re.search(rb"X509v3 Extended Key Usage:[^\n]*\n[ \t]+([^\r\n]+)", description)
+            if not usage or b"Code Signing" not in usage.group(1).split(b", "):
                 raise ValueError("The certificate must explicitly permit code signing")
             sha1 = hashlib.sha1(der).hexdigest().upper()
             keychain_password = secrets.token_hex(24)
