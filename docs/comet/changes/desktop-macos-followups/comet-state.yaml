@@ -1,0 +1,96 @@
+schema: comet.native.v4
+name: desktop-macos-followups
+language: zh-CN
+phase: build
+status: active
+state_version: 3
+brief: brief.md
+shape_confirmation_hash: 3cb15ec2f060b31a50865e3cdd013f2827a06f843130a42027a64c1113b45cbb
+spec_changes:
+  - capability: desktop-macos-followups
+    operation: create
+    source: specs/desktop-macos-followups/spec.md
+workspace:
+  isolation: worktree
+  change_branch: codex/desktop-macos-followups
+  target_branch: main
+  finish: null
+loop:
+  stage: building
+  goal_cycle: 1
+  iteration: 1
+  attempt: 0
+  retry_epoch: 0
+  failed_iteration_count: 0
+  no_progress_count: 0
+  execution_failure_count: 0
+  previous_unresolved_ids: []
+  next_action: submit-builder-candidate
+acceptance:
+  - id: A1
+    source: specs/desktop-macos-followups/spec.md
+    text: Hidden resources do not cover installation instructions WHEN 用户在 Finder
+      开启显示隐藏文件并打开生成的 DMG，THEN 安装说明无遮挡，布局和隐藏标记符合规格，挂载与复制安装后的 App
+      签名仍有效；保留作者原始实测范围。
+    result: pending
+    reason: null
+  - id: A2
+    source: specs/desktop-macos-followups/spec.md
+    text: Stable identity and signing failures are preserved WHEN
+      使用测试身份、正确维护者身份、错误密码/证书、无代码签名用途、过期证书或缺失正式配置进行打包，THEN
+      仅有效身份可以用于相应模式；错误状态被拒绝，清理临时钥匙串，所有 Mach-O 架构、嵌套代码和复制安装后的 App 被逐项验证，秘密不泄露。
+    result: pending
+    reason: null
+  - id: A3
+    source: specs/desktop-macos-followups/spec.md
+    text: Universal packaging keeps both backends and the intended identity WHEN 构建
+      Universal 并从同一 DMG 在原生 ARM 与 Intel 上复制安装和启动，THEN 前端和 launcher
+      包含双架构、后端选择正确、参数/stdin/stdout/退出码保持、复制路径变化不影响启动，两个后端版本一致；最终签名及固定指纹符合当前构建模式。
+    result: pending
+    reason: null
+  - id: A4
+    source: specs/desktop-macos-followups/spec.md
+    text: Renamed assets remain compatible and download tables are complete WHEN
+      从已发布 v0.1.24 获取基线并生成下一候选的发布集合，THEN 旧名称可正确识别，更新器身份和原 feed 地址不变，五个安装链接存在，三种
+      Mac 资产与签名回执齐全；发布表幂等且不覆盖原说明，签名与公证声明真实。
+    result: pending
+    reason: null
+  - id: A5
+    source: specs/desktop-macos-followups/spec.md
+    text: Native update regressions survive integration WHEN 运行最终组合的 Windows 与 Mac
+      SDK 更新检查，THEN 各自的差分/完整回退和错误签名检查通过，Mac 同证书升级与旧 ad-hoc 迁移保持，Universal
+      更新后仍具双后端；未实测的 GUI/权限继承明确单列。
+    result: pending
+    reason: null
+  - id: A6
+    source: specs/desktop-macos-followups/spec.md
+    text: Final integration is checked against its exact source WHEN 提交整合候选供合并，THEN
+      来源提交可追溯，文本与无文本冲突的行为联动均被处理，打包检查、共享回归、两 Windows、两 Mac 原生包与 Universal
+      ARM/Intel 检查绑定最终代码；作者原始证据保留，失败/等待/跳过与通过分开。
+    result: pending
+    reason: null
+  - id: A7
+    source: specs/desktop-macos-followups/spec.md
+    text: Preparation and delivery preserve existing releases and user work WHEN
+      完成准备或后续授权的主线合并，THEN 操作与授权相符，原工作区和现有发行附件保留；准备阶段不发布或安装，合并阶段准确报告自动 beta
+      行为，正式签名配置和 GUI 验收的未完成边界继续保留。
+    result: pending
+    reason: null
+builder_handoff: null
+blockers: []
+verification: null
+history: []
+history_overflow:
+  dropped_entries: 0
+  first_dropped_at: null
+  last_dropped_at: null
+  outcome_counts:
+    pass: 0
+    fail: 0
+    blocked: 0
+    execution-error: 0
+    recovery: 0
+verification_result: pending
+verification_report: null
+archived: false
+created_at: 2026-09-22T02:45:12.119Z
