@@ -56,6 +56,7 @@ def fingerprint(value):
 
 def create_identity(directory: Path, password: str):
     """Create once; only encrypted private material survives this operation."""
+    __tracebackhide__ = True  # Do not render the password if generation fails.
     if not password:
         raise ValueError("A nonempty P12 password is required")
     directory.mkdir(mode=0o700)  # Deliberately refuse to overwrite an identity.
