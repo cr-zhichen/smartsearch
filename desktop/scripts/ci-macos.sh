@@ -9,12 +9,12 @@ mise run desktop:macos:build "$@"
 builds=()
 for result in .desktop-artifacts/macos-*/result.json; do
   existing=false
-  for previous in "${before[@]}"; do
+  for previous in ${before[@]+"${before[@]}"}; do
     if [[ "$result" == "$previous" ]]; then existing=true; break; fi
   done
   if ! $existing; then builds+=("$result"); fi
 done
-if [[ ${#builds[@]} -ne 1 ]]; then
+if [[ -z "${builds[*]-}" ]] || [[ ${#builds[@]} -ne 1 ]]; then
   echo 'Expected exactly one fresh macOS build for CI.' >&2
   exit 1
 fi
