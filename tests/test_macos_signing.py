@@ -1,5 +1,6 @@
 """Exercise real macOS signatures with disposable identities, never maintainer keys."""
 import base64
+from dataclasses import dataclass
 import importlib.util
 import os
 from pathlib import Path
@@ -19,12 +20,28 @@ spec.loader.exec_module(signing)
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="Requires Apple's actual signing tools")
 
 
+@dataclass(repr=False)
+class DisposableIdentity:
+    p12: bytes
+    password: str
+    digest: str
+
+    def __iter__(self):
+        return iter((self.p12, self.password, self.digest))
+
+    def __getitem__(self, index):
+        return tuple(self)[index]
+
+    def __repr__(self):
+        return f"<DisposableIdentity certificate_sha256={self.digest}>"
+
+
 @pytest.fixture(scope="module")
 def identity(tmp_path_factory):
     directory = tmp_path_factory.mktemp("certificates") / "identity"
     password = secrets.token_hex(24)
     digest = signing.create_identity(directory, password)
-    return (directory / "smart-search.p12").read_bytes(), password, digest
+    return DisposableIdentity((directory / "smart-search.p12").read_bytes(), password, digest)
 
 
 def make_app(root, version):

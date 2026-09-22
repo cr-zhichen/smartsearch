@@ -17,10 +17,12 @@ from pathlib import Path
 import plistlib
 import re
 import secrets
+import shlex
 import signal
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[2]
 PREFIX = "SMART_SEARCH_MACOS_"
@@ -32,6 +34,7 @@ MACHO_MAGICS = {
 
 
 def run(argv, *, env=None):
+    __tracebackhide__ = True  # pytest must not render password-bearing argv.
     # Never include argv in exceptions: security import accepts its password as
     # an argument. Command output is captured, including private-key tool output.
     try:
@@ -92,6 +95,7 @@ subjectKeyIdentifier = hash
 
 @contextmanager
 def signing_identity(p12: bytes, password: str, expected: str, *, kind="self-signed"):
+    __tracebackhide__ = True  # P12/password values must not appear in test reports.
     expected = fingerprint(expected)
     with tempfile.TemporaryDirectory(prefix="smartsearch-signing-") as temporary:
         directory = Path(temporary)
@@ -121,6 +125,18 @@ def signing_identity(p12: bytes, password: str, expected: str, *, kind="self-sig
                  "-T", "/usr/bin/codesign", "-T", "/usr/bin/security"])
             run(["/usr/bin/security", "set-key-partition-list", "-S", "apple-tool:,apple:,codesign:",
                  "-s", "-k", keychain_password, keychain])
+            # Older macOS resolves certificate chains through the search list,
+            # even when codesign receives --keychain for identity selection.
+            keychains = shlex.split(run(["/usr/bin/security", "list-keychains", "-d", "user"]).decode())
+            if str(keychain) not in keychains:
+                run(["/usr/bin/security", "list-keychains", "-d", "user", "-s", keychain, *keychains])
+            for attempt in range(5):
+                available = run(["/usr/bin/security", "find-identity", "-p", "codesigning", keychain]).decode()
+                if sha1 in available:
+                    break
+                if attempt == 4:
+                    raise ValueError("The imported macOS signing identity has no discoverable private key")
+                time.sleep(1)
             # The final codesign invocation verifies usability; no global trust
             # settings or login/system keychain identities are changed.
             container.unlink()
