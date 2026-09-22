@@ -1,6 +1,6 @@
 # 目标
 
-准备将 cr-zhichen 的三项 macOS 后续贡献整合到当前 main，保留作者已有测试证据、现有 Windows 与 Sparkle 更新能力，并在实际合并前明确冲突处理和验收范围。本轮用户原话为“cr-zhichen又提交macos上面的改动了，准备合并”；当前处于合并准备，尚未合入 main。
+将 cr-zhichen 的三项 macOS 后续贡献整合到当前 main，保留作者已有测试证据、现有 Windows 与 Sparkle 更新能力。本轮用户原话为“cr-zhichen又提交macos上面的改动了，准备合并”；用户随后明确选择“按此方案整合并合入 main（推荐）”，授权最终测试通过后合并，包含现有 npm beta 自动流程，不包含新的稳定发行或本机安装修改。
 
 # 范围
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- | --- |
 | 用户本轮请求 | complete | 合并准备、保留贡献者已测成果 | A6、A7 | covered |
 | [PR53](https://github.com/konbakuyomu/smartsearch/pull/53) 描述及 a733b71fa8569efca40e2b7378d4d1bf64551ae3 | complete | 两隐藏资源坐标、隐藏标记、16pt 标签；保留 Finder/codesign 实测及原有后端超时限制 | A1、A6 | covered |
-| [PR55](https://github.com/konbakuyomu/smartsearch/pull/55) 描述、维护者指南及 827e894a3a1d57cd2c70149aa97eed20096ac832 | complete | 稳定证书身份、临时钥匙串、正式配置失败关闭、签名/迁移负例、EKU 校验 | A2、A3、A5、A6 | covered |
+| [PR55](https://github.com/konbakuyomu/smartsearch/pull/55) 描述、维护者指南及 3ad3c8365cb7b84815641db76130501e0265d786 | complete | 稳定证书身份、临时钥匙串、正式配置失败关闭、签名/迁移负例、EKU 校验；启动检查对齐 App 的 30 秒超时并保留初始化后的 5 秒 IPC 检查 | A2、A3、A5、A6 | covered |
 | [PR57](https://github.com/konbakuyomu/smartsearch/pull/57) 描述及 15e4ce28b1db9d2086d34b7d74bd38e44d82fa48 | complete | 五个下载入口、通用包双后端/双架构、改名兼容、发布说明、隐藏目录附件上传 | A3、A4、A5、A6 | covered |
 | 当前 main c05ad78、v0.1.24 及发布工作流 | complete | Windows Velopack 身份、既有 Sparkle 公钥、正式发行与本机安装边界 | A4、A5、A7 | covered |
 
@@ -46,10 +46,12 @@
 - 2026-09-22：只读 git merge-tree 已确认 #55/#57 的 8 个冲突，#53 可以独立干净组合。采用“DMG 修复先引入，签名与通用包一起整合验证”的建议顺序。
 - 2026-09-22：发现作者继续提交后，已将 #55 基线从 e4c203d 更新到 827e894，将 #57 从 7f4186c 更新到 15e4ce2；新增差异分别是 EKU 精确校验与隐藏目录 artifact 上传。实施前再次核对远端 HEAD。
 - main 推送会触发现有 npm beta 预发布工作流；本次尚未推送 main。新的稳定版桌面发布与正式签名配置不包含在当前“准备合并”的执行中。
+- 2026-09-22：用户明确确认一起整合 #53、#55、#57，保留稳定签名，处理 8 处冲突和 Universal 联动，最终测试通过后合入 main；无需重复请求相同合并授权。发布稳定版、修改本机安装及正式 macOS 身份配置仍不在本轮范围。
+- 2026-09-22：实施中纳入作者 #55 的 3ad3c83 启动诊断修正。三个 PR 的贡献提交均以 merge 保留；共享打包器、Universal ARM/Intel 验证和发布说明已衔接签名模式及固定指纹，实际效果以最终组合 CI 为准。
 
 # 待解决问题
 
-无需要猜测的产品方案。待用户确认是否按上述三 PR 范围、冲突整合方式与验收标准进入实际整合。作者最新 CI 尚未全部完成，按精确提交观察结果；不把 pending 或 queued 写成失败，也不以旧提交通过代替新提交。
+无未解决的用户决定。整合与主线合并已获明确授权；最终组合 CI 和独立验收完成前不执行主线合并。按精确提交记录成功、失败、等待与跳过；不以来源 PR 的旧结果代替最终组合检查。
 
 # 验证预期
 
