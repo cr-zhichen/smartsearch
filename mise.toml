@@ -141,19 +141,19 @@ raw_args = true
 run = "bash desktop/scripts/compile-macos-icon.sh"
 
 [tasks."desktop:macos:verify"]
-description = "Verify a packaged DMG, its app signature and isolated backend startup"
+description = "Verify a packaged DMG, its app signature and native architecture"
 raw_args = true
 run = '"{{vars.python}}" desktop/scripts/verify_macos_dmg.py'
 
 [tasks."desktop:macos:backend-check"]
-description = "Exercise release-mode Swift IPC against the real bundled backend"
+description = "Exercise release-mode Swift IPC against an independently packaged CLI"
 raw_args = true
 run = "bash desktop/scripts/check-macos-backend.sh"
 
 [tasks."desktop:packaging:lint"]
 description = "Check the desktop workflow and macOS packaging scripts"
 run = [
-  "shellcheck desktop/scripts/build-macos.sh desktop/scripts/build-macos-universal.sh desktop/scripts/package-macos.sh desktop/scripts/package-sparkle.sh desktop/scripts/compile-macos.sh desktop/scripts/compile-macos-icon.sh desktop/scripts/render-dmg-background.sh desktop/scripts/check-macos-backend.sh desktop/scripts/ci-macos.sh",
+  "shellcheck desktop/scripts/build-macos.sh desktop/scripts/build-macos-universal.sh desktop/scripts/package-macos.sh desktop/scripts/package-sparkle.sh desktop/scripts/compile-macos.sh desktop/scripts/compile-macos-icon.sh desktop/scripts/render-dmg-background.sh desktop/scripts/check-macos-backend.sh desktop/scripts/check-macos-cli.sh desktop/scripts/ci-macos.sh",
   "actionlint .github/workflows/desktop-build.yml",
   "git diff --check",
 ]
@@ -190,6 +190,10 @@ description = "Package a standalone CLI archive, separate from the native App"
 raw_args = true
 run = '"{{vars.python}}" desktop/scripts/package_cli.py'
 
+[tasks."desktop:macos:cli-check"]
+description = "Verify native CLI management against isolated npm installations"
+run = "bash desktop/scripts/check-macos-cli.sh"
+
 [tasks.node]
 description = "Run Node with the project toolchain"
 raw_args = true
@@ -208,6 +212,11 @@ run = 'node npm/scripts/smoke-packed-install.js'
 [tasks."npm:test"]
 description = "Test the npm binary launcher"
 run = 'npm test'
+
+[tasks."desktop:windows:cli-check"]
+description = "Check Windows npm management in an isolated fixture"
+raw_args = true
+run = 'dotnet run --project desktop/tests/CLIManagementCheck --configuration Release --'
 
 [tasks."npm:workflow:lint"]
 description = "Validate npm build and release workflows"

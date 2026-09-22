@@ -35,7 +35,7 @@ smart-search deep "深度搜索一下最近的比特币行情" --format json | C
 
 ## CLI 包已升级，但提示运行环境未就绪
 
-mise 等管理器可能跳过 npm 包的安装脚本，因此包版本已更新并不代表 Python 环境已准备好。App 的“更新 CLI”会在核对安装来源后补齐该包的私有 Python 环境，并验证实际运行结果；失败时保留日志，允许重新检查后重试同一版本。普通刷新仍只读。若缺少可用的独立 Python，请先在“共用独立 CLI 环境”完成准备。终端中的 `smart-search --version` 也可能触发首次环境修复，因此第一次耗时更长。
+新版 npm CLI 不依赖安装脚本或系统 Python。缺少平台运行包时，使用同一 npm 执行 `npm install -g @konbakuyomu/smart-search@latest --include=optional`，再重新检测；不要使用 `--omit=optional`。手动指定 npm 时，确认同目录有配套 Node.js，且全局 prefix 可写。旧版 npm 0.1.24 需要等待新的二进制版本发布后更新。
 
 ## App 更新失败或不可用
 

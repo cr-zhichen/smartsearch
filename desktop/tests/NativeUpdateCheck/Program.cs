@@ -44,7 +44,6 @@ while (DateTime.UtcNow < timeout)
     await Task.Delay(200);
 }
 if (!installed) throw new InvalidOperationException("The updater did not install the target version.");
-using var backend = JsonDocument.Parse(File.ReadAllText(Path.Combine(current, "backend", "package.json")));
-if (backend.RootElement.GetProperty("version").GetString() != version) throw new InvalidOperationException("App and backend versions differ.");
+if (Directory.Exists(Path.Combine(current, "backend"))) throw new InvalidOperationException("The App must not contain a CLI.");
 File.WriteAllText(result, JsonSerializer.Serialize(new { version, packageId = id, adapter = "AppUpdater", installed = true, deltaCount = plan.DeltasToTarget.Length }));
 Console.WriteLine("Native candidate download, verification and application passed.");

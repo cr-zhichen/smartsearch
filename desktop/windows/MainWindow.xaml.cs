@@ -22,7 +22,11 @@ public sealed partial class MainWindow : Window
     private const int SwRestore = 9;
 
     private readonly BackendClient _backend;
+    private readonly CLIInstallationManager _cliManager = new();
+    private bool _managingCLI;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _activityTimer;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _appUpdateTimer;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _cliUpdateTimer;
     private readonly NativeTray _tray;
     private readonly Dictionary<string, FieldEditor> _fieldEditors = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Control> _commandControls = new(StringComparer.Ordinal);
@@ -50,7 +54,11 @@ public sealed partial class MainWindow : Window
     private CancellationTokenSource? _appDownloadCancellation;
     private bool _installingApp;
     private string? _promptedAppVersion;
-    private bool AppInstallBlocked => _state is null || _dialogOpen || EnvironmentBusy || Bool(_skills, "busy") ||
+    private bool _manualAppUpdateCheck;
+    private bool AppAutoCheck => ReadSetting("appAutoCheck") != "false";
+    private bool AppVersionSkipped => _appUpdater.LatestVersion is { } version && ReadSetting("appSkippedVersion") == version;
+    private bool AppUpdateOffered => _appUpdater.Available && (!AppVersionSkipped || _manualAppUpdateCheck);
+    private bool AppInstallBlocked => _connecting || _managingCLI || _dialogOpen || EnvironmentBusy || Bool(_skills, "busy") ||
         _providerDraft.Count > 0 || ConfigOperationBusy || HasActiveOwnedRuns ||
         Text(Property(_updates, "cli_update"), "status") == "running";
     private JsonElement? _environment;
@@ -59,11 +67,10 @@ public sealed partial class MainWindow : Window
     private ToggleSwitch? _autoSkillsSwitch;
     private bool _settingAutoSkills, _skillSelectionInitialized;
     private readonly HashSet<string> _selectedSkillTargets = [];
-    private StackPanel? _environmentSteps;
-    private TextBlock? _environmentSummary, _environmentDetails, _environmentPlan;
-    private ProgressBar? _environmentProgress;
     private bool EnvironmentBusy => Bool(_environment, "busy") || _operations.IsBusy("environment-request");
-    private TextBlock? _appUpdateSummary, _cliUpdateSummary, _downloadSummary, _updateCheckSummary, _cliUpdateLog;
+    private TextBlock? _appUpdateSummary, _appVersionValue, _appLatestVersionValue, _appCheckedAtValue, _appUpdateDetail;
+    private Button? _appUpdateRecheck, _appUpdateCancel, _appUpdateSkip;
+    private Panel? _appUpdateMigration;
     private ProgressBar? _downloadProgress;
     private ToggleSwitch? _autoUpdateSwitch;
     private bool _settingAutoUpdate;
@@ -81,7 +88,6 @@ public sealed partial class MainWindow : Window
     private TextBlock? _activityHint;
     private ToggleSwitch? _activityEnabledSwitch;
     private StackPanel? _skillRows;
-    private TextBlock? _cliSummary;
     private ComboBox? _commandPicker;
     private StackPanel? _commandFieldPanel;
     private TextBox? _resultText;
@@ -104,9 +110,14 @@ public sealed partial class MainWindow : Window
         _activityTimer.Tick += async (_, _) =>
         {
             await RefreshActivityAsync(silent: true);
-            await CheckAppAutomaticallyAsync();
         };
+        _appUpdateTimer = DispatcherQueue.CreateTimer();
+        _appUpdateTimer.Interval = TimeSpan.FromSeconds(10);
+        _appUpdateTimer.Tick += async (_, _) => await CheckAppAutomaticallyAsync();
         LoadLocalPreferences();
+        _cliUpdateTimer = DispatcherQueue.CreateTimer();
+        _cliUpdateTimer.Interval = TimeSpan.FromMinutes(1);
+        _cliUpdateTimer.Tick += async (_, _) => await CheckCliAutomaticallyAsync();
         Localization.Preference = ReadSetting("language") ?? "auto";
         if (Localization.Preference is not ("auto" or "zh" or "en"))
         {
@@ -134,19 +145,36 @@ public sealed partial class MainWindow : Window
         if (_started)
             return;
         _started = true;
+        _appUpdateTimer.Start();
+        _cliUpdateTimer.Start();
+        var updateCheck = CheckAppAutomaticallyAsync(onLaunch: true);
         await RunOperationAsync("connect", ConnectAsync);
+        await CheckCliAutomaticallyAsync(onLaunch: true);
+        await updateCheck;
         if (_preferenceReadFailed && _backend.IsConnected)
             ShowNotice(L("本机偏好"), L("无法读取已保存的显示偏好，已使用默认设置。原配置文件未修改。"), InfoBarSeverity.Warning);
     }
 
     private async Task ConnectAsync()
     {
-        if (EnvironmentBusy || _operations.IsBusy("updates-cli") || Text(Property(_updates, "cli_update"), "status") == "running") return;
+        if (_connecting || _managingCLI || EnvironmentBusy || _operations.IsBusy("updates-cli") || Text(Property(_updates, "cli_update"), "status") == "running") return;
         _connecting = true;
         _connectionFailed = false;
         RenderCurrentPage();
         try
         {
+            if (!_backend.UsesExplicitBackend)
+            {
+                await _cliManager.DiscoverAsync();
+                _backend.Installation = _cliManager.Selected;
+                if (_backend.Installation?.Compatible != true)
+                {
+                    _activityTimer.Stop();
+                    await _backend.StopAsync();
+                    _state = null;
+                    return;
+                }
+            }
             var state = await _backend.StartAsync(configDirectory: null, CancellationToken.None);
             ApplyState(state);
             _activityTimer.Start();
@@ -157,8 +185,11 @@ public sealed partial class MainWindow : Window
             _connectionFailed = true;
             ShowNotice(L("后端不可用"), SafeMessage(error), InfoBarSeverity.Error);
         }
-        _connecting = false;
-        RenderCurrentPage();
+        finally
+        {
+            _connecting = false;
+            RenderCurrentPage();
+        }
     }
 
     private async Task<bool> RefreshStateAsync(bool preserveDraft = true)
@@ -232,40 +263,86 @@ public sealed partial class MainWindow : Window
     private UIElement BuildOverviewPage()
     {
         var panel = PagePanel();
-        panel.Children.Add(PageTitle(L("概览")));
-        if (_state is not { } state)
+        panel.Children.Add(new StackPanel { Spacing = 8, Children =
+            { PageTitle(L("概览")), Secondary(L("配置、运行与结果，都在这台电脑上管理。")) } });
+        var steps = new StackPanel { Spacing = 16 };
+        steps.Children.Add(BuildNativeCliPanel(firstStep: true));
+        var providers = new StackPanel { Spacing = 12 };
+        var summary = L("选择搜索服务，填写 API Key。");
+        var actions = new List<UIElement>
         {
-            panel.Children.Add(Card(Section(_connecting ? L("正在读取本机配置…") : L("连接本地引擎"),
-                [Body(_connecting ? L("读取配置不会调用外部服务商。") : L("本地引擎尚未连接，请重新连接或检查安装是否完整。")),
-                 ActionButton(L("重新连接"), ConnectAsync, primary: true, operationKey: "connect", busyText: L("连接中…"))])));
-            return Scroll(panel);
+            ActionButton(L("配置服务商"), () => NavigateToProvidersAsync(), enabled: () => _state is not null)
+        };
+        if (_state is { } state)
+        {
+            var minimum = Property(state, "minimum_profile");
+            if (Bool(minimum, "ok"))
+            {
+                summary = L("基础配置已完成，可以开始搜索。");
+                actions.Add(ActionButton(L("开始搜索"), () => NavigateToAsync("search"), primary: true));
+            }
+            else if (Items(minimum, "missing").Any()) summary = L("待配置：{0}", MissingText(minimum));
         }
-
-        var minimum = Property(state, "minimum_profile");
-        var profileOk = Bool(minimum, "ok");
-        panel.Children.Add(Secondary(L("配置、运行与结果，都在这台电脑上管理。")));
-        var next = new StackPanel { Spacing = 12 };
-        next.Children.Add(HeadingWithStatus(profileOk ? L("可以开始搜索了") : L("先完成基础配置"),
-            profileOk ? L("配置齐全") : L("待配置"), profileOk ? "Success" : "Warning"));
-        next.Children.Add(Body(profileOk ? L("主搜索、文档检索和网页抓取已满足使用条件。") : L("还需要配置：{0}。每类任选一个服务商即可。", MissingText(minimum))));
-        next.Children.Add(ActionButton(profileOk ? L("开始搜索") : L("去配置"), () => NavigateToAsync(profileOk ? "search" : "providers"), primary: true));
-        next.Children.Add(Secondary(L("配置齐全表示可以发起请求；连接是否正常，以你主动测试的结果为准。")));
-        panel.Children.Add(Card(next));
-        var capabilityRows = CapabilityRows(state, primary: true).ToList();
-        if (capabilityRows.Count > 0)
-            panel.Children.Add(Card(Section(L("当前能力"), capabilityRows)));
-        var additional = CapabilityRows(state, primary: false).ToList();
-        if (additional.Count > 0)
-            panel.Children.Add(Disclosure("overview-additional", L("更多能力"), Section(L("扩展能力"), additional)));
-        panel.Children.Add(ActionRow(
-            ActionButton(L("刷新本机状态"), () => RefreshStateAsync(), operationKey: "state"),
-            DetailsButton(L("配置与路由详情"), () => ShowDetailsAsync(L("配置与路由详情"), Section(L("本机配置"),
-                [KeyValue(L("配置目录"), Text(state, "config_dir", Text(state, "config_path", L("未返回")))),
-                 KeyValue(L("配置版本"), Text(state, "revision", L("未返回"))), .. CapabilityChains(state)])))));
+        providers.Children.Add(StepHeader(L("2. 配置服务商"), summary, actions.ToArray()));
+        if (_state is { } configuredState)
+        {
+            foreach (var row in CapabilityRows(configuredState, primary: true))
+            {
+                providers.Children.Add(OverviewDivider());
+                providers.Children.Add(row);
+            }
+            var additional = CapabilityRows(configuredState, primary: false).ToList();
+            var footer = new Grid();
+            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            footer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var extraRows = new StackPanel { Spacing = 12 };
+            if (additional.Count > 0)
+            {
+                const string key = "overview-additional";
+                var expanded = _disclosures.GetValueOrDefault(key);
+                extraRows.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+                foreach (var row in additional)
+                {
+                    extraRows.Children.Add(OverviewDivider());
+                    extraRows.Children.Add(row);
+                }
+                var icon = new FontIcon { Glyph = expanded ? "\uE70E" : "\uE70D", FontSize = 12 };
+                var more = new Button { MinHeight = 36, HorizontalAlignment = HorizontalAlignment.Left,
+                    Content = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8,
+                        Children = { Body(L("更多能力")), icon } } };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(more, L("更多能力"));
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(more, expanded ? L("已展开") : L("已收起"));
+                more.Click += (_, _) =>
+                {
+                    expanded = !expanded;
+                    _disclosures[key] = expanded;
+                    extraRows.Visibility = expanded ? Visibility.Visible : Visibility.Collapsed;
+                    icon.Glyph = expanded ? "\uE70E" : "\uE70D";
+                    Microsoft.UI.Xaml.Automation.AutomationProperties.SetHelpText(more, expanded ? L("已展开") : L("已收起"));
+                };
+                footer.Children.Add(more);
+            }
+            var details = DetailsButton(L("配置详情…"), () => ShowDetailsAsync(L("配置与路由详情"), Section(L("本机配置"),
+                [KeyValue(L("配置目录"), Text(configuredState, "config_dir", Text(configuredState, "config_path", L("未返回")))),
+                 KeyValue(L("配置版本"), Text(configuredState, "revision", L("未返回"))), .. CapabilityChains(configuredState)])));
+            Grid.SetColumn(details, 1);
+            footer.Children.Add(details);
+            providers.Children.Add(footer);
+            if (additional.Count > 0) providers.Children.Add(extraRows);
+        }
+        steps.Children.Add(Card(providers));
+        steps.Children.Add(Card(StepHeader(L("3. 接入 Skills"), L("添加 Skills，让 Agent 使用搜索。"),
+            ActionButton(L("管理 Skills"), () => NavigateToAsync("ai"), enabled: () => _state is not null))));
+        panel.Children.Add(steps);
         return Scroll(panel);
     }
 
-    private static IEnumerable<UIElement> CapabilityRows(JsonElement state, bool primary)
+    private static Border OverviewDivider() => new()
+    {
+        Height = 1, Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["DividerStrokeColorDefaultBrush"]
+    };
+
+    private IEnumerable<UIElement> CapabilityRows(JsonElement state, bool primary)
     {
         var capabilities = Property(state, "capability_status");
         if (capabilities.ValueKind != JsonValueKind.Object)
@@ -282,11 +359,20 @@ public sealed partial class MainWindow : Window
                 .Where(item => !string.IsNullOrWhiteSpace(item))
                 .ToArray();
             var available = Bool(capability.Value, "ok");
-            var status = available ? L("已配置") : configured.Length > 0 ? L("需要调整") : L("未配置");
+            var status = L("未配置");
+            if (available) status = L("已配置");
+            else if (configured.Length > 0) status = L("需要调整");
             var experimental = Bool(capability.Value, "experimental") ? L("（实验性）") : string.Empty;
+            UIElement control = Secondary(status);
+            if (!available)
+            {
+                var configure = new HyperlinkButton { Content = status, Padding = new Thickness(0), MinHeight = 28 };
+                Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(configure, L("配置{0}", CapabilityLabel(capability.Name)));
+                configure.Click += async (_, _) => await NavigateToProvidersAsync(capability.Name);
+                control = configure;
+            }
             yield return SettingRow(CapabilityLabel(capability.Name) + experimental,
-                configured.Length == 0 ? L("选择一个服务商开始配置。") : string.Join(" · ", configured.Select(value => ProviderLabel(value!))),
-                Badge(status, available ? "Success" : "Neutral"));
+                configured.Length == 0 ? L("选择一个服务商开始配置。") : string.Join(" · ", configured.Select(value => ProviderLabel(value!))), control);
         }
     }
 
@@ -317,80 +403,6 @@ public sealed partial class MainWindow : Window
             Items(health, "cooldown_providers").Any(item => item.ValueKind == JsonValueKind.String && item.GetString() == provider);
         if (cooling) panel.Children.Add(Badge(L("调用保护：冷却中 · {0}", CooldownText(healthRow)), "Warning"));
         return panel;
-    }
-
-    private void RenderEnvironmentState()
-    {
-        if (_currentPage != "settings" || _environmentSummary is null) { RefreshActionButtons(); return; }
-        _environmentSummary.Text = Text(_environment, "message", L("先检测环境，再安装缺少的组件。"));
-        _environmentSteps!.Children.Clear();
-        foreach (var step in Items(Property(_environment, "steps")))
-        {
-            var ready = Text(step, "status") == "ready";
-            _environmentSteps.Children.Add(new StackPanel { Spacing = 4, Children = {
-                HeadingWithStatus(Text(step, "name"), Text(step, "status_label", ready ? L("已检查") : L("待处理")), ready ? "Success" : "Warning"),
-                Body(Text(step, "message")) } });
-        }
-        var total = Number(_environment ?? default, "total");
-        var actions = EnvironmentActions();
-        _environmentPlan!.Text = Text(_environment, "plan_id").Length == 0 ? L("检测后会在这里列出将要安装或配置的内容。") :
-            actions.Count == 0 ? L("独立 CLI 已就绪。可返回上方检查并更新 Skills。") :
-            L("本次将执行：\n") + string.Join("\n", actions.Select(action => "• " + action));
-        _environmentProgress!.Visibility = EnvironmentBusy && total > 0 ? Visibility.Visible : Visibility.Collapsed;
-        _environmentProgress.Value = total > 0 ? 100 * Number(_environment ?? default, "received") / total : 0;
-        _environmentDetails!.Text = L("独立安装目录：{0}\n", Text(_environment, "tools_dir", L("检测后显示"))) +
-            L("检查时间：{0}\n", Timestamp(_environment ?? default, "checked_at")) +
-            $"Node：{Text(Property(_environment, "node"), "path")}\nPython：{Text(Property(_environment, "python"), "path")}\n" +
-            L("独立调用：{0}\n配置目录：{1}\n", Text(_environment, "invocation"), Text(_environment, "config_dir")) +
-            L("缺失的 Python 使用 Astral CPython；App 只负责管理，独立 CLI 不依赖 App。\n") + Text(_environment, "log") + "\n" + Text(_environment, "error");
-        RefreshActionButtons();
-    }
-
-    private List<string> EnvironmentActions()
-    {
-        var actions = Items(Property(_environment, "plan")).Select(item => item.GetString() ?? "").Where(item => item.Length > 0).ToList();
-        return actions;
-    }
-
-    private string EnvironmentActionLabel()
-    {
-        if (Text(_environment, "plan_id").Length == 0) return L("安装缺少的组件");
-        if (EnvironmentActions().Count == 0) return L("环境已就绪");
-        return Items(Property(_environment, "plan")).Any() ? L("按清单准备环境") : L("配置所选 AI 接入");
-    }
-
-    private async Task EnvironmentRequestAsync(string method, object? parameters = null)
-    {
-        if (!_operations.Begin("environment-request")) return;
-        RefreshActionButtons();
-        try
-        {
-            var result = await RequestAsync(method, parameters ?? new { }, L("环境操作未完成。"));
-            if (result is not null) _environment = result.Value.Clone();
-        }
-        finally { _operations.EndRequest("environment-request"); RenderEnvironmentState(); }
-    }
-
-    private async Task PrepareEnvironmentAsync()
-    {
-        if (EnvironmentBusy || !Bool(_environment, "can_install")) return;
-        var plan = string.Join("\n", EnvironmentActions());
-        var selected = Array.Empty<string>();
-        var planId = Text(_environment, "plan_id");
-        var replace = false;
-        var message = plan + L("\n接入目标：") + (selected.Length == 0 ? L("只准备独立 CLI") : string.Join("、", selected)) +
-            L("\n独立安装目录：") + Text(_environment, "tools_dir") + "\n" +
-            (replace ? L("内容不同的接入文件将先备份再替换。") : L("已有个人修改将保留。")) + L("\n关闭或卸载 App 后，独立 CLI 仍可使用。");
-        if (!await ConfirmAsync(L("准备独立 CLI"), message, L("开始准备"))) return;
-        await EnvironmentRequestAsync("environment.install", new { confirm = true, targets = selected, plan_id = planId, replace_modified = replace });
-    }
-
-    private Task CopyEnvironmentTestAsync()
-    {
-        CopyText(L("请使用 Smart Search 技能，先运行以下命令并告诉我实际版本，不要仅检查文件，也先不要发起联网搜索：\n") +
-            Text(_environment, "invocation") + L(" --version\n如果技能没有出现，请重新打开 AI 再试。配置目录：") + Text(_environment, "config_dir"));
-        ShowNotice(L("已复制测试指引"), L("粘贴到所选 AI 中执行；App 的本机检查不代表 AI 已调用成功。"), InfoBarSeverity.Informational);
-        return Task.CompletedTask;
     }
 
     private void RenderCommandFields()
@@ -599,19 +611,6 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task LoadCliStatusAsync()
-    {
-        var result = await RequestAsync("cli.status", new { }, L("无法读取 CLI 状态。"));
-        if (result is null || _cliSummary is null)
-            return;
-        var externalProtocol = Text(result.Value, "external_activity_protocol_version", L("未返回"));
-        var observation = externalProtocol == "1" ? L("已接入实时活动") : L("尚未接入实时活动；升级后才能在活动页看到新的外部调用。");
-        _cliSummary.Text = L("内置：{0}（{1}）\n", Text(result.Value, "bundled_path", L("未返回")), Text(result.Value, "version", L("版本未知"))) +
-                           L("外部：{0}（{1}）\n", Text(result.Value, "external_path", L("未发现")), Text(result.Value, "external_version", L("版本未知"))) +
-                           L("外部 CLI：{0}\n", Text(result.Value, "external_status", L("观测能力未知"))) +
-                           L("活动观测：{0}（协议：{1}）", observation, externalProtocol);
-    }
-
     private async Task LoadSkillsAsync()
     {
         await SkillsRequestAsync("skills.catalog");
@@ -636,36 +635,6 @@ public sealed partial class MainWindow : Window
             .Select(item => Text(item, "label") + "\n" + Text(item, "path"));
         if (!await ConfirmAsync(L("更新所选 Skills"), L("来源版本：{0}\n{1}\n将同步所选目标的托管文件；不同内容先备份，额外文件保留。", Text(Property(_skills, "source"), "version"), string.Join("\n\n", paths)), L("备份并更新"))) return;
         await SkillsRequestAsync("skills.sync", new { targets, confirm = true, plan_id = planId });
-    }
-
-    private async Task CopyBundledCli()
-    {
-        var result = await RequestAsync("cli.status", new { }, L("无法读取内置 CLI 路径。"));
-        if (result is null)
-            return;
-        var path = Text(result.Value, "bundled_path");
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            ShowNotice(L("没有可复制的路径"), L("后端没有报告内置 CLI 路径。"), InfoBarSeverity.Warning);
-            return;
-        }
-        CopyText($"& \"{path}\" --help");
-        ShowNotice(L("已复制"), L("已复制不含密钥的 PowerShell 调用示例。"), InfoBarSeverity.Success);
-    }
-
-    private async Task EnableBundledCliAsync()
-    {
-        if (!await ConfirmAsync(L("启用 App 内置命令"), L("此操作会让当前用户显式启用 App 内置命令。若发现同名外部 CLI，后端会拒绝覆盖；App 不会静默修改 PATH。"), L("启用")))
-            return;
-        var result = await RequestAsync("cli.enable", new { confirm = true }, L("无法启用内置命令。"));
-        if (result is not null)
-        {
-            if (Bool(result.Value, "ok"))
-                ShowNotice(L("已启用"), Text(result.Value, "message", L("请重新打开终端。")), InfoBarSeverity.Success);
-            else
-                ShowNotice(L("未启用"), Text(result.Value, "error", L("后端拒绝了该操作，外部 CLI 未被覆盖。")), InfoBarSeverity.Warning);
-            await LoadCliStatusAsync();
-        }
     }
 
     private async Task SelectConfigDirectoryAsync()
@@ -695,14 +664,12 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private async Task CheckForUpdateAsync()
-    {
-        await Task.WhenAll(UpdateRequestAsync("cli.update-check"), CheckNativeAppAsync());
-    }
+    private Task CheckNativeAppAsync() => CheckNativeAppAsync(manual: true);
 
-    private async Task CheckNativeAppAsync()
+    private async Task CheckNativeAppAsync(bool manual)
     {
-        if (_appUpdater.Checking || _appUpdater.Downloading || _installingApp) return;
+        if (!_appUpdater.CanCheck || _installingApp) return;
+        _manualAppUpdateCheck = manual;
         SaveSetting("appUpdateLastAttempt", DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString());
         var check = _appUpdater.CheckAsync();
         RenderUpdateState();
@@ -710,21 +677,48 @@ public sealed partial class MainWindow : Window
         RenderUpdateState();
     }
 
-    private async Task CheckAppAutomaticallyAsync()
+    private async Task CheckAppAutomaticallyAsync(bool onLaunch = false)
     {
-        if (_shuttingDown || _state is null || !_appUpdater.Installed || !Bool(_updates, "auto_check", true)) return;
+        if (_shuttingDown || !_appUpdater.Installed || _appUpdater.Ready || !AppAutoCheck) return;
         var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-        if (!long.TryParse(ReadSetting("appUpdateLastAttempt"), out var last) || last > now || now - last >= 86400)
-            await CheckNativeAppAsync();
-        if (_shuttingDown || !Bool(_updates, "auto_check", true)) return;
-        if (_appUpdater.Available && !_appUpdater.Downloading && !_installingApp && !AppInstallBlocked &&
+        if (onLaunch || !long.TryParse(ReadSetting("appUpdateLastAttempt"), out var last) || last > now || now - last >= 86400)
+            await CheckNativeAppAsync(manual: false);
+        if (_shuttingDown || !AppAutoCheck) return;
+        if (_appUpdater.Available && !AppVersionSkipped && !_appUpdater.Downloading && !_installingApp && !AppInstallBlocked &&
             !_dialogOpen && _promptedAppVersion != _appUpdater.LatestVersion)
         {
             _promptedAppVersion = _appUpdater.LatestVersion;
             ShowMainWindow();
-            if (await ConfirmAsync(L("发现 App 新版本"), L("{0} → {1}。现在下载更新并重启，或稍后在设置中更新。", _appUpdater.CurrentVersion, _appUpdater.LatestVersion), L("现在更新"), L("稍后")))
+            var dialog = new ContentDialog
+            {
+                XamlRoot = DialogRoot,
+                RequestedTheme = ((FrameworkElement)Content).ActualTheme,
+                Title = L("发现 App 新版本"),
+                Content = L("{0} → {1}。现在下载更新并重启，或稍后在设置中更新。", _appUpdater.CurrentVersion, _appUpdater.LatestVersion),
+                PrimaryButtonText = L("现在更新"),
+                SecondaryButtonText = L("跳过此版本"),
+                CloseButtonText = L("稍后"),
+                DefaultButton = ContentDialogButton.Close
+            };
+            _dialogOpen = true;
+            ContentDialogResult choice;
+            try { choice = await dialog.ShowAsync(); }
+            finally { _dialogOpen = false; }
+            if (choice == ContentDialogResult.Secondary) await SkipAppUpdateAsync();
+            if (choice == ContentDialogResult.Primary)
                 await RunOperationAsync("updates-install", InstallUpdateAsync);
         }
+    }
+
+    private Task SkipAppUpdateAsync()
+    {
+        if (_appUpdater.Available && _appUpdater.CanCheck && SaveSetting("appSkippedVersion", _appUpdater.LatestVersion!))
+        {
+            _manualAppUpdateCheck = false;
+            _promptedAppVersion = _appUpdater.LatestVersion;
+            RenderUpdateState();
+        }
+        return Task.CompletedTask;
     }
 
     private async Task ShowMigrationAsync()
@@ -735,52 +729,53 @@ public sealed partial class MainWindow : Window
             (legacy is null ? "" : "\n\n" + L("检测到旧安装：{0}", legacy)), L("知道了"));
     }
 
-    private async Task UpdateRequestAsync(string method, object? parameters = null)
-    {
-        var result = await RequestAsync(method, parameters ?? new { }, L("更新操作未完成。"));
-        if (result is not null) { _updates = result.Value.Clone(); RenderUpdateState(); }
-    }
-
     private void RenderUpdateState()
     {
         if (_currentPage != "settings" || _appUpdateSummary is null) return;
-        var cli = Property(_updates, "cli");
-        var installed = Property(_updates, "installed_cli");
-        var cliUpdate = Property(_updates, "cli_update");
         _settingAutoUpdate = true;
-        if (_autoUpdateSwitch is not null) _autoUpdateSwitch.IsOn = Bool(_updates, "auto_check", true);
+        if (_autoUpdateSwitch is not null)
+        {
+            _autoUpdateSwitch.IsOn = AppAutoCheck;
+            _autoUpdateSwitch.IsEnabled = _appUpdater.Installed;
+        }
         _settingAutoUpdate = false;
-        _updateCheckSummary!.Text = _appUpdater.Checking || Bool(_updates, "checking") ? L("正在检查官方稳定版本…") :
-            Text(_updates, "error") is { Length: > 0 } error ? error : L("App 与独立 CLI 分别检查和更新。");
-        var appStatus = !_appUpdater.Installed ? L("此副本尚未通过新安装器安装；请先完成一次完整安装。") :
-            _appUpdater.Error.Length > 0 ? _appUpdater.Error : _appUpdater.Checking ? L("检查中…") :
-            _appUpdater.Available ? L("有新版可下载") : _appUpdater.CheckedAt is null ? L("尚未检查") : L("没有更高的可安装版本");
-        _appUpdateSummary.Text = L("App：{0} · 内置引擎：{1}\n", _appUpdater.CurrentVersion, Text(_state, "version", L("未知"))) +
-            L("可安装稳定版：{0} · {1}", _appUpdater.LatestVersion ?? L("尚未检查"), appStatus) +
-            (_appUpdater.CheckedAt is { } checkedAt ? "\n" + L("App 检查时间：{0}", checkedAt.ToLocalTime().ToString("g")) : "");
-        _cliUpdateSummary!.Text = L("实际版本：{0} · npm 稳定版：{1}\n", Text(installed, "external_version", L("未安装或未知")), Text(cli, "latest_version", L("尚未检查"))) +
-            L("来源：{0}\n生效路径：{1}\n入口：{2}\n{3}", Text(installed, "manager_label", L("未确认")), Text(installed, "resolved_path", Text(installed, "external_path", L("未发现"))), Text(installed, "external_path", L("未发现")), Text(installed, "update_note"));
-        var cliStatus = Bool(cli, "cached") ? L("历史检查结果，请重新检查更新。") : Text(cli, "error") is { Length: > 0 } cliError ? cliError :
-            Bool(cli, "runtime_needs_repair") ? L("CLI 版本已是最新，但运行环境尚未就绪；点击“更新 CLI”完成准备。") : "";
-        if (cliStatus.Length > 0) _cliUpdateSummary.Text += "\n" + cliStatus;
-        _downloadSummary!.Text = _appUpdater.Downloading ? L("正在下载更新：{0}%", _appUpdater.Progress) :
-            _appUpdater.Ready ? L("更新已下载并校验，等待安全重启。") : _appUpdater.Error;
+        _appUpdateSummary.Text = AppUpdateStatus();
+        _appVersionValue!.Text = _appUpdater.CurrentVersion;
+        _appLatestVersionValue!.Text = _appUpdater.LatestVersion ?? (_appUpdater.CheckedAt is null ? L("尚未检查") : _appUpdater.CurrentVersion);
+        _appCheckedAtValue!.Text = _appUpdater.CheckedAt?.ToLocalTime().ToString("g") ?? L("尚未检查");
+        _appUpdateRecheck!.Visibility = AppUpdateOffered && _appUpdater.CanCheck ? Visibility.Visible : Visibility.Collapsed;
+        _appUpdateSkip!.Visibility = AppUpdateOffered && _appUpdater.CanCheck ? Visibility.Visible : Visibility.Collapsed;
+        _appUpdateCancel!.Visibility = _appUpdater.Downloading ? Visibility.Visible : Visibility.Collapsed;
+        _appUpdateMigration!.Visibility = _appUpdater.Installed ? Visibility.Collapsed : Visibility.Visible;
+        if (AppVersionSkipped && !_manualAppUpdateCheck)
+            _appUpdateDetail!.Text = L("此版本不再自动提醒。手动检查仍可查看并安装。");
+        else if (AppUpdateOffered && AppInstallBlocked)
+            _appUpdateDetail!.Text = L("请先处理正在进行的任务或未保存修改，再点击更新重启。");
+        else
+            _appUpdateDetail!.Text = L("在 App 内完成下载和安装，重启后生效。配置、独立 CLI 和 Skills 保留。");
         _downloadProgress!.Visibility = _appUpdater.Downloading ? Visibility.Visible : Visibility.Collapsed;
         _downloadProgress.Value = _appUpdater.Progress;
-        _cliUpdateLog!.Text = Text(cli, "command") + "\n" + Text(cliUpdate, "log") + "\n" + Text(cliUpdate, "error");
-        if (Text(cliUpdate, "status") == "running") _cliUpdateSummary.Text += L("\n正在更新，请保持 App 打开。");
-        if (Text(cliUpdate, "status") == "finished") _cliUpdateSummary.Text += L("\n已更新并验证实际版本。");
-        if (Text(cliUpdate, "status") == "failed") _cliUpdateSummary.Text += L("\n更新未完成，请查看日志。");
         RefreshActionButtons();
     }
 
-    private async Task UpdateCliAsync()
+    private string AppUpdateStatus()
     {
-        if (EnvironmentBusy) return;
-        var version = Text(Property(_updates, "cli"), "latest_version");
-        var installed = Property(_updates, "installed_cli");
-        if (!await ConfirmAsync(L("更新独立 CLI"), L("来源：{0}\n生效路径：{1}\n{2} → {3}\n\n只更新 Smart Search。请先结束其他终端中的 CLI 调用；更新期间请保持 App 打开。", Text(installed, "manager_label"), Text(installed, "resolved_path", Text(installed, "external_path")), Text(installed, "external_version"), version), L("更新 CLI"))) return;
-        await UpdateRequestAsync("cli.update", new { confirm = true, version });
+        if (!_appUpdater.Installed) return L("此副本尚未配置自动更新，请安装正式版。");
+        if (_appUpdater.Checking) return L("正在检查 App 更新…");
+        if (_appUpdater.Downloading) return L("正在下载更新：{0}%", _appUpdater.Progress);
+        if (_appUpdater.Ready) return L("更新已就绪");
+        if (_appUpdater.Error.Length > 0) return _appUpdater.Error;
+        if (AppVersionSkipped && !_manualAppUpdateCheck) return L("已跳过版本 {0}", _appUpdater.LatestVersion);
+        if (AppUpdateOffered) return L("发现新版本 {0}", _appUpdater.LatestVersion);
+        return _appUpdater.CheckedAt is null ? L("尚未检查") : L("暂无可安装的更新");
+    }
+
+    private string AppUpdateActionTitle()
+    {
+        if (_appUpdater.Ready) return L("重启并完成更新");
+        if (AppUpdateOffered) return L("更新到 {0}", _appUpdater.LatestVersion);
+        if (_appUpdater.Error.Length > 0) return L("重新检查");
+        return L("检查更新");
     }
 
     private async Task InstallUpdateAsync()
@@ -810,10 +805,15 @@ public sealed partial class MainWindow : Window
         }
         _installingApp = true;
         RefreshActionButtons();
-        var ready = await RequestAsync("app.update-prepare", new { }, L("暂不能安装"));
-        if (ready is null) { _installingApp = false; RefreshActionButtons(); return; }
+        if (_backend.IsConnected)
+        {
+            var ready = await RequestAsync("app.update-prepare", new { }, L("暂不能安装"));
+            if (ready is null) { _installingApp = false; RefreshActionButtons(); return; }
+        }
         _shuttingDown = true;
         _activityTimer.Stop();
+        _appUpdateTimer.Stop();
+        _cliUpdateTimer.Stop();
         try
         {
             if (_providerDraft.Count > 0) throw new InvalidOperationException(L("请先处理正在进行的任务或未保存修改，再点击更新重启。"));
@@ -826,6 +826,8 @@ public sealed partial class MainWindow : Window
             App.RestoreInstallerMutex();
             _shuttingDown = false;
             _installingApp = false;
+            _appUpdateTimer.Start();
+            _cliUpdateTimer.Start();
             await ConnectAsync();
             ShowNotice(L("更新未完成"), L("已恢复 App 连接，请重新检查更新。"), InfoBarSeverity.Error);
         }
@@ -864,7 +866,7 @@ public sealed partial class MainWindow : Window
                     snapshot["cli"] = Property(_environment, "cli").Clone();
                     _state = JsonSerializer.SerializeToElement(snapshot);
                 }
-                RenderEnvironmentState();
+                RefreshActionButtons();
             }
             if (backendEvent.Name == "updates")
             {
@@ -925,7 +927,7 @@ public sealed partial class MainWindow : Window
     private void OnBackendDisconnected(object? sender, string message) =>
         DispatcherQueue.TryEnqueue(() =>
         {
-            if (_shuttingDown) return;
+            if (_shuttingDown || _managingCLI || _connecting) return;
             _connectionFailed = true;
             _activityTimer.Stop();
             _operations.Clear();
@@ -1085,6 +1087,11 @@ public sealed partial class MainWindow : Window
 
     private async Task RequestCloseAsync()
     {
+        if (_managingCLI)
+        {
+            ShowNotice(L("CLI 操作进行中"), L("请保持 App 打开，等待 CLI 操作完成。"), InfoBarSeverity.Warning);
+            return;
+        }
         if (_shuttingDown || _installingApp || _dialogOpen)
             return;
         if (_appUpdater.Downloading)
@@ -1157,6 +1164,8 @@ public sealed partial class MainWindow : Window
             return;
         _shuttingDown = true;
         _activityTimer.Stop();
+        _appUpdateTimer.Stop();
+        _cliUpdateTimer.Stop();
         _tray.Hide();
         await _backend.DisposeAsync();
         _tray.Dispose();
@@ -1307,7 +1316,8 @@ public sealed partial class MainWindow : Window
         var key = binding.Key();
         var downloading = _appUpdater.Downloading;
         var updatingCli = Text(Property(_updates, "cli_update"), "status") == "running";
-        var busy = _operations.IsBusy(key) || key == "updates-check" && (Bool(_updates, "checking") || _appUpdater.Checking) ||
+        var busy = _operations.IsBusy(key) || key == "updates-check" && _appUpdater.Checking ||
+            key == "updates-cli-check" && Bool(_updates, "checking") ||
             key == "skills-check" && Bool(_skills, "checking") || key == "skills-install" && Bool(_skills, "busy") ||
             key == "updates-install" && downloading || key == "updates-cli" && updatingCli ||
             Bool(_environment, "busy") && key == "environment-" + Text(_environment, "operation");
@@ -1320,12 +1330,13 @@ public sealed partial class MainWindow : Window
             "skills-install" => _state is not null && Bool(_skills, "can_sync") && !Bool(_skills, "checking") && !EnvironmentBusy && !updatingCli && SkillTargetsToUpdate().Length > 0,
             "skills-check" or "skills-status" => _state is not null && !Bool(_skills, "busy") && !Bool(_skills, "checking") && !EnvironmentBusy && !updatingCli,
             "environment-check" or "environment-verify" => _state is not null && !EnvironmentBusy && !updatingCli,
-            "environment-install" => _state is not null && !EnvironmentBusy && !updatingCli && Bool(_environment, "can_install") && Text(_environment, "plan_id").Length > 0 && EnvironmentActions().Count > 0,
             "environment-cancel" => Bool(_environment, "can_cancel"),
             "environment-copy" => Text(_environment, "invocation").Length > 0,
-            "updates-check" => !downloading && !_appUpdater.Checking,
+            "updates-check" => _appUpdater.CanCheck,
+            "updates-cli-check" => _backend.IsConnected && !Bool(_updates, "checking") && !updatingCli,
             "updates-cancel" => downloading,
-            "updates-install" => _appUpdater.Available && !AppInstallBlocked,
+            "updates-install" => AppUpdateOffered && !AppInstallBlocked,
+            "updates-skip" => AppUpdateOffered && _appUpdater.CanCheck,
             "updates-cli" => Bool(Property(_updates, "installed_cli"), "can_update") && Bool(Property(_updates, "cli"), "available") && !Bool(_updates, "checking") && Text(Property(_updates, "cli"), "error").Length == 0,
             "updates-copy" => Text(Property(_updates, "cli"), "command").Length > 0,
             _ => true
@@ -1389,7 +1400,7 @@ public sealed partial class MainWindow : Window
         if (isLocked)
             return new TextBox { Text = secret ? (HasSavedSecret(field) ? "••••••••" : L("未设置")) : value, IsReadOnly = true, TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas") };
         if (secret)
-            return new PasswordBox { PlaceholderText = L("留空将保留当前密钥"), IsEnabled = true };
+            return new PasswordBox { PlaceholderText = ConfigurationPlaceholder(field), IsEnabled = true };
         if (Text(field, "kind").Equals("bool", StringComparison.OrdinalIgnoreCase))
             return new ToggleSwitch { IsOn = value.Equals("true", StringComparison.OrdinalIgnoreCase) || value.Equals(L("是"), StringComparison.OrdinalIgnoreCase) };
         var choices = Items(field, "choices").Where(choice => choice.ValueKind == JsonValueKind.String).Select(choice => choice.GetString()!).ToList();
@@ -1401,7 +1412,7 @@ public sealed partial class MainWindow : Window
             combo.SelectedItem = combo.Items.OfType<ConfigurationChoice>().FirstOrDefault(choice => choice.Value.Equals(value, StringComparison.OrdinalIgnoreCase)) ?? combo.Items.FirstOrDefault();
             return combo;
         }
-        return new TextBox { Text = value, PlaceholderText = Text(field, "placeholder", Text(field, "default")), TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas") };
+        return new TextBox { Text = value, PlaceholderText = ConfigurationPlaceholder(field), TextWrapping = TextWrapping.Wrap, FontFamily = new FontFamily("Consolas") };
     }
 
     private Control CreateCommandInput(JsonElement field)

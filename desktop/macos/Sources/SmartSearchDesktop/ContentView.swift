@@ -10,6 +10,7 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject var model: AppModel
     @State private var configurationSelection: ConfigurationRoute?
+    @State private var configurationSearch = ""
     @State private var showingFeedback = false
 
     private var hasFeedback: Bool { model.errorMessage != nil || model.noticeMessage != nil }
@@ -119,11 +120,21 @@ struct ContentView: View {
         }
     }
 
+    private func configureProviders(for capability: String?) {
+        configurationSearch = capability.map(capabilityName) ?? ""
+        if let capability, let state = model.state {
+            let candidates = state.providerGroups.filter { $0.capabilities.contains(capability) }.map(\.id)
+            let preferred = state.capabilityChains[capability, default: []].first { candidates.contains($0) }
+            configurationSelection = (preferred ?? candidates.sorted().first).map(ConfigurationRoute.provider)
+        }
+        model.selectedDestination = .providers
+    }
+
     @ViewBuilder
     private var destinationView: some View {
         switch model.selectedDestination {
-        case .overview: OverviewView(model: model)
-        case .providers: ProvidersView(model: model, selection: $configurationSelection)
+        case .overview: OverviewView(model: model, configureProviders: configureProviders)
+        case .providers: ProvidersView(model: model, selection: $configurationSelection, filter: $configurationSearch)
         case .search: SearchResearchView(model: model)
         case .activity: ActivityView(model: model)
         case .integration: IntegrationView(model: model)
@@ -223,98 +234,89 @@ private struct ConnectionIndicator: View {
 
 private struct BackendUnavailableView: View {
     @ObservedObject var model: AppModel
-
     var body: some View {
         VStack(spacing: 16) {
-            if model.connection == .connecting {
-                ProgressView().controlSize(.large)
-            } else {
-                Image(systemName: "bolt.horizontal.circle")
-                    .font(.system(size: 42))
-                    .foregroundStyle(.secondary)
-            }
-            Text(model.connection == .failed ? L("后端目前不可用") : L("正在连接本机后端"))
-                .font(.title2.weight(.semibold))
-            Text(L("连接后会读取当前配置、工具目录和活动记录。"))
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            if model.connection != .connecting {
-                Button(L("重新连接")) { Task { await model.reconnect() } }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.isBusy.contains("connect"))
-            }
+            if model.connection == .connecting { ProgressView().controlSize(.large) }
+            CLIManagementView(model: model)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(40)
+        .padding(DesktopMetrics.pagePadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 }
 
 private struct OverviewView: View {
     @ObservedObject var model: AppModel
+    let configureProviders: (String?) -> Void
     @State private var showingDetails = false
+    @State private var showingMoreCapabilities = false
 
     var body: some View {
-        if let state = model.state {
-            DesktopPage(L("概览"), subtitle: L("配置、运行与结果，都在这台电脑上管理。")) {
+        DesktopPage(L("概览"), subtitle: L("配置、运行与结果，都在这台电脑上管理。")) {
+            VStack(alignment: .leading, spacing: 16) {
+                CLIManagementView(model: model, firstStep: true)
                 DesktopPanel {
-                    HStack(spacing: 12) {
-                        Image(systemName: state.minimumProfileOK == true ? "checkmark.circle" : "slider.horizontal.3")
-                            .font(.system(size: 23, weight: .semibold))
-                            .foregroundStyle(state.minimumProfileOK == true ? Color.green : Color.accentColor)
-                            .frame(width: 52, height: 52)
-                            .background((state.minimumProfileOK == true ? Color.green : Color.accentColor).opacity(0.14), in: Circle())
-                            .accessibilityHidden(true)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(readinessTitle(state)).font(.title3.weight(.semibold))
-                            Text(readinessDetail(state)).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
+                    DesktopStepHeader(title: L("2. 配置服务商"), subtitle: providerSummary) {
+                        Button(L("配置服务商")) { configureProviders(nil) }
+                            .disabled(model.state == nil)
+                        if model.state?.minimumProfileOK == true {
+                            Button(L("开始搜索")) { model.selectedDestination = .search }
+                                .buttonStyle(.borderedProminent)
                         }
-                        Spacer(minLength: 16)
-                        Button(state.minimumProfileOK == true ? L("开始搜索") : L("去配置")) {
-                            model.selectedDestination = state.minimumProfileOK == true ? .search : .providers
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .fixedSize()
                     }
-                    Text(L("配置齐全表示可以发起请求；连接是否正常，以你主动测试的结果为准。"))
-                        .font(.caption).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-
-                if let details = state.capabilityStatus?.objectValue, !details.isEmpty {
-                    let primary = ["main_search", "docs_search", "web_fetch"].filter { details[$0] != nil }
-                    let additional = details.keys.filter { !primary.contains($0) }.sorted()
-                    GroupBox(L("当前能力")) {
-                        ForEach(primary, id: \.self) { key in
-                            CapabilityStatusRow(capability: key, status: details[key] ?? .object([:]))
-                            if key != primary.last { Divider() }
+                    if let details = model.state?.capabilityStatus?.objectValue, !details.isEmpty {
+                        let primary = ["main_search", "docs_search", "web_fetch"].filter { details[$0] != nil }
+                        let additional = details.keys.filter { !primary.contains($0) }.sorted()
+                        Divider()
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(primary, id: \.self) { key in
+                                CapabilityStatusRow(capability: key, status: details[key] ?? .object([:])) {
+                                    configureProviders(key)
+                                }
+                                if key != primary.last { Divider() }
+                            }
                         }
-                        if !additional.isEmpty {
-                            DisclosureGroup(L("更多能力")) {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    ForEach(additional, id: \.self) { key in
-                                        CapabilityStatusRow(capability: key, status: details[key] ?? .object([:]))
+                        HStack(spacing: 16) {
+                            if !additional.isEmpty {
+                                Button {
+                                    showingMoreCapabilities.toggle()
+                                } label: {
+                                    HStack(spacing: 6) {
+                                        Text(L("更多能力"))
+                                        Image(systemName: showingMoreCapabilities ? "chevron.up" : "chevron.down")
+                                            .font(.caption)
                                     }
                                 }
-                                .padding(.top, 12)
+                                .buttonStyle(.plain)
+                                .accessibilityValue(showingMoreCapabilities ? L("已展开") : L("已收起"))
+                            }
+                            Spacer(minLength: 0)
+                            Button(L("配置详情…")) { showingDetails = true }
+                                .fixedSize()
+                        }
+                        if showingMoreCapabilities {
+                            ForEach(additional, id: \.self) { key in
+                                Divider()
+                                CapabilityStatusRow(capability: key, status: details[key] ?? .object([:])) {
+                                    configureProviders(key)
+                                }
                             }
                         }
                     }
                 }
-
-                HStack {
-                    Text(L("管理连接信息和检索服务。"))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button(L("配置服务商")) { model.selectedDestination = .providers }
-                    Button(L("配置详情…")) { showingDetails = true }
+                DesktopPanel {
+                    DesktopStepHeader(title: L("3. 接入 Skills"), subtitle: L("添加 Skills，让 Agent 使用搜索。")) {
+                        Button(L("管理 Skills")) { model.selectedDestination = .integration }
+                            .disabled(model.state == nil)
+                    }
                 }
             }
-            .sheet(isPresented: $showingDetails) {
+        }
+        .sheet(isPresented: $showingDetails) {
+            if let state = model.state {
                 DetailSheet(L("配置与路由详情")) {
                     KeyValueLine(label: L("配置文件"), value: state.configPath ?? L("后端未提供"))
                     KeyValueLine(label: L("配置目录"), value: state.configDirectory ?? L("后端未提供"))
-                    KeyValueLine(label: L("内置引擎"), value: state.version ?? L("后端未提供"))
+                    KeyValueLine(label: L("CLI 版本"), value: state.version ?? L("后端未提供"))
                     KeyValueLine(label: L("协议 generation"), value: state.generation ?? L("后端未提供"))
                     KeyValueLine(label: L("最后读取"), value: model.lastStateRefresh?.formatted(date: .abbreviated, time: .standard) ?? L("尚未读取"))
                     ForEach(state.capabilityChains.keys.sorted(), id: \.self) { key in
@@ -326,24 +328,14 @@ private struct OverviewView: View {
                     }
                 }
             }
-        } else {
-            BackendUnavailableView(model: model)
         }
     }
 
-    private func readinessDetail(_ state: DesktopState) -> String {
-        if state.minimumProfileOK == true { return L("主搜索、文档检索和网页抓取已满足使用条件。") }
-        if state.minimumProfileOK == nil { return L("后端尚未报告基础配置状态。") }
-        if state.minimumMissing.isEmpty { return L("后端未列出缺失能力。请在服务商页查看当前字段。") }
-        return L("还需要配置：{0}。每类任选一个服务商即可。", state.minimumMissing.map(capabilityName).joined(separator: "、"))
-    }
-
-    private func readinessTitle(_ state: DesktopState) -> String {
-        switch state.minimumProfileOK {
-        case true: return L("可以开始搜索了")
-        case false: return L("先完成基础配置")
-        case nil: return L("查看配置状态")
-        }
+    private var providerSummary: String {
+        guard let state = model.state else { return L("选择搜索服务，填写 API Key。") }
+        if state.minimumProfileOK == true { return L("基础配置已完成，可以开始搜索。") }
+        if state.minimumMissing.isEmpty { return L("选择搜索服务，填写 API Key。") }
+        return L("待配置：{0}", state.minimumMissing.map(capabilityName).joined(separator: "、"))
     }
 }
 
@@ -357,7 +349,7 @@ private enum ConfigurationRoute: Hashable {
 private struct ProvidersView: View {
     @ObservedObject var model: AppModel
     @Binding var selection: ConfigurationRoute?
-    @State private var filter = ""
+    @Binding var filter: String
 
     var body: some View {
         if let state = model.state {
@@ -370,7 +362,7 @@ private struct ProvidersView: View {
                             .padding([.horizontal, .top], DesktopMetrics.pagePadding)
                             .padding(.bottom, 12)
                         List(selection: $selection) {
-                            if let field = state.fields.first(where: { $0.key == "SMART_SEARCH_INTENT_ROUTER" }) {
+                            if matches(L("意图路由")), let field = state.fields.first(where: { $0.key == "SMART_SEARCH_INTENT_ROUTER" }) {
                                 navigationRow(L("意图路由"), subtitle: configurationChoiceLabel(
                                     model.configDraft[field.key] ?? state.effectiveValue(for: field), for: field))
                                     .tag(ConfigurationRoute.section("routing"))
@@ -385,19 +377,21 @@ private struct ProvidersView: View {
                                     }
                                 }
                             }
-                            Section(L("高级配置")) {
-                                if !researchSourceFields(state).isEmpty && matches(L("研究数据源")) {
-                                    Text(L("研究数据源")).padding(.vertical, 5)
-                                        .tag(ConfigurationRoute.researchSources)
-                                }
-                                ForEach(advancedSectionIDs(state), id: \.self) { id in
-                                    Text(state.sections.first { $0.id == id }?.label ?? id)
-                                        .padding(.vertical, 5)
-                                        .tag(ConfigurationRoute.section(id))
-                                }
-                                if matches(L("冷却与路由详情")) {
-                                    Text(L("冷却与路由详情")).padding(.vertical, 5)
-                                        .tag(ConfigurationRoute.routing)
+                            if hasAdvancedEntries(state) {
+                                Section(L("高级配置")) {
+                                    if !researchSourceFields(state).isEmpty && matches(L("研究数据源")) {
+                                        Text(L("研究数据源")).padding(.vertical, 5)
+                                            .tag(ConfigurationRoute.researchSources)
+                                    }
+                                    ForEach(advancedSectionIDs(state), id: \.self) { id in
+                                        Text(state.sections.first { $0.id == id }?.label ?? id)
+                                            .padding(.vertical, 5)
+                                            .tag(ConfigurationRoute.section(id))
+                                    }
+                                    if matches(L("冷却与路由详情")) {
+                                        Text(L("冷却与路由详情")).padding(.vertical, 5)
+                                            .tag(ConfigurationRoute.routing)
+                                    }
                                 }
                             }
                         }
@@ -508,6 +502,11 @@ private struct ProvidersView: View {
         state.fields.filter { $0.section == "routing" && $0.key.hasPrefix("SMART_SEARCH_RESEARCH_") }
     }
 
+    private func hasAdvancedEntries(_ state: DesktopState) -> Bool {
+        (!researchSourceFields(state).isEmpty && matches(L("研究数据源")))
+            || !advancedSectionIDs(state).isEmpty || matches(L("冷却与路由详情"))
+    }
+
     private func groups(_ state: DesktopState) -> [ProviderFieldGroup] {
         state.providerGroups
             .filter { group in
@@ -527,7 +526,8 @@ private struct ProvidersView: View {
     }
 
     private func matches(_ text: String) -> Bool {
-        filter.isEmpty || text.localizedCaseInsensitiveContains(filter)
+        let query = filter.trimmingCharacters(in: .whitespacesAndNewlines)
+        return query.isEmpty || text.localizedCaseInsensitiveContains(query)
     }
 }
 
@@ -719,7 +719,7 @@ private func orderedSectionIDs(state: DesktopState, present: Set<String>) -> [St
 
 /// A button label that turns into a spinner while its operation runs. Without it
 /// a 20-second probe looks identical to a click that did nothing.
-private struct BusyLabel: View {
+struct BusyLabel: View {
     let text: String
     let busyText: String
     let busy: Bool
@@ -764,64 +764,47 @@ private struct ConfigPreviewView: View {
 private struct CapabilityStatusRow: View {
     let capability: String
     let status: JSONValue
+    let configure: () -> Void
 
     private var configuredProviders: [String] {
         status["configured"]?.arrayValue?.map(\.displayString).filter { !$0.isEmpty } ?? []
     }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(capabilityTitle).fontWeight(.medium)
-                Text(configuredProviders.isEmpty ? L("没有已配置的服务商") : L("已配置：{0}", "\(configuredProviders.joined(separator: "、"))"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Text(capabilityName(capability)).fontWeight(.medium)
+                    if status["experimental"]?.boolValue == true {
+                        Text(L("实验性")).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                Text(configuredProviders.isEmpty ? L("没有已配置的服务商") : configuredProviders.joined(separator: " · "))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
-            Label {
-                Text(configurationLabel).font(.callout)
-            } icon: {
-                Image(systemName: configurationSymbol).foregroundStyle(configurationColor)
+            Spacer(minLength: 8)
+            if status["ok"]?.boolValue == false {
+                Button(action: configure) {
+                    HStack(spacing: 4) {
+                        Text(configurationLabel)
+                        Image(systemName: "chevron.right").font(.caption)
+                    }
+                }
+                .buttonStyle(.plain).foregroundStyle(Color.accentColor).fixedSize()
+                .accessibilityLabel(L("配置{0}", capabilityName(capability)))
+                .accessibilityValue(configurationLabel)
+            } else {
+                Text(configurationLabel).font(.callout).foregroundStyle(.secondary).fixedSize()
             }
-            if status["experimental"]?.boolValue == true {
-                Text(L("实验性")).font(.caption).foregroundStyle(.orange)
-            }
-        }
-        .padding(.vertical, 3)
-    }
-
-    private var capabilityTitle: String {
-        switch capability {
-        case "main_search": return L("主搜索")
-        case "web_search": return L("网页搜索")
-        case "docs_search": return L("文档检索")
-        case "web_fetch": return L("网页抓取")
-        case "vertical_search": return L("垂直检索")
-        default: return capability
         }
     }
 
     private var configurationLabel: String {
         switch status["ok"]?.boolValue {
-        case .some(true): return L("配置条件已满足")
-        case .some(false): return L("缺少配置")
+        case .some(true): return L("已配置")
+        case .some(false): return configuredProviders.isEmpty ? L("未配置") : L("需要调整")
         case nil: return L("状态未报告")
-        }
-    }
-
-    private var configurationSymbol: String {
-        switch status["ok"]?.boolValue {
-        case .some(true): return "checkmark.circle"
-        case .some(false): return "exclamationmark.circle"
-        case nil: return "questionmark.circle"
-        }
-    }
-
-    private var configurationColor: Color {
-        switch status["ok"]?.boolValue {
-        case .some(true): return .green
-        case .some(false): return .orange
-        case nil: return .secondary
         }
     }
 }
@@ -1072,8 +1055,9 @@ private struct ConfigFieldEditor: View {
                     .textSelection(.enabled)
             } else if field.isSecret {
                 HStack {
-                    SecureField(field.label, text: model.draftBinding(for: field), prompt: Text(L("输入 API Key")))
+                    SecureField(field.label, text: model.draftBinding(for: field), prompt: Text(field.inputPlaceholder))
                         .accessibilityLabel(field.label)
+                        .help(field.inputPlaceholder)
                     if model.clearSecretKeys.contains(field.key) {
                         Button(L("保留")) { model.keepSecret(field) }
                     } else {
@@ -1097,8 +1081,9 @@ private struct ConfigFieldEditor: View {
                     set: { model.setDraft($0 ? "true" : "false", for: field) }))
                     .labelsHidden()
             } else {
-                TextField(field.label, text: model.draftBinding(for: field), prompt: Text(field.placeholder))
+                TextField(field.label, text: model.draftBinding(for: field), prompt: Text(field.inputPlaceholder))
                     .accessibilityLabel(field.label)
+                    .help(field.inputPlaceholder)
             }
 
             if let keyURL = field.keyURL, let url = URL(string: keyURL) {
@@ -1569,85 +1554,11 @@ private struct StatusTag: View {
     }
 }
 
-private struct EnvironmentSetupView: View {
-    @ObservedObject var model: AppModel
-    private var environment: JSONValue { model.environmentState ?? .object([:]) }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            GroupBox(L("准备独立 CLI")) {
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(environment["message"]?.displayString ?? L("先检测环境，再安装缺少的组件。"))
-                        .textSelection(.enabled)
-                    if model.environmentBusy, let total = environment["total"]?.numberValue, total > 0 {
-                        ProgressView(value: environment["received"]?.numberValue ?? 0, total: total)
-                    }
-                    ForEach(environment["steps"]?.arrayValue ?? [], id: \.self) { step in
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text(step["name"]?.displayString ?? "").font(.headline)
-                                Spacer()
-                                Text(step["status_label"]?.displayString ?? L("待处理"))
-                                    .font(.caption).foregroundStyle(.secondary)
-                            }
-                            Text(step["message"]?.displayString ?? "").foregroundStyle(.secondary)
-                        }
-                    }
-                    if environment["plan_id"]?.stringValue?.isEmpty == false {
-                        Text(model.environmentActions.isEmpty ? L("独立 CLI 已就绪。可返回上方检查并更新 Skills。") :
-                            L("本次将执行：\n") + model.environmentActions.map { "• " + $0 }.joined(separator: "\n"))
-                    } else { Text(L("检测后会在这里列出将要安装或配置的内容。")).foregroundStyle(.secondary) }
-                    HStack {
-                        Button { Task { await model.environmentAction("environment.check") } } label: {
-                            BusyLabel(text: L("检测环境"), busyText: L("检测中…"), busy: model.environmentBusy && environment["operation"]?.stringValue == "check")
-                        }
-                            .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI)
-                        Button { Task { await model.prepareEnvironment() } } label: {
-                            BusyLabel(text: model.environmentActionLabel, busyText: L("准备中…"), busy: model.environmentBusy && environment["operation"]?.stringValue == "install")
-                        }
-                            .buttonStyle(.borderedProminent)
-                            .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.environmentActions.isEmpty || environment["can_install"]?.boolValue != true || environment["plan_id"]?.stringValue?.isEmpty != false)
-                        Button { Task { await model.environmentAction("environment.verify") } } label: {
-                            BusyLabel(text: L("验证可用性"), busyText: L("验证中…"), busy: model.environmentBusy && environment["operation"]?.stringValue == "verify")
-                        }
-                            .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI)
-                        if environment["can_cancel"]?.boolValue == true {
-                            Button(L("取消下载")) { Task { await model.environmentAction("environment.cancel") } }
-                        }
-                    }
-                    HStack {
-                        Button(L("去配置服务商")) { model.selectedDestination = .providers }
-                        Button(L("复制 AI 测试指引"), action: model.copyEnvironmentTest)
-                            .disabled(environment["invocation"]?.stringValue?.isEmpty != false)
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }
-            DisclosureGroup(L("安装位置与检查详情")) {
-                VStack(alignment: .leading, spacing: 8) {
-                    KeyValueLine(label: L("独立安装目录"), value: environment["tools_dir"]?.displayString ?? L("检测后显示"))
-                    if let checked = environment["checked_at"]?.numberValue, checked > 0 {
-                        KeyValueLine(label: L("检查时间"), value: Date(timeIntervalSince1970: checked).formatted())
-                    }
-                    KeyValueLine(label: "Node", value: environment["node"]?["path"]?.displayString ?? "")
-                    KeyValueLine(label: "Python", value: environment["python"]?["path"]?.displayString ?? "")
-                    KeyValueLine(label: L("独立调用"), value: environment["invocation"]?.displayString ?? "")
-                    KeyValueLine(label: L("配置目录"), value: environment["config_dir"]?.displayString ?? "")
-                    Text(L("缺失的 Python 使用 Astral CPython；App 只负责管理，独立 CLI 不依赖 App。"))
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text(environment["log"]?.displayString ?? "").font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-                    Text(environment["error"]?.displayString ?? "").foregroundStyle(.red)
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 8)
-            }
-        }.disabled(model.connection != .ready)
-    }
-}
-
 private enum SkillsSheet: Identifiable {
-    case preferences, environment, files(JSONValue)
+    case preferences, files(JSONValue)
     var id: String {
         switch self {
         case .preferences: return "preferences"
-        case .environment: return "environment"
         case .files(let target): return target["target"]?.stringValue ?? "files"
         }
     }
@@ -1666,12 +1577,12 @@ private struct IntegrationView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(L("技能来源")).font(.headline)
-                            Text(skills["source"]?["version"]?.stringValue.map { "npm " + $0 } ?? L("尚未检查"))
+                            Text(skills["source"]?["version"]?.stringValue.map { "CLI " + $0 } ?? L("尚未检查"))
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
                         Button { Task { await model.skillsAction("skills.check") } } label: {
-                            BusyLabel(text: L("检查最新 Skills"), busyText: L("检查中…"), busy: model.skillsChecking)
+                            BusyLabel(text: L("刷新 CLI 提供的 Skills"), busyText: L("检查中…"), busy: model.skillsChecking)
                         }.disabled(unavailable)
                         Button { sheet = .preferences } label: { Image(systemName: "gearshape") }
                             .help(L("检查偏好"))
@@ -1692,7 +1603,7 @@ private struct IntegrationView: View {
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Button(L("管理运行环境…")) { sheet = .environment }
+                        Button(L("管理 CLI…")) { model.selectedDestination = .settings }
                     }
                 }
                 VStack(alignment: .leading, spacing: 8) {
@@ -1700,36 +1611,45 @@ private struct IntegrationView: View {
                     Text(L("状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。"))
                         .font(.callout).foregroundStyle(.secondary)
                 }
-                DesktopPanel {
-                    VStack(spacing: 0) {
-                        ForEach(skills["targets"]?.arrayValue ?? [], id: \.self) { target in
-                            let id = target["target"]?.stringValue ?? ""
-                            let name = target["label"]?.displayString ?? id
-                            HStack(spacing: 12) {
-                                VStack(alignment: .leading, spacing: 5) {
-                                    Text(name).font(.body.weight(.medium))
-                                    Text(skillStatus(target)).font(.caption).foregroundStyle(.secondary)
-                                    if let error = target["error"]?.stringValue, !error.isEmpty {
-                                        Text(error).font(.caption).foregroundStyle(.red)
-                                    }
+                VStack(spacing: 0) {
+                    ForEach(skills["targets"]?.arrayValue ?? [], id: \.self) { target in
+                        let id = target["target"]?.stringValue ?? ""
+                        let name = target["label"]?.displayString ?? id
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(name).font(.body.weight(.medium))
+                                Text(skillStatus(target)).font(.caption).foregroundStyle(.secondary)
+                                if let error = target["error"]?.stringValue, !error.isEmpty {
+                                    Text(error).font(.caption).foregroundStyle(.red)
                                 }
-                                Spacer()
-                                Button { sheet = .files(target) } label: { Image(systemName: "info.circle") }
-                                    .buttonStyle(.borderless).help(L("查看 {0} 的文件详情", name))
-                                Toggle(name, isOn: Binding(
-                                    get: { model.selectedSkillTargets.contains(id) },
-                                    set: { if $0 { model.selectedSkillTargets.insert(id) } else { model.selectedSkillTargets.remove(id) } }))
-                                    .labelsHidden().disabled(model.skillsBusy)
-                            }.padding(.vertical, 14)
-                            if target != skills["targets"]?.arrayValue?.last { Divider() }
-                        }
+                            }
+                            Spacer()
+                            Button { sheet = .files(target) } label: { Image(systemName: "info.circle") }
+                                .buttonStyle(.borderless).help(L("查看 {0} 的文件详情", name))
+                            Toggle(name, isOn: Binding(
+                                get: { model.selectedSkillTargets.contains(id) },
+                                set: { if $0 { model.selectedSkillTargets.insert(id) } else { model.selectedSkillTargets.remove(id) } }))
+                                .labelsHidden().disabled(model.skillsBusy)
+                        }.padding(.vertical, 14)
+                        if target != skills["targets"]?.arrayValue?.last { Divider() }
                     }
                 }
+                .desktopPanel(verticalPadding: 0)
                 ForEach(skills["result"]?["installed"]?.arrayValue ?? [], id: \.self) { receipt in
                     Label((receipt["target"]?.displayString ?? "") + L("：已同步"), systemImage: "checkmark.circle").foregroundStyle(.green)
                     if let backup = receipt["backup"]?.stringValue, !backup.isEmpty {
                         Text(L("备份：{0}", backup)).font(.caption).textSelection(.enabled)
                     }
+                }
+                ForEach(skills["result"]?["removed"]?.arrayValue ?? [], id: \.self) { receipt in
+                    Label(L("{0}：已移除", receipt["target"]?.displayString ?? ""), systemImage: "checkmark.circle").foregroundStyle(.green)
+                    if let backup = receipt["backup"]?.stringValue, !backup.isEmpty {
+                        Text(L("备份：{0}", backup)).font(.caption).textSelection(.enabled)
+                    }
+                }
+                ForEach((skills["maintenance"]?.arrayValue ?? []).filter { ["personal_changes", "needs_attention"].contains($0["status"]?.stringValue ?? "") }, id: \.self) { item in
+                    Text(L("{0}：保留个人修改或缺失文件，请查看文件详情。", item["target"]?.displayString ?? ""))
+                        .font(.callout).foregroundStyle(.secondary)
                 }
                 ForEach(skills["result"]?["failed"]?.arrayValue ?? [], id: \.self) { failure in
                     Text((failure["target"]?.displayString ?? "") + ": " + (failure["error"]?.displayString ?? "")).foregroundStyle(.red)
@@ -1742,6 +1662,8 @@ private struct IntegrationView: View {
                         Text(L("已选择 {0} 个 Agent", "\(model.selectedSkillTargets.count)"))
                             .font(.callout).foregroundStyle(.secondary)
                         Spacer()
+                        Button(L("移除 Skills"), role: .destructive) { Task { await model.removeSelectedSkills() } }
+                            .disabled(unavailable || model.selectedSkillTargets.isEmpty)
                         Button { Task { await model.refreshSkillStatus() } } label: {
                             BusyLabel(text: L("刷新本机状态"), busyText: L("刷新中…"), busy: model.isBusy.contains("skills.catalog"))
                         }.disabled(unavailable || model.isBusy.contains("skills.catalog"))
@@ -1756,7 +1678,7 @@ private struct IntegrationView: View {
                 switch selected {
                 case .preferences:
                     DetailSheet(L("检查偏好")) {
-                        Toggle(L("每天自动检查 Skills，只提示，不写入"), isOn: Binding(
+                        Toggle(L("自动维护已接入的 Skills，保留个人修改"), isOn: Binding(
                             get: { skills["auto_check"]?.boolValue ?? true },
                             set: { enabled in Task { await model.skillsAction("skills.auto", params: .object(["enabled": .bool(enabled)])) } }))
                         if let checked = skills["source"]?["checked_at"]?.numberValue {
@@ -1765,8 +1687,6 @@ private struct IntegrationView: View {
                         Text(L("不同内容会先备份；额外文件与未选目标保持原样。更新后重新打开 Agent 会话；Gemini 可运行 /skills reload。实际调用仍需在 Agent 中验证。"))
                             .font(.callout).foregroundStyle(.secondary)
                     }
-                case .environment:
-                    DetailSheet(L("运行环境")) { EnvironmentSetupView(model: model) }
                 case .files(let target):
                     DetailSheet(target["label"]?.displayString ?? L("文件详情")) {
                         KeyValueLine(label: L("安装位置"), value: target["path"]?.displayString ?? L("未发现"))
@@ -1811,8 +1731,6 @@ private struct IntegrationView: View {
 private struct SettingsAboutView: View {
     @ObservedObject var model: AppModel
     @AppStorage(AppearancePreference.defaultsKey) private var appearance = AppearancePreference.system
-    @State private var showEnvironment = false
-    @State private var confirmEnableCLI = false
 
     var body: some View {
         ScrollView {
@@ -1821,23 +1739,13 @@ private struct SettingsAboutView: View {
                 settingsSection(L("通用"), subtitle: L("管理语言、外观和配置目录。")) {
                     generalSettings
                 }
-                settingsSection(L("App 更新"), subtitle: L("更新 App 和内置引擎。")) {
-                    UpdatesView(model: model, cliOnly: false)
+                settingsSection(L("App 更新"), subtitle: L("独立更新 App，不改变 CLI 安装。")) {
+                    AppUpdatesView(model: model)
                 }
                 settingsSection(L("独立 CLI"), subtitle: L("管理独立安装的命令行工具。")) {
-                    UpdatesView(model: model, cliOnly: true)
-                    DesktopPanel(L("运行环境"), compact: true) {
-                        HStack(spacing: 16) {
-                            Text(L("准备独立 CLI 与 AI 接入"))
-                                .foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
-                            Button(L("准备运行环境…")) { showEnvironment = true }
-                                .fixedSize()
-                        }
-                    }
+                    CLIManagementView(model: model)
                 }
-                settingsSection(L("高级"), subtitle: L("配置连接参数和内置 CLI。")) {
+                settingsSection(L("高级"), subtitle: L("配置连接参数和诊断选项。")) {
                     advancedSettings
                 }
             }
@@ -1847,13 +1755,7 @@ private struct SettingsAboutView: View {
         }
         .background(DesktopAppearance.contentBackground)
         .textFieldStyle(.roundedBorder)
-        .sheet(isPresented: $showEnvironment) {
-            DetailSheet(L("运行环境")) { EnvironmentSetupView(model: model) }
-        }
-        .alert(L("启用内置 CLI？"), isPresented: $confirmEnableCLI) {
-            Button(L("取消"), role: .cancel) {}
-            Button(L("确认启用")) { Task { await model.enableBundledCLI() } }
-        } message: { Text(L("这会要求后端创建用户级 CLI 链接；它不会覆盖已存在的同名外部 CLI。")) }
+
     }
 
     private func settingsSection<Content: View>(_ title: String, subtitle: String,
@@ -1957,9 +1859,9 @@ private struct SettingsAboutView: View {
                             TextField(L("开发环境后端路径（可选）"), text: $model.backendPathOverride)
                             HStack {
                                 Button(L("选择…"), action: model.chooseBackendExecutable)
-                                Button(L("使用内置后端")) { model.saveBackendOverride("") }
+                                Button(L("恢复 CLI 自动检测")) { model.saveBackendOverride("") }
                             }
-                            Text(L("发布包默认使用 Contents/Resources/backend/smart-search。仅显式选择时才会使用开发路径。"))
+                            Text(L("默认连接所选独立 CLI。开发路径只在明确选择后使用。"))
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
@@ -1975,22 +1877,7 @@ private struct SettingsAboutView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
-            DesktopPanel(L("App 内置 CLI"), compact: true) {
-                KeyValueLine(label: L("内置路径"), value: model.cliStatus?["bundled_path"]?.displayString ?? L("尚未读取"))
-                KeyValueLine(label: L("外部路径"), value: model.cliStatus?["external_path"]?.displayString ?? L("未发现或尚未读取"))
-                KeyValueLine(label: L("内置版本"), value: model.cliStatus?["version"]?.displayString ?? L("尚未读取"))
-                HStack {
-                    Button(L("复制内置路径"), action: model.copyBundledCLIPath)
-                    Button { Task { await model.refreshCLIStatus() } } label: { BusyLabel(text: L("刷新 CLI 状态"), busyText: L("刷新中…"), busy: model.isBusy.contains("cli.status")) }.disabled(model.isBusy.contains("cli.status"))
-                    Spacer()
-                }
-                Divider()
-                Text(L("内置入口随 App 卸载失效。独立 CLI 接入不使用此入口；已有同名命令不会被覆盖。"))
-                    .font(.caption).foregroundStyle(.secondary)
-                Button(model.isBusy.contains("cli.enable") ? L("启用中…") : L("启用内置 CLI…")) { confirmEnableCLI = true }
-                    .disabled(model.connection != .ready || model.environmentBusy || model.isBusy.contains("cli.enable"))
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
         }
     }
 }
@@ -2006,119 +1893,6 @@ private struct KeyValueLine: View {
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 0)
         }
-    }
-}
-
-private struct UpdatesView: View {
-    @ObservedObject var model: AppModel
-    @ObservedObject var updater: AppUpdater
-    let cliOnly: Bool
-    private var cli: JSONValue? { model.updateResult?["cli"] }
-    private var checking: Bool {
-        model.updateResult?["checking"]?.boolValue == true || model.isBusy.contains("update") || (!cliOnly && updater.checking)
-    }
-
-    init(model: AppModel, cliOnly: Bool) {
-        self.model = model
-        self.updater = model.appUpdater
-        self.cliOnly = cliOnly
-    }
-
-    var body: some View {
-        Group {
-            if cliOnly {
-                DesktopPanel(L("版本与更新"), compact: true) {
-                    HStack {
-                        Button { Task { await model.checkForUpdates(includeApp: !cliOnly) } } label: {
-                            BusyLabel(text: L("检查更新"), busyText: L("检查中…"), busy: checking)
-                        }.disabled(checking || model.connection != .ready)
-                        Button(L("刷新已安装版本")) { Task { await model.refreshCLIStatus() } }
-                            .disabled(model.isBusy.contains("cli.status"))
-                    }
-                    if let error = model.updateResult?["error"]?.stringValue, !error.isEmpty {
-                        Text(error).foregroundStyle(.red)
-                    }
-                    Divider()
-                    cliCard
-                }
-            } else {
-                DesktopPanel(L("版本与更新"), compact: true) {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack(spacing: 16) {
-                            Text(L("自动检查，每 24 小时一次，点击才下载"))
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Toggle(L("自动检查，每 24 小时一次，点击才下载"), isOn: Binding(
-                                get: { model.updateResult?["auto_check"]?.boolValue ?? true },
-                                set: { value in Task { await model.updateAction("updates.auto", params: .object(["enabled": .bool(value)])) } }))
-                                .labelsHidden()
-                                .fixedSize()
-                        }
-                        HStack {
-                            Button { Task { await model.checkForUpdates(includeApp: !cliOnly) } } label: {
-                                BusyLabel(text: L("检查更新"), busyText: L("检查中…"), busy: checking)
-                            }.disabled(checking || model.connection != .ready)
-                            Button(L("刷新已安装版本")) { Task { await model.refreshState() } }.disabled(model.isBusy.contains("state"))
-                        }
-                        if let error = model.updateResult?["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.red) }
-                        if let date = updater.checkedAt {
-                            Text(L("App 检查时间：{0}", date.formatted())).font(.caption).foregroundStyle(.secondary)
-                        }
-                        Text(L("App 和内置引擎一起更新；独立 CLI 使用原管理器更新。")).font(.caption).foregroundStyle(.secondary)
-                    }.frame(maxWidth: .infinity, alignment: .leading)
-                    Divider()
-                    appCard
-                }
-            }
-        }
-    }
-
-    private var appCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            KeyValueLine(label: "App", value: updater.currentVersion)
-            KeyValueLine(label: L("内置引擎"), value: model.state?.version ?? L("尚未读取"))
-            KeyValueLine(label: L("可安装稳定版"), value: updater.latestVersion.isEmpty ? L("尚未检查") : updater.latestVersion)
-            if !updater.statusMessage.isEmpty { Text(updater.statusMessage).foregroundStyle(.secondary) }
-            HStack {
-                Button(updater.waitingToRestart ? L("更新并重启") : L("打开 App 更新")) { updater.check() }
-                    .disabled(!updater.started || updater.checking || !model.canInstallAppUpdate)
-                Link(L("查看版本说明"), destination: URL(string: "https://github.com/konbakuyomu/smartsearch/releases")!)
-            }
-            Text(L("由 Sparkle 下载、校验并更新整个 App。旧版需先完整安装一次；用户配置、独立 CLI 和 Skills 保留。"))
-                .font(.caption).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var cliCard: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            KeyValueLine(label: L("实际版本"), value: model.cliStatus?["external_version"]?.displayString ?? L("未安装或未知"))
-            KeyValueLine(label: L("npm 稳定版"), value: cli?["latest_version"]?.displayString ?? L("尚未检查"))
-            KeyValueLine(label: L("来源"), value: model.cliStatus?["manager_label"]?.displayString ?? L("未确认"))
-            DisclosureGroup(L("安装位置")) {
-                KeyValueLine(label: L("生效路径"), value: model.cliStatus?["resolved_path"]?.displayString ?? model.cliStatus?["external_path"]?.displayString ?? L("未发现"))
-                Text(L("入口：") + (model.cliStatus?["external_path"]?.displayString ?? L("未发现"))).font(.system(.caption, design: .monospaced)).textSelection(.enabled)
-            }
-            Text(model.cliStatus?["update_note"]?.displayString ?? "").font(.caption).foregroundStyle(.secondary)
-            if cli?["cached"]?.boolValue == true {
-                Text(L("历史检查结果，请重新检查更新。")).foregroundStyle(.orange)
-            } else if let error = cli?["error"]?.stringValue, !error.isEmpty {
-                Text(error).foregroundStyle(.orange)
-            } else if cli?["runtime_needs_repair"]?.boolValue == true {
-                Text(L("CLI 版本已是最新，但运行环境尚未就绪；点击“更新 CLI”完成准备。")).foregroundStyle(.orange)
-            }
-            HStack {
-                Button(model.isUpdatingCLI ? L("更新中…") : L("更新 CLI")) { Task { await model.updateCLI() } }
-                    .disabled(model.skillsBusy || model.environmentBusy || model.isUpdatingCLI || model.isBusy.contains("cli.update") || checking || cli?["available"]?.boolValue != true || model.cliStatus?["can_update"]?.boolValue != true || !(cli?["error"]?.stringValue ?? "").isEmpty)
-                Button(L("复制更新命令"), action: model.copyCLIUpdateCommand).disabled(cli?["command"] == nil)
-            }
-            if model.isUpdatingCLI { Text(L("请保持 App 打开，等待原管理器完成。")).foregroundStyle(.orange) }
-            if model.updateResult?["cli_update"]?["status"]?.stringValue == "finished" { Text(L("已更新并验证实际版本。")).foregroundStyle(.green) }
-            if let error = model.updateResult?["cli_update"]?["error"]?.stringValue, !error.isEmpty { Text(error).foregroundStyle(.red) }
-            DisclosureGroup(L("更新日志与命令")) {
-                Text((cli?["command"]?.stringValue ?? "") + "\n" + (model.updateResult?["cli_update"]?["log"]?.stringValue ?? ""))
-                    .font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }.frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

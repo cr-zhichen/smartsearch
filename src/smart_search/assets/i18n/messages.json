@@ -16655,25 +16655,301 @@
     "下载已取消，请重新检查更新。",
     "Download cancelled. Check for updates again to retry."
   ],
+  "1. Install and connect the CLI": [
+    "1. 安装并连接 CLI",
+    "1. Install and connect the CLI"
+  ],
+  "1. Install the CLI": [
+    "1. 安装 CLI",
+    "1. Install the CLI"
+  ],
+  "1. 安装 CLI": [
+    "1. 安装 CLI",
+    "1. Install the CLI"
+  ],
+  "1. 安装并连接 CLI": [
+    "1. 安装并连接 CLI",
+    "1. Install and connect the CLI"
+  ],
+  "2. Configure providers": [
+    "2. 配置服务商",
+    "2. Configure providers"
+  ],
+  "2. 配置服务商": [
+    "2. 配置服务商",
+    "2. Configure providers"
+  ],
+  "3. Connect Skills": [
+    "3. 接入 Skills",
+    "3. Connect Skills"
+  ],
+  "3. 接入 Skills": [
+    "3. 接入 Skills",
+    "3. Connect Skills"
+  ],
+  "Add Skills so your Agent can search.": [
+    "添加 Skills，让 Agent 使用搜索。",
+    "Add Skills so your Agent can search."
+  ],
+  "After configuration, connect search to your Agent.": [
+    "完成配置后，将搜索能力接入你的 Agent。",
+    "After configuration, connect search to your Agent."
+  ],
+  "After connecting the CLI, configure search providers and API keys here.": [
+    "CLI 连接后，在这里配置搜索服务与 API Key。",
+    "After connecting the CLI, configure search providers and API keys here."
+  ],
   "App 与 CLI 协议版本不兼容，请更新 CLI 或 App。": [
     "App 与 CLI 协议版本不兼容，请更新 CLI 或 App。",
     "The App and CLI protocols are incompatible. Update the CLI or App."
+  ],
+  "App 与所选 CLI 的协议不兼容，请更新 CLI 或 App。": [
+    "App 与所选 CLI 的协议不兼容，请更新 CLI 或 App。",
+    "The selected CLI uses an incompatible protocol. Update the CLI or App."
+  ],
+  "App 更新未完成，请重试。": [
+    "App 更新未完成，请重试。",
+    "The App update could not be completed. Try again."
+  ],
+  "App 更新配置无效，请安装正式版后重试。": [
+    "App 更新配置无效，请安装正式版后重试。",
+    "App updates are not configured correctly. Install the official release and try again."
+  ],
+  "App 管理独立安装的 CLI；关闭或卸载 App 后，CLI 和 Skills 仍可使用。": [
+    "App 管理独立安装的 CLI；关闭或卸载 App 后，CLI 和 Skills 仍可使用。",
+    "The App manages a separate CLI installation. The CLI and Skills remain available when the App is closed or removed."
+  ],
+  "Apply path": [
+    "应用路径",
+    "Apply path"
+  ],
+  "Automatically check for CLI updates": [
+    "自动检查 CLI 更新",
+    "Automatically check for CLI updates"
+  ],
+  "CLI Settings…": [
+    "CLI 设置…",
+    "CLI Settings…"
+  ],
+  "CLI installation is not yet available": [
+    "CLI 尚不可安装",
+    "CLI installation is not yet available"
+  ],
+  "CLI installation metadata is damaged. Update or repair it.": [
+    "CLI 安装信息损坏，请更新或修复。",
+    "CLI installation metadata is damaged. Update or repair it."
+  ],
+  "CLI settings": [
+    "CLI 设置",
+    "CLI settings"
+  ],
+  "CLI update available: {0} → {1}": [
+    "CLI 有新版本：{0} → {1}",
+    "CLI update available: {0} → {1}"
   ],
   "CLI version": [
     "CLI 版本",
     "CLI version"
   ],
+  "CLI {0}": [
+    "CLI {0}",
+    "CLI {0}"
+  ],
+  "CLI {0} is connected; continue with configuration": [
+    "CLI {0} 已连接，可以继续配置",
+    "CLI {0} is connected; continue with configuration"
+  ],
+  "CLI {0} is installed; waiting to connect": [
+    "CLI {0} 已安装，等待连接",
+    "CLI {0} is installed; waiting to connect"
+  ],
+  "CLI {0} needs an update or repair": [
+    "CLI {0} 需要更新或修复",
+    "CLI {0} needs an update or repair"
+  ],
+  "CLI {0} 已安装，等待连接": [
+    "CLI {0} 已安装，等待连接",
+    "CLI {0} is installed; waiting to connect"
+  ],
+  "CLI {0} 已连接，可以继续配置": [
+    "CLI {0} 已连接，可以继续配置",
+    "CLI {0} is connected; continue with configuration"
+  ],
+  "CLI {0} 需要更新或修复": [
+    "CLI {0} 需要更新或修复",
+    "CLI {0} needs an update or repair"
+  ],
+  "CLI 下载失败，请重试。": [
+    "CLI 下载失败，请重试。",
+    "CLI download failed. Try again."
+  ],
+  "CLI 安装信息损坏，请更新或修复。": [
+    "CLI 安装信息损坏，请更新或修复。",
+    "CLI installation metadata is damaged. Update or repair it."
+  ],
+  "CLI 安装包包含无效路径。": [
+    "CLI 安装包包含无效路径。",
+    "The CLI package contains an invalid path."
+  ],
+  "CLI 安装包校验失败。": [
+    "CLI 安装包校验失败。",
+    "CLI package verification failed."
+  ],
+  "CLI 安装完成，正在重新连接。": [
+    "CLI 安装完成，正在重新连接。",
+    "CLI installation finished. Reconnecting…"
+  ],
   "CLI 安装由 App 的独立安装管理器处理。": [
     "CLI 安装由 App 的独立安装管理器处理。",
     "The App's independent installation manager handles CLI installations."
+  ],
+  "CLI 尚不可安装": [
+    "CLI 尚不可安装",
+    "CLI installation is not yet available"
+  ],
+  "CLI 尚不可用或协议不兼容，请修复或更新。": [
+    "CLI 尚不可用或协议不兼容，请修复或更新。",
+    "The CLI is unavailable or incompatible. Repair or update it."
+  ],
+  "CLI 已卸载，配置和 Skills 已保留。": [
+    "CLI 已卸载，配置和 Skills 已保留。",
+    "CLI uninstalled. Configuration and Skills were retained."
+  ],
+  "CLI 已安装，但运行验证未通过，请更新或修复。": [
+    "CLI 已安装，但运行验证未通过，请更新或修复。",
+    "The CLI was installed but failed runtime verification. Update or repair it."
+  ],
+  "CLI 操作未完成": [
+    "CLI 操作未完成",
+    "CLI operation incomplete"
+  ],
+  "CLI 操作未完成，请检查 npm 或重试。": [
+    "CLI 操作未完成，请检查 npm 或重试。",
+    "The CLI operation failed. Check npm or retry."
+  ],
+  "CLI 操作未完成，请检查原安装或重试。": [
+    "CLI 操作未完成，请检查原安装或重试。",
+    "The CLI operation failed. Check the original installation or retry."
+  ],
+  "CLI 操作进行中": [
+    "CLI 操作进行中",
+    "CLI operation in progress"
+  ],
+  "CLI 是搜索与配置的运行基础。通过你的 npm 安装，自带运行时，无需安装 Python。": [
+    "CLI 是搜索与配置的运行基础。通过你的 npm 安装，自带运行时，无需安装 Python。",
+    "The CLI powers search and configuration. Install it with your npm; its runtime is included, so Python is not required."
+  ],
+  "CLI 最新版本：{0}": [
+    "CLI 最新版本：{0}",
+    "Latest CLI version: {0}"
+  ],
+  "CLI 有新版本：{0} → {1}": [
+    "CLI 有新版本：{0} → {1}",
+    "CLI update available: {0} → {1}"
+  ],
+  "CLI 未通过协议兼容性检查。": [
+    "CLI 未通过协议兼容性检查。",
+    "The CLI did not pass the protocol compatibility check."
   ],
   "CLI 版本": [
     "CLI 版本",
     "CLI version"
   ],
+  "CLI 设置": [
+    "CLI 设置",
+    "CLI settings"
+  ],
+  "CLI 设置…": [
+    "CLI 设置…",
+    "CLI Settings…"
+  ],
+  "CLI 连接后，在这里配置搜索服务与 API Key。": [
+    "CLI 连接后，在这里配置搜索服务与 API Key。",
+    "After connecting the CLI, configure search providers and API keys here."
+  ],
+  "Cannot determine the actual Node.js path.": [
+    "无法确认 Node.js 的实际路径。",
+    "Cannot determine the actual Node.js path."
+  ],
+  "Cannot find npm for this Node.js installation. Choose another npm path.": [
+    "无法找到与 Node.js 配套的 npm，请重新选择 npm 路径。",
+    "Cannot find npm for this Node.js installation. Choose another npm path."
+  ],
+  "Check at startup and every 24 hours.": [
+    "启动时及每 24 小时检查。",
+    "Check at startup and every 24 hours."
+  ],
+  "Check for CLI updates at startup and every 24 hours": [
+    "启动时和每 24 小时检查 CLI 更新",
+    "Check for CLI updates at startup and every 24 hours"
+  ],
+  "Choose a search provider and enter your API key.": [
+    "选择搜索服务，填写 API Key。",
+    "Choose a search provider and enter your API key."
+  ],
+  "Choose the npm executable supplied with your Node.js installation.": [
+    "选择与你的 Node.js 配套的 npm 文件。",
+    "Choose the npm executable supplied with your Node.js installation."
+  ],
+  "Configure {0}": [
+    "配置{0}",
+    "Configure {0}"
+  ],
+  "Could not check for updates. Try again later.": [
+    "检查更新失败，请稍后重试。",
+    "Could not check for updates. Try again later."
+  ],
   "Detect again": [
     "重新检测",
     "Detect again"
+  ],
+  "Detect automatically": [
+    "自动查找",
+    "Detect automatically"
+  ],
+  "Detect or specify npm first.": [
+    "请先检测或指定 npm。",
+    "Detect or specify npm first."
+  ],
+  "Detecting or managing the CLI…": [
+    "正在检测或处理 CLI…",
+    "Detecting or managing the CLI…"
+  ],
+  "Install Node.js": [
+    "安装 Node.js",
+    "Install Node.js"
+  ],
+  "Install directory: {0}": [
+    "安装目录：{0}",
+    "Install directory: {0}"
+  ],
+  "Installation is currently unavailable. Try again later.": [
+    "暂时无法安装，请稍后重试。",
+    "Installation is currently unavailable. Try again later."
+  ],
+  "Installing the CLI with npm…": [
+    "正在通过 npm 安装 CLI…",
+    "Installing the CLI with npm…"
+  ],
+  "Invalid npm path. Choose an npm executable.": [
+    "npm 路径无效，请选择可执行的 npm 文件。",
+    "Invalid npm path. Choose an npm executable."
+  ],
+  "Manage Skills": [
+    "管理 Skills",
+    "Manage Skills"
+  ],
+  "Next: configure providers": [
+    "下一步：配置服务商",
+    "Next: configure providers"
+  ],
+  "No usable npm was found. Install Node.js or specify the npm path.": [
+    "未找到可用的 npm。请先安装 Node.js，或手动指定 npm 路径。",
+    "No usable npm was found. Install Node.js or specify the npm path."
+  ],
+  "Node.js was not found beside npm. Choose a complete Node.js installation.": [
+    "npm 同目录下未找到 Node.js，请选择完整的 Node.js 安装。",
+    "Node.js was not found beside npm. Choose a complete Node.js installation."
   ],
   "Read the current CLI instructions for Agents.": [
     "读取当前 CLI 提供给 Agent 的使用说明。",
@@ -16683,13 +16959,541 @@
     "移除所选 Skills 并保留文件备份。",
     "Remove selected Skills, keeping a backup of their files."
   ],
+  "Repair CLI": [
+    "修复 CLI",
+    "Repair CLI"
+  ],
+  "Set up Smart Search to get started.": [
+    "完成以下设置，开始使用 Smart Search。",
+    "Set up Smart Search to get started."
+  ],
+  "Set up npm first": [
+    "先准备 npm 环境",
+    "Set up npm first"
+  ],
+  "Setup is complete. You can start searching.": [
+    "基础配置已完成，可以开始搜索。",
+    "Setup is complete. You can start searching."
+  ],
+  "Show all": [
+    "显示全部",
+    "Show all"
+  ],
+  "Skills 由当前 CLI 提供；自动维护已接入目标，保留个人修改。": [
+    "Skills 由当前 CLI 提供；自动维护已接入目标，保留个人修改。",
+    "The current CLI supplies Skills and maintains connected targets while preserving personal edits."
+  ],
+  "Start with the CLI to set up search on this computer.": [
+    "从 CLI 开始，完成这台电脑的搜索配置。",
+    "Start with the CLI to set up search on this computer."
+  ],
+  "Successfully check for CLI updates first.": [
+    "请先成功检查 CLI 更新。",
+    "Successfully check for CLI updates first."
+  ],
+  "The CLI and Skills remain usable after closing or uninstalling the App. Switching npm does not move or remove the previous installation.": [
+    "关闭或卸载 App 后，CLI 和 Skills 仍可使用。更换 npm 环境不会搬移或删除原安装。",
+    "The CLI and Skills remain usable after closing or uninstalling the App. Switching npm does not move or remove the previous installation."
+  ],
+  "The CLI operation failed. Check npm or retry.": [
+    "CLI 操作未完成，请检查 npm 或重试。",
+    "The CLI operation failed. Check npm or retry."
+  ],
+  "The CLI powers search and configuration. Install it with your npm; its runtime is included, so Python is not required.": [
+    "CLI 是搜索与配置的运行基础。通过你的 npm 安装，自带运行时，无需安装 Python。",
+    "The CLI powers search and configuration. Install it with your npm; its runtime is included, so Python is not required."
+  ],
+  "The CLI was installed but failed runtime verification. Update or repair it.": [
+    "CLI 已安装，但运行验证未通过，请更新或修复。",
+    "The CLI was installed but failed runtime verification. Update or repair it."
+  ],
+  "The self-contained CLI is not yet published on npm. Install it after the new release is available.": [
+    "npm 上尚未发布自带运行时的 CLI，请等待新版发布后再安装。",
+    "The self-contained CLI is not yet published on npm. Install it after the new release is available."
+  ],
+  "To configure: {0}": [
+    "待配置：{0}",
+    "To configure: {0}"
+  ],
+  "Update available: {0}": [
+    "可更新至 {0}",
+    "Update available: {0}"
+  ],
+  "Update check failed: {0}": [
+    "检查更新失败：{0}",
+    "Update check failed: {0}"
+  ],
+  "Updates are notifications only; you choose when to install. App updates are managed separately.": [
+    "仅提示更新，由你决定何时安装。App 更新单独管理。",
+    "Updates are notifications only; you choose when to install. App updates are managed separately."
+  ],
+  "Use Node.js 18 or later.": [
+    "请使用 Node.js 18 或更新版本。",
+    "Use Node.js 18 or later."
+  ],
+  "Using npm {0} · {1}": [
+    "使用 npm {0} · {1}",
+    "Using npm {0} · {1}"
+  ],
+  "npm Environment": [
+    "npm 环境",
+    "npm Environment"
+  ],
+  "npm environment and update settings": [
+    "npm 环境与更新设置",
+    "npm environment and update settings"
+  ],
+  "npm is ready; the CLI is not installed": [
+    "npm 已就绪，尚未安装 CLI",
+    "npm is ready; the CLI is not installed"
+  ],
+  "npm not found": [
+    "未找到 npm",
+    "npm not found"
+  ],
+  "npm path (leave empty to detect automatically)": [
+    "npm 路径（留空自动查找）",
+    "npm path (leave empty to detect automatically)"
+  ],
+  "npm returned an invalid version or install directory.": [
+    "npm 返回了无效的版本或安装目录。",
+    "npm returned an invalid version or install directory."
+  ],
+  "npm {0} · {1}": [
+    "npm {0} · {1}",
+    "npm {0} · {1}"
+  ],
+  "npm 上尚未发布自带运行时的 CLI，请等待新版发布后再安装。": [
+    "npm 上尚未发布自带运行时的 CLI，请等待新版发布后再安装。",
+    "The self-contained CLI is not yet published on npm. Install it after the new release is available."
+  ],
+  "npm 同目录下未找到 Node.js，请选择完整的 Node.js 安装。": [
+    "npm 同目录下未找到 Node.js，请选择完整的 Node.js 安装。",
+    "Node.js was not found beside npm. Choose a complete Node.js installation."
+  ],
+  "npm 已就绪，尚未安装 CLI": [
+    "npm 已就绪，尚未安装 CLI",
+    "npm is ready; the CLI is not installed"
+  ],
+  "npm 环境": [
+    "npm 环境",
+    "npm Environment"
+  ],
+  "npm 环境与更新设置": [
+    "npm 环境与更新设置",
+    "npm environment and update settings"
+  ],
+  "npm 路径无效，请选择可执行的 npm 文件。": [
+    "npm 路径无效，请选择可执行的 npm 文件。",
+    "Invalid npm path. Choose an npm executable."
+  ],
+  "npm 路径（留空自动查找）": [
+    "npm 路径（留空自动查找）",
+    "npm path (leave empty to detect automatically)"
+  ],
+  "npm 返回了无效的版本或安装目录。": [
+    "npm 返回了无效的版本或安装目录。",
+    "npm returned an invalid version or install directory."
+  ],
+  "{0} · Needs repair": [
+    "{0} · 需要修复",
+    "{0} · Needs repair"
+  ],
+  "{0} · Not connected": [
+    "{0} · 尚未连接",
+    "{0} · Not connected"
+  ],
+  "{0} · Ready": [
+    "{0} · 已就绪",
+    "{0} · Ready"
+  ],
+  "{0} · Update available: {1}": [
+    "{0} · 可更新至 {1}",
+    "{0} · Update available: {1}"
+  ],
+  "{0} · 可更新至 {1}": [
+    "{0} · 可更新至 {1}",
+    "{0} · Update available: {1}"
+  ],
+  "{0} · 尚未连接": [
+    "{0} · 尚未连接",
+    "{0} · Not connected"
+  ],
+  "{0} · 已就绪": [
+    "{0} · 已就绪",
+    "{0} · Ready"
+  ],
+  "{0} · 需要修复": [
+    "{0} · 需要修复",
+    "{0} · Needs repair"
+  ],
+  "{0}：保留个人修改或缺失文件，请查看文件详情。": [
+    "{0}：保留个人修改或缺失文件，请查看文件详情。",
+    "{0}: Personal edits or missing files were preserved. Review file details."
+  ],
+  "{0}：已移除": [
+    "{0}：已移除",
+    "{0}: Removed"
+  ],
+  "上次检查": [
+    "上次检查",
+    "Last checked"
+  ],
+  "下一步：配置服务商": [
+    "下一步：配置服务商",
+    "Next: configure providers"
+  ],
+  "下载正式版": [
+    "下载正式版",
+    "Download official release"
+  ],
+  "仅提示更新，由你决定何时安装。App 更新单独管理。": [
+    "仅提示更新，由你决定何时安装。App 更新单独管理。",
+    "Updates are notifications only; you choose when to install. App updates are managed separately."
+  ],
+  "从 CLI 开始，完成这台电脑的搜索配置。": [
+    "从 CLI 开始，完成这台电脑的搜索配置。",
+    "Start with the CLI to set up search on this computer."
+  ],
+  "使用 npm {0} · {1}": [
+    "使用 npm {0} · {1}",
+    "Using npm {0} · {1}"
+  ],
   "使用的 CLI": [
     "使用的 CLI",
     "CLI installation"
   ],
+  "修复 CLI": [
+    "修复 CLI",
+    "Repair CLI"
+  ],
+  "先准备 npm 环境": [
+    "先准备 npm 环境",
+    "Set up npm first"
+  ],
+  "关闭或卸载 App 后，CLI 和 Skills 仍可使用。更换 npm 环境不会搬移或删除原安装。": [
+    "关闭或卸载 App 后，CLI 和 Skills 仍可使用。更换 npm 环境不会搬移或删除原安装。",
+    "The CLI and Skills remain usable after closing or uninstalling the App. Switching npm does not move or remove the previous installation."
+  ],
+  "刷新 CLI 提供的 Skills": [
+    "刷新 CLI 提供的 Skills",
+    "Refresh CLI Skills"
+  ],
+  "卸载 CLI": [
+    "卸载 CLI",
+    "Uninstall CLI"
+  ],
+  "卸载所选 CLI？": [
+    "卸载所选 CLI？",
+    "Uninstall the selected CLI?"
+  ],
+  "发现新版本 {0}": [
+    "发现新版本 {0}",
+    "Version {0} is available"
+  ],
+  "只处理所选 CLI；配置和 Skills 保留。App 自身不会更新。": [
+    "只处理所选 CLI；配置和 Skills 保留。App 自身不会更新。",
+    "This affects the selected CLI. Configuration and Skills are retained. The App version stays the same."
+  ],
+  "可安装版本": [
+    "可安装版本",
+    "Available version"
+  ],
+  "可更新至 {0}": [
+    "可更新至 {0}",
+    "Update available: {0}"
+  ],
+  "启动时及每 24 小时检查。": [
+    "启动时及每 24 小时检查。",
+    "Check at startup and every 24 hours."
+  ],
+  "启动时和每 24 小时检查 CLI 更新": [
+    "启动时和每 24 小时检查 CLI 更新",
+    "Check for CLI updates at startup and every 24 hours"
+  ],
+  "启动时检查新版本，之后每 24 小时检查。确认后才下载。": [
+    "启动时检查新版本，之后每 24 小时检查。确认后才下载。",
+    "Check at launch and every 24 hours afterward. Downloads start after confirmation."
+  ],
+  "在 App 内完成下载和安装，重启后生效。配置、独立 CLI 和 Skills 保留。": [
+    "在 App 内完成下载和安装，重启后生效。配置、独立 CLI 和 Skills 保留。",
+    "Download and install within the App, then restart to finish. Configuration, the independent CLI and Skills are preserved."
+  ],
+  "基础配置已完成，可以开始搜索。": [
+    "基础配置已完成，可以开始搜索。",
+    "Setup is complete. You can start searching."
+  ],
+  "安装 CLI": [
+    "安装 CLI",
+    "Install CLI"
+  ],
+  "安装 Node.js": [
+    "安装 Node.js",
+    "Install Node.js"
+  ],
+  "安装或更新独立 CLI？": [
+    "安装或更新独立 CLI？",
+    "Install or update the separate CLI?"
+  ],
+  "安装目录：{0}": [
+    "安装目录：{0}",
+    "Install directory: {0}"
+  ],
+  "完成以下设置，开始使用 Smart Search。": [
+    "完成以下设置，开始使用 Smart Search。",
+    "Set up Smart Search to get started."
+  ],
+  "完成配置后，将搜索能力接入你的 Agent。": [
+    "完成配置后，将搜索能力接入你的 Agent。",
+    "After configuration, connect search to your Agent."
+  ],
+  "尚未安装 CLI": [
+    "尚未安装 CLI",
+    "CLI not installed"
+  ],
+  "尚未选择 CLI": [
+    "尚未选择 CLI",
+    "No CLI selected"
+  ],
+  "已移除 {0} 个，失败 {1} 个。": [
+    "已移除 {0} 个，失败 {1} 个。",
+    "Removed {0}; failed {1}."
+  ],
+  "已跳过版本 {0}": [
+    "已跳过版本 {0}",
+    "Version {0} skipped"
+  ],
+  "应用路径": [
+    "应用路径",
+    "Apply path"
+  ],
+  "当前 CLI 提供的 Skills": [
+    "当前 CLI 提供的 Skills",
+    "Skills from the current CLI"
+  ],
+  "当前 CLI 版本": [
+    "当前 CLI 版本",
+    "Current CLI version"
+  ],
+  "当前版本": [
+    "当前版本",
+    "Current version"
+  ],
+  "待配置：{0}": [
+    "待配置：{0}",
+    "To configure: {0}"
+  ],
+  "恢复 CLI 自动检测": [
+    "恢复 CLI 自动检测",
+    "Restore CLI auto-detection"
+  ],
+  "所选 Skill 文件会移入备份目录，CLI 和配置保留。": [
+    "所选 Skill 文件会移入备份目录，CLI 和配置保留。",
+    "Selected Skill files will move to a backup folder. The CLI and configuration are retained."
+  ],
+  "找不到所选 CLI：{0}。请在设置中安装或修复 CLI。": [
+    "找不到所选 CLI：{0}。请在设置中安装或修复 CLI。",
+    "Selected CLI not found: {0}. Install or repair the CLI in Settings."
+  ],
+  "无法找到与 Node.js 配套的 npm，请重新选择 npm 路径。": [
+    "无法找到与 Node.js 配套的 npm，请重新选择 npm 路径。",
+    "Cannot find npm for this Node.js installation. Choose another npm path."
+  ],
+  "无法确认 CLI 的最新版本。": [
+    "无法确认 CLI 的最新版本。",
+    "Could not determine the latest CLI version."
+  ],
+  "无法确认 Node.js 的实际路径。": [
+    "无法确认 Node.js 的实际路径。",
+    "Cannot determine the actual Node.js path."
+  ],
+  "无法读取 CLI 发行信息，请稍后重试。": [
+    "无法读取 CLI 发行信息，请稍后重试。",
+    "Could not read CLI release information. Try again later."
+  ],
+  "显示全部": [
+    "显示全部",
+    "Show all"
+  ],
+  "暂无可安装的更新": [
+    "暂无可安装的更新",
+    "No installable updates available"
+  ],
+  "暂时无法安装，请稍后重试。": [
+    "暂时无法安装，请稍后重试。",
+    "Installation is currently unavailable. Try again later."
+  ],
+  "更新到 {0}": [
+    "更新到 {0}",
+    "Update to {0}"
+  ],
+  "更新或修复 CLI": [
+    "更新或修复 CLI",
+    "Update or repair CLI"
+  ],
+  "未找到 npm": [
+    "未找到 npm",
+    "npm not found"
+  ],
+  "未找到可用的 npm。请先安装 Node.js，或手动指定 npm 路径。": [
+    "未找到可用的 npm。请先安装 Node.js，或手动指定 npm 路径。",
+    "No usable npm was found. Install Node.js or specify the npm path."
+  ],
+  "查看更新进度": [
+    "查看更新进度",
+    "Show update progress"
+  ],
+  "检查 CLI 更新": [
+    "检查 CLI 更新",
+    "Check for CLI updates"
+  ],
+  "检查更新失败，请稍后重试。": [
+    "检查更新失败，请稍后重试。",
+    "Could not check for updates. Try again later."
+  ],
+  "检查更新失败：{0}": [
+    "检查更新失败：{0}",
+    "Update check failed: {0}"
+  ],
+  "检测 CLI": [
+    "检测 CLI",
+    "Detect CLI"
+  ],
+  "检测到多份 CLI，请选择要使用和管理的安装。": [
+    "检测到多份 CLI，请选择要使用和管理的安装。",
+    "Multiple CLI installations found. Choose the installation to use and manage."
+  ],
+  "正在下载并准备更新…": [
+    "正在下载并准备更新…",
+    "Downloading and preparing the update…"
+  ],
+  "正在处理 CLI…": [
+    "正在处理 CLI…",
+    "Working on CLI…"
+  ],
+  "正在检查 App 更新…": [
+    "正在检查 App 更新…",
+    "Checking for App updates…"
+  ],
+  "正在检测或处理 CLI…": [
+    "正在检测或处理 CLI…",
+    "Detecting or managing the CLI…"
+  ],
+  "正在通过 npm 安装 CLI…": [
+    "正在通过 npm 安装 CLI…",
+    "Installing the CLI with npm…"
+  ],
+  "此副本尚未配置自动更新，请安装正式版。": [
+    "此副本尚未配置自动更新，请安装正式版。",
+    "Automatic updates are not configured for this copy. Install the official release."
+  ],
+  "此版本不再自动提醒。手动检查仍可查看并安装。": [
+    "此版本不再自动提醒。手动检查仍可查看并安装。",
+    "This version will no longer trigger automatic reminders. Check manually to view or install it."
+  ],
+  "此版本尚未提供可验证的独立 CLI 安装包。": [
+    "此版本尚未提供可验证的独立 CLI 安装包。",
+    "This release does not include a verifiable standalone CLI package yet."
+  ],
+  "添加 Skills，让 Agent 使用搜索。": [
+    "添加 Skills，让 Agent 使用搜索。",
+    "Add Skills so your Agent can search."
+  ],
+  "独立更新 App，不改变 CLI 安装。": [
+    "独立更新 App，不改变 CLI 安装。",
+    "Update the App independently, keeping the CLI installation."
+  ],
+  "移除 Skills": [
+    "移除 Skills",
+    "Remove Skills"
+  ],
+  "移除所选 Skills？": [
+    "移除所选 Skills？",
+    "Remove selected Skills?"
+  ],
+  "管理 CLI…": [
+    "管理 CLI…",
+    "Manage CLI…"
+  ],
+  "管理 Skills": [
+    "管理 Skills",
+    "Manage Skills"
+  ],
+  "终端和 Agent 可使用上述完整路径；如需短命令，将该目录加入 PATH。": [
+    "终端和 Agent 可使用上述完整路径；如需短命令，将该目录加入 PATH。",
+    "Terminals and Agents can use the full path above. Add its directory to PATH to use the short command."
+  ],
+  "继续": [
+    "继续",
+    "Continue"
+  ],
+  "自动查找": [
+    "自动查找",
+    "Detect automatically"
+  ],
+  "自动检查 CLI 更新": [
+    "自动检查 CLI 更新",
+    "Automatically check for CLI updates"
+  ],
+  "自动维护已接入的 Skills，保留个人修改": [
+    "自动维护已接入的 Skills，保留个人修改",
+    "Maintain connected Skills, preserving personal edits"
+  ],
   "自动维护登记失败；Skill 文件已保留，请重试。": [
     "自动维护登记失败；Skill 文件已保留，请重试。",
     "Could not register automatic maintenance. Skill files were retained; try again."
+  ],
+  "请使用 Node.js 18 或更新版本。": [
+    "请使用 Node.js 18 或更新版本。",
+    "Use Node.js 18 or later."
+  ],
+  "请保持 App 打开，等待 CLI 操作完成。": [
+    "请保持 App 打开，等待 CLI 操作完成。",
+    "Keep the App open until the CLI operation completes."
+  ],
+  "请先成功检查 CLI 更新。": [
+    "请先成功检查 CLI 更新。",
+    "Successfully check for CLI updates first."
+  ],
+  "请先检测或指定 npm。": [
+    "请先检测或指定 npm。",
+    "Detect or specify npm first."
+  ],
+  "请选择安装": [
+    "请选择安装",
+    "Choose an installation"
+  ],
+  "请通过原安装管理器处理这份 CLI。": [
+    "请通过原安装管理器处理这份 CLI。",
+    "Use the original package manager to manage this CLI installation."
+  ],
+  "跳过此版本": [
+    "跳过此版本",
+    "Skip this version"
+  ],
+  "选择 CLI 安装": [
+    "选择 CLI 安装",
+    "Choose CLI installation"
+  ],
+  "选择与你的 Node.js 配套的 npm 文件。": [
+    "选择与你的 Node.js 配套的 npm 文件。",
+    "Choose the npm executable supplied with your Node.js installation."
+  ],
+  "选择搜索服务，填写 API Key。": [
+    "选择搜索服务，填写 API Key。",
+    "Choose a search provider and enter your API key."
+  ],
+  "配置{0}": [
+    "配置{0}",
+    "Configure {0}"
+  ],
+  "配置连接参数和诊断选项。": [
+    "配置连接参数和诊断选项。",
+    "Configure connection parameters and diagnostics."
+  ],
+  "重启并完成更新": [
+    "重启并完成更新",
+    "Restart to finish updating"
   ],
   "重新检查": [
     "重新检查",
@@ -16698,5 +17502,17 @@
   "重新检测": [
     "重新检测",
     "Detect again"
+  ],
+  "默认连接所选独立 CLI。开发路径只在明确选择后使用。": [
+    "默认连接所选独立 CLI。开发路径只在明确选择后使用。",
+    "Connect to the selected independent CLI by default. A development path is used only when explicitly selected."
+  ],
+  "示例：{0}": [
+    "示例：{0}",
+    "e.g. {0}"
+  ],
+  "e.g. {0}": [
+    "示例：{0}",
+    "e.g. {0}"
   ]
 }

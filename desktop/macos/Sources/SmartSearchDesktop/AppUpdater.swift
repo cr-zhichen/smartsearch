@@ -5,12 +5,18 @@ import Sparkle
 
 @MainActor
 final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStandardUserDriverDelegate {
+    enum Phase { case idle, checking, available, upToDate, skipped, downloading, ready, failed }
+
     @Published private(set) var started = false
-    @Published private(set) var checking = false
+    @Published private(set) var automaticallyChecks = UserDefaults.standard.object(forKey: "SUEnableAutomaticChecks") as? Bool ?? true
+    @Published private(set) var phase: Phase = .idle
     @Published private(set) var latestVersion = ""
-    @Published private(set) var statusMessage = ""
     @Published private(set) var waitingToRestart = false
     @Published private(set) var checkedAt: Date?
+    @Published private(set) var sessionInProgress = false
+    @Published private var canShowUpdate = false
+    @Published private var unavailableReason = ""
+    private var observations: [NSKeyValueObservation] = []
     var canInstall: () -> Bool = { false }
     var prepareInstall: () async -> Bool = { false }
     var recoverInstall: () async -> Void = {}
@@ -23,33 +29,82 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
     private lazy var updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
 
     var currentVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "" }
+    var checking: Bool { phase == .checking }
+    var available: Bool { !latestVersion.isEmpty && phase != .failed && phase != .skipped }
+    var canCheck: Bool { started && !sessionInProgress && !checking && !waitingToRestart }
+    var canInstallUpdate: Bool { started && !checking && (waitingToRestart || canShowUpdate) }
+    var statusMessage: String {
+        if !unavailableReason.isEmpty { return L(unavailableReason) }
+        switch phase {
+        case .idle: return L("尚未检查")
+        case .checking: return L("正在检查 App 更新…")
+        case .available: return L("发现新版本 {0}", latestVersion)
+        case .upToDate: return L("暂无可安装的更新")
+        case .skipped: return L("已跳过版本 {0}", latestVersion)
+        case .downloading: return L("正在下载并准备更新…")
+        case .ready: return L("更新已就绪")
+        case .failed: return L("App 更新未完成，请重试。")
+        }
+    }
 
-    func synchronize(automaticallyChecks: Bool, enabled: Bool) {
-        guard enabled else { if started { updater.automaticallyChecksForUpdates = false }; return }
-        if !started {
-            guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String,
-                  Data(base64Encoded: key)?.count == 32 else {
-                statusMessage = L("此测试包尚未配置更新签名，App 自动更新不可用。")
-                return
-            }
-            updater.automaticallyChecksForUpdates = automaticallyChecks
-            updater.automaticallyDownloadsUpdates = false
-            updater.updateCheckInterval = 86400
-            do { try updater.start(); started = true }
-            catch { statusMessage = L("App 更新配置无效，请使用完整安装包。"); return }
+    func start() {
+        guard !started else { return }
+        unavailableReason = ""
+        guard let key = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String,
+              Data(base64Encoded: key)?.count == 32 else {
+            unavailableReason = "此副本尚未配置自动更新，请安装正式版。"
+            return
         }
-        if updater.automaticallyChecksForUpdates != automaticallyChecks {
-            updater.automaticallyChecksForUpdates = automaticallyChecks
-        }
-        if updater.automaticallyDownloadsUpdates { updater.automaticallyDownloadsUpdates = false }
+        updater.automaticallyChecksForUpdates = automaticallyChecks
+        updater.automaticallyDownloadsUpdates = false
+        updater.updateCheckInterval = 86400
+        do { try updater.start(); started = true }
+        catch { unavailableReason = "App 更新配置无效，请安装正式版后重试。"; return }
+        observations = [
+            updater.observe(\.sessionInProgress, options: [.initial, .new]) { [weak self] _, _ in
+                Task { @MainActor in self?.refreshAvailability() }
+            },
+            updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] _, _ in
+                Task { @MainActor in self?.refreshAvailability() }
+            },
+            updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] _, _ in
+                Task { @MainActor in self?.refreshAvailability() }
+            },
+        ]
+        // Check on every launch; Sparkle owns subsequent scheduling and skipped versions.
+        if automaticallyChecks { updater.checkForUpdatesInBackground() }
+        refreshAvailability()
+    }
+
+    func setAutomaticallyChecks(_ value: Bool) {
+        guard started else { return }
+        updater.automaticallyChecksForUpdates = value
+        automaticallyChecks = value
+    }
+
+    private func refreshAvailability() {
+        sessionInProgress = updater.sessionInProgress
+        canShowUpdate = updater.canCheckForUpdates
+        automaticallyChecks = updater.automaticallyChecksForUpdates
     }
 
     func check() {
-        if waitingToRestart { Task { await completePreparedUpdate() }; return }
-        guard started, updater.canCheckForUpdates else { return }
-        checking = true
-        statusMessage = ""
+        guard canCheck, !updater.sessionInProgress else { return }
+        phase = .checking
+        // Manual checks include skipped versions and expose Sparkle's Install / Later / Skip choices.
         updater.checkForUpdates()
+        refreshAvailability()
+    }
+
+    func install() {
+        guard canInstallUpdate else { return }
+        if waitingToRestart { Task { await completePreparedUpdate() }; return }
+        updater.checkForUpdates()
+        refreshAvailability()
+    }
+
+    func updater(_ updater: SPUUpdater, mayPerform updateCheck: SPUUpdateCheck) throws {
+        phase = .checking
     }
 
     func resumePromptIfPossible() {
@@ -62,14 +117,25 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         latestVersion = item.displayVersionString
         checkedAt = Date()
-        checking = false
-        statusMessage = L("有新版可下载")
+        phase = .available
     }
 
     func updaterDidNotFindUpdate(_ updater: SPUUpdater) {
         latestVersion = ""
         checkedAt = Date()
-        statusMessage = L("没有更高的可安装版本")
+        phase = .upToDate
+    }
+
+    func updater(_ updater: SPUUpdater, userDidMake choice: SPUUserUpdateChoice, forUpdate item: SUAppcastItem, state: SPUUserUpdateState) {
+        if choice == .skip && state.stage != .installing { phase = .skipped }
+    }
+
+    func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
+        phase = .downloading
+    }
+
+    func updater(_ updater: SPUUpdater, didExtractUpdate item: SUAppcastItem) {
+        phase = .ready
     }
 
     func updater(_ updater: SPUUpdater, shouldProceedWithUpdate item: SUAppcastItem, updateCheck: SPUUpdateCheck) throws {
@@ -93,16 +159,14 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
     func updater(_ updater: SPUUpdater, shouldPostponeRelaunchForUpdate item: SUAppcastItem, untilInvokingBlock installHandler: @escaping () -> Void) -> Bool {
         resumeInstallation = installHandler
         waitingToRestart = true
+        phase = .ready
         Task { await completePreparedUpdate() }
         return true
     }
 
     private func completePreparedUpdate() async {
         guard !preparing, let resume = resumeInstallation else { return }
-        guard canInstall() else {
-            statusMessage = L("请先处理正在进行的任务或未保存修改，再点击更新重启。")
-            return
-        }
+        guard canInstall() else { return }
         preparing = true
         defer { preparing = false }
         guard await prepareInstall() else { return }
@@ -113,13 +177,15 @@ final class AppUpdater: NSObject, ObservableObject, SPUUpdaterDelegate, SPUStand
     }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
-        checking = false
         deferredPrompt = false
-        resumeInstallation = nil
-        waitingToRestart = false
         if let error = error as NSError?, !(error.domain == SUSparkleErrorDomain && error.code == 1001) {
-            statusMessage = L("App 更新未完成，请重新检查或使用完整安装包。")
+            phase = .failed
+            resumeInstallation = nil
+            waitingToRestart = false
             if prepared { prepared = false; Task { await recoverInstall() } }
+        } else if !waitingToRestart && phase != .upToDate && phase != .skipped {
+            phase = latestVersion.isEmpty ? .idle : .available
         }
+        refreshAvailability()
     }
 }

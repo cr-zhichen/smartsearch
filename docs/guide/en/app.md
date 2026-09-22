@@ -4,7 +4,7 @@
 
 ## Install and open
 
-Download the package for your operating system and architecture from [Releases](https://github.com/konbakuyomu/smartsearch/releases/latest). Windows installs for the current user. The App includes its own runtime; using the App does not require a separate Python, Node.js, or CLI installation.
+Download the package for your operating system and architecture from [Releases](https://github.com/konbakuyomu/smartsearch/releases/latest). Windows installs for the current user. The App contains a native interface and installation manager, without a bundled CLI. Overview starts by detecting your Node.js / npm or accepting a manual npm path. The CLI is installed through that npm and includes Python. The App does not download Node.js or Python.
 
 Environment preparation and full App/CLI language switching are available from v0.1.21; the Update Skills page is available from v0.1.22. Windows self-signing and the new transparent icon are available from v0.1.23. Windows `-signed.exe` packages use a self-signed certificate that Windows does not trust by default, so SmartScreen may still appear. Check the official release source and [public certificate fingerprint](../../windows-signing.md), then decide whether to use the options allowed by your system. This does not permanently trust the certificate or require disabling security protection. Older `-unsigned-test.exe` packages remain unsigned; older macOS packages use ad-hoc signing; after maintainer setup, new packages use a fixed self-signed identity, without Developer ID or notarization. See [macOS signing](../../macos-signing.md). Complete macOS/Windows ARM64 device use, clean-machine operation and the DPI matrix still require manual validation.
 
@@ -32,22 +32,26 @@ Edits stay in a draft until saved. An empty key field keeps the saved key; selec
 
 ## Update Agent Skills
 
-1. Open **Update Skills** and select **Check latest Skills**. The page downloads instruction files from the latest official stable npm package and shows the source version and check time. It does not run package code.
-2. Review the Agents, target paths and changed filenames, then select your targets. Status describes the Smart Search Skill, not the Agent application's installation, version or successful invocation.
-3. **Update selected Skills** is enabled only when a selected target has changed content, missing files or local invocation details to refresh. It is disabled when nothing is selected or all selected targets match. Review the source and paths, then confirm. Changed content is backed up first; the result shows backup paths. Extra files, unselected targets and legacy copies are kept.
-4. Reopen the Agent session; Gemini can use `/skills reload`. Ask the Agent to run `smart-search --version` first, then test a search when needed.
+1. Open **Update Skills** to read the selected CLI's Skill catalog and target paths. Use **Refresh CLI Skills** to read it again.
+2. Select Agents and confirm the changed files. Updates back up changed content and retain extra files, unselected targets and historical copies.
+3. The installed Skill calls `smart-search agent-guide` for the current CLI's full instructions. Reopen the Agent session and verify invocation with `smart-search --version`.
+4. **Remove Skills** moves selected files to a backup folder and removes those targets from automatic maintenance.
 
-Daily automatic checks are enabled by default and can be turned off. They notify without writing Agent directories. Offline or integrity failures show an error and label cached data; check successfully again before updating. App and CLI upgrades do not automatically sync Skills.
+Automatic maintenance is enabled for connected targets by default. It checks on first use after a CLI upgrade and daily thereafter, even when the App is closed or removed. Personal edits and missing files are preserved for manual review. Disable maintenance in Skill preferences if needed.
 
 Codex, Claude Code, Cursor, Copilot, Gemini, OpenCode, Cline, Roo Code and the other listed targets use the same Skill. Codex uses `~/.agents/skills/smart-search-cli`; other compatible Agents may read that shared directory too. Historical `.codex/skills` copies are kept. Claude respects an absolute `CLAUDE_CONFIG_DIR`. OpenCode uses `~/.config/opencode/skills` and reports old `.opencode/skills` copies. WSL, remote hosts and Cloud Agents need their own setup; local files are not automatically synced there.
 
-## Prepare the shared independent CLI
+## Manage the independent CLI
 
-Under **Update Skills → Shared independent CLI environment**, detect the environment, review the plan, install missing components and verify availability. Healthy Node.js, Python and independent Smart Search CLI installations are reused. Missing components go into user-writable directories separate from the App. The App does not install or sign into Agent applications, and does not require mise.
+Overview starts with CLI installation, current version, connection and updates. Continue with providers, then Skills. Open **CLI settings** for the management dialog.
 
-Skills are compared by file content; a software version change does not imply changed Skills. An older or unverified CLI does not block instruction-file sync. Existing local invocation details are preserved when unverified, and new targets receive generic instructions. Changes to a verified invocation path are shown separately. Prepare the CLI before using it and verify real calls in the Agent. Configure missing provider keys rather than reinstalling the runtime.
+Automatic discovery checks PATH, common Node.js directories, mise, nvm and Volta. Open **CLI settings** to select npm manually; an empty path restores automatic discovery. Invalid manual paths never fall back to another npm. All operations use the selected Node/npm and its original global prefix. Switching npm does not move or remove another installation or adopt a pip/uv development CLI from PATH.
 
-Failed installation keeps completed components; detect again and retry the missing work. Wait for installation or Skills writes before quitting. Local checks and version verification do not make paid requests.
+CLI updates are checked at App startup and every 24 hours while running. Checks notify; installation is manual. Preferences and timestamps persist independently, and failed checks retain the last success with a retry delay. App updates remain separate in Sparkle / Velopack.
+
+Configuration and Skills survive CLI repair, updates and removal. The npm prefix must be writable; the App does not elevate permissions, edit global npm settings or alter PATH. Add the selected npm global command directory to your terminal PATH when using short commands; Skills use the full invocation. Compatibility follows the protocol version, not matching product versions.
+
+Published npm 0.1.24 and earlier do not contain the self-contained runtime. Until the new version is published, the App reports this instead of installing a package that requires user Python.
 
 ## Everyday pages
 
@@ -57,7 +61,7 @@ Failed installation keeps completed components; detect again and retry the missi
 | Providers | Edit, test, preview and save provider settings |
 | Search & research | Search, read URLs, map sites, look up docs, plan offline research or run online research; copy/export results |
 | Activity | See actual stages, providers, models and elapsed time; cancel tasks started by this App |
-| Update Skills | Check stable Skills, back up and sync selected Agent targets; prepare the shared independent CLI |
+| Update Skills | Read Skills from the selected CLI; back up, sync or remove Agent targets |
 | Settings & about | Choose the configuration directory, observe additional activity directories, set theme/language, reset health status and check updates |
 
 Search results need source checking. A hit or snippet is a candidate source, not proof that its page was read. See [Search, research and evidence](research.md).
@@ -72,11 +76,11 @@ For a manual check, switch to English, visit each page, then switch to Chinese a
 
 ## App and CLI independence
 
-The App's private engine serves the App. An independently installed npm CLI runs separately and remains available after the App closes or is uninstalled. App upgrades do not replace that CLI; its update uses the original installation manager.
+The selected independent CLI provides search, configuration and Skill operations. It remains usable after the App closes or is removed. App updates do not replace the CLI.
 
 Both can share provider settings by selecting the same configuration directory. Windows defaults to `%LOCALAPPDATA%\smart-search`, with the legacy home directory supported. `SMART_SEARCH_CONFIG_DIR` or the App's directory selector can isolate configurations. Different inherited environment variables can still produce different effective settings.
 
-The private engine's absolute path also works while the App is closed, but uninstalling the App removes that engine. Use the independent CLI for lasting AI integration. External activity requires CLI 0.1.19 or newer; older CLI versions still work but do not emit the new activity events.
+The App manages only its own protocol process. It does not stop CLI tasks started by terminals or Agents.
 
 ## Activity, updates and removal
 
@@ -84,9 +88,9 @@ Activity refreshes every two seconds and observes only the current or explicitly
 
 Closing the window with a running App task offers continuing in the background, cancelling App tasks and exiting, or returning. Restore the background App from its tray/menu icon; launching it again restores the same window. Independent CLI tasks started by a terminal or AI are not cancelled by the App.
 
-In Settings & about, App updates use Velopack on Windows and Sparkle on macOS. Automatic checks run at most every 24 hours while the App is open; the switch stops future automatic checks and leaves manual checks available. A check downloads only metadata. Choose Update or Later when prompted; downloads and installation require your action. Errors remain errors, rather than being shown as “up to date”.
+In Settings & about, App updates use Velopack on Windows and Sparkle on macOS. Automatic checks run on every launch and every 24 hours while the App remains open; the switch stops future automatic checks and leaves manual checks available. A check downloads only metadata. Choose Update, Later or Skip this version when prompted. Skips persist across restarts; a newer version prompts again, and manual checks can rediscover a skipped release; downloads and installation require your action. Errors remain errors, rather than being shown as “up to date”.
 
-The frameworks download, verify and install the App and its private engine together, using a delta when applicable and a verified full package as fallback. Before restart, finish App tasks, CLI/environment/Skills writes and handle unsaved drafts. The App never cancels independent CLI tasks. A completed download is not a completed installation; check the actual version after restart.
+The frameworks download, verify and install the App independently, using a delta when applicable and a verified full package as fallback. Before restart, finish App tasks, CLI/environment/Skills writes and handle unsaved drafts. The App never cancels independent CLI tasks. A completed download is not a completed installation; check the actual version after restart.
 
 The first move from an Inno Setup installation requires a full installation: finish writes, close the old App, uninstall its App entry in Windows Settings, run the new official Setup, then use its new shortcut. Detection and the included migration guide do not uninstall anything automatically. On macOS, close the old App and replace it once with the full download. Shared configuration, independent CLI, SmartSearchTools, Agent Skills, research evidence and exports stay in their original locations. Subsequent App updates use the framework.
 

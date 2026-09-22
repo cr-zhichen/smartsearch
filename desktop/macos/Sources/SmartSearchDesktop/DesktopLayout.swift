@@ -73,6 +73,35 @@ struct DesktopPanel<Content: View>: View {
     }
 }
 
+struct DesktopStepHeader<Actions: View>: View {
+    let title: String
+    let subtitle: String
+    @ViewBuilder let actions: Actions
+
+    private var heading: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title).font(.headline)
+            Text(subtitle).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 16) {
+                heading.fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 16)
+                HStack(spacing: 8) { actions }.fixedSize()
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                heading
+                HStack(spacing: 8) { actions }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
 struct DesktopGroupBoxStyle: GroupBoxStyle {
     func makeBody(configuration: Configuration) -> some View {
         VStack(alignment: .leading, spacing: 12) {

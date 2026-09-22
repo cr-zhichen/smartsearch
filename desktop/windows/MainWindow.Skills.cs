@@ -15,25 +15,27 @@ public sealed partial class MainWindow
     {
         var panel = PagePanel();
         panel.Children.Add(PageTitle(L("更新 Skills")));
-        panel.Children.Add(Secondary(L("为编程 Agent 安装或更新 Smart Search Skill。软件更新不会自动同步这些文件。")));
+        panel.Children.Add(Secondary(L("Skills 由当前 CLI 提供；自动维护已接入目标，保留个人修改。")));
+        if (!_backend.IsConnected) { panel.Children.Add(BuildNativeCliPanel()); return Scroll(panel); }
         _skillSummary = Body(string.Empty);
         _skillResult = Body(string.Empty);
         _skillRows = new StackPanel { Spacing = 8 };
         _skillTargetRows.Clear();
         var source = new StackPanel { Spacing = 12 };
-        source.Children.Add(SectionHeading(L("最新正式版 Skills")));
+        source.Children.Add(SectionHeading(L("当前 CLI 提供的 Skills")));
         source.Children.Add(_skillSummary);
         source.Children.Add(ActionRow(
-            ActionButton(L("检查最新 Skills"), () => SkillsRequestAsync("skills.check"), operationKey: "skills-check", busyText: L("检查中…")),
+            ActionButton(L("刷新 CLI 提供的 Skills"), () => SkillsRequestAsync("skills.check"), operationKey: "skills-check", busyText: L("检查中…")),
             DetailsButton(L("检查详情与偏好"), ShowSkillPreferencesAsync)));
         panel.Children.Add(Card(source));
         panel.Children.Add(Card(SettingRow(L("运行环境"), L("所有 Agent 共用独立 CLI。准备完成后，选择需要更新 Skills 的 Agent。"),
-            ActionButton(L("管理运行环境…"), OpenRuntimeSettingsAsync))));
+            ActionButton(L("管理 CLI…"), () => NavigateToAsync("settings")))));
         panel.Children.Add(SettingsSection(L("选择 Agent"), L("状态只表示 Smart Search Skill 内容。Codex 使用的 .agents/skills 也可能被其他兼容 Agent 读取。"), Card(_skillRows)));
         panel.Children.Add(_skillResult);
         _skillSelectionSummary = Secondary(string.Empty);
         var footer = WorkspaceFooter(_skillSelectionSummary,
             ActionRow(ActionButton(L("刷新本机状态"), LoadSkillsAsync, operationKey: "skills-status", busyText: L("刷新中…")),
+                ActionButton(L("移除 Skills"), RemoveSelectedSkillsAsync, operationKey: "skills-remove", enabled: () => !Bool(_skills, "busy") && _selectedSkillTargets.Count > 0),
                 ActionButton(L("更新所选 Skills"), InstallSelectedSkillsAsync, primary: true, operationKey: "skills-install", busyText: L("更新中…"))));
         var layout = new Grid();
         layout.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -49,18 +51,25 @@ public sealed partial class MainWindow
     private Task ShowSkillPreferencesAsync()
     {
         var source = Property(_skills, "source");
-        _autoSkillsSwitch = CompactSwitch(L("每天自动检查 Skills，只提示，不写入"), Bool(_skills, "auto_check", true));
+        _autoSkillsSwitch = CompactSwitch(L("自动维护已接入的 Skills，保留个人修改"), Bool(_skills, "auto_check", true));
         _autoSkillsSwitch.Toggled += async (_, _) =>
         {
             if (!_settingAutoSkills) await SkillsRequestAsync("skills.auto", new { enabled = _autoSkillsSwitch.IsOn });
         };
         return ShowDetailsAsync(L("检查详情与偏好"), new StackPanel { Spacing = 16, Children =
         {
-            SettingRow(L("每天自动检查 Skills，只提示，不写入"), string.Empty, _autoSkillsSwitch),
-            Divider(), KeyValue(L("最近成功检查"), Timestamp(source, "checked_at")),
+            SettingRow(L("自动维护已接入的 Skills，保留个人修改"), string.Empty, _autoSkillsSwitch),
+            Divider(), KeyValue(L("当前 CLI 版本"), Text(source, "version", "—")),
             KeyValue(L("独立 CLI"), Text(_skills, "cli_version", L("未发现"))),
             Secondary(L("不同内容会先备份；额外文件与未选目标保持原样。更新后重新打开 Agent 会话；Gemini 可运行 /skills reload。实际调用仍需在 Agent 中验证。"))
         } });
+    }
+
+    private async Task RemoveSelectedSkillsAsync()
+    {
+        if (Bool(_skills, "busy") || _selectedSkillTargets.Count == 0) return;
+        if (!await ConfirmAsync(L("移除所选 Skills？"), L("所选 Skill 文件会移入备份目录，CLI 和配置保留。"), L("移除 Skills"))) return;
+        await SkillsRequestAsync("skills.remove", new { targets = _selectedSkillTargets.ToArray(), confirm = true });
     }
 
     private void RenderSkillState()
@@ -68,9 +77,9 @@ public sealed partial class MainWindow
         if (_currentPage != "ai" || _skillRows is null || _skillSummary is null) { RefreshActionButtons(); return; }
         var source = Property(_skills, "source");
         var lines = new List<string>();
-        lines.Add(Bool(_skills, "checking") ? L("正在检查官方稳定版 Skills…") : Text(source, "version").Length > 0
-            ? L("npm {0}", Text(source, "version")) : L("尚未获取正式版 Skills；当前文件仅与 App 内置副本比较。"));
-        if (Bool(_skills, "cached") && Text(source, "version").Length > 0) lines.Add(L("显示上次缓存；请检查最新 Skills 后再更新。"));
+        lines.Add(L("CLI {0}", Text(source, "version", "—")));
+        foreach (var item in Items(Property(_skills, "maintenance")).Where(item => Text(item, "status") is "personal_changes" or "needs_attention"))
+            lines.Add(L("{0}：保留个人修改或缺失文件，请查看文件详情。", Text(item, "target")));
         if (Text(_skills, "error").Length > 0) lines.Add(Text(_skills, "error"));
         if (Text(_skills, "compatibility").Length > 0) lines.Add(Text(_skills, "compatibility"));
         _skillSummary.Text = string.Join("\n", lines);
@@ -107,8 +116,9 @@ public sealed partial class MainWindow
         _updatingSkillRows = false;
         var result = Property(_skills, "result");
         var installed = Items(result, "installed").ToList();
+        var removed = Items(result, "removed").ToList();
         var failed = Items(result, "failed").ToList();
-        _skillResult!.Text = Bool(_skills, "busy") ? L("正在更新所选 Skills…") : installed.Count + failed.Count > 0
+        _skillResult!.Text = removed.Count > 0 ? L("已移除 {0} 个，失败 {1} 个。", removed.Count, failed.Count) : Bool(_skills, "busy") ? L("正在更新所选 Skills…") : installed.Count + failed.Count > 0
             ? L("已同步 {0} 个，失败 {1} 个。", installed.Count, failed.Count) : string.Empty;
         if (targets.Count == 0) _skillResult.Text = L("后端没有返回可管理的 Skill 目标。");
         _skillResult.Visibility = _skillResult.Text.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
@@ -145,7 +155,7 @@ public sealed partial class MainWindow
             foreach (var legacy in Items(current, "legacy_locations")) panel.Children.Add(DataText(L("历史副本，保留：{0}", Text(legacy, "path"))));
             if (Text(current, "error").Length > 0) panel.Children.Add(Body(Text(current, "error")));
             var result = Property(_skills, "result");
-            foreach (var receipt in Items(result, "installed").Where(item => Text(item, "target") == id))
+            foreach (var receipt in Items(result, "installed").Concat(Items(result, "removed")).Where(item => Text(item, "target") == id))
                 if (Text(receipt, "backup").Length > 0) panel.Children.Add(DataText(L("备份：{0}", Text(receipt, "backup"))));
             foreach (var failure in Items(result, "failed").Where(item => Text(item, "target") == id)) panel.Children.Add(Body(Text(failure, "error")));
             return ShowDetailsAsync(Text(current, "label", id), panel);

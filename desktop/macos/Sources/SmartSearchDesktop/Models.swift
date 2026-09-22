@@ -184,6 +184,32 @@ struct ConfigField: Identifiable, Hashable {
         return normalized.contains("password") || normalized.contains("secret") || normalized.contains("api_key") || normalized.contains("token")
     }
 
+    var inputPlaceholder: String { L("示例：{0}", exampleValue) }
+
+    private var exampleValue: String {
+        if !placeholder.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return placeholder }
+        if !defaultValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return defaultValue }
+        switch key {
+        case "OPENAI_COMPATIBLE_MODEL", "INTENT_CLASSIFIER_MODEL": return "gpt-4o"
+        case "OPENAI_COMPATIBLE_FALLBACK_MODELS": return "gpt-4o,deepseek-chat"
+        case "JINA_RESPOND_WITH": return "readerlm-v2"
+        case "INTENT_EMBEDDING_API_URL": return "https://api.siliconflow.cn/v1/embeddings"
+        case "INTENT_EMBEDDING_MODEL": return "Qwen/Qwen3-Embedding-8B"
+        case "INTENT_CLASSIFIER_API_URL": return "https://api.example.com/v1/chat/completions"
+        case "SMART_SEARCH_RESEARCH_PREFERRED_PROVIDERS": return "exa,tavily"
+        case "SMART_SEARCH_RESEARCH_DISABLED_PROVIDERS": return "anysearch,sciverse"
+        default: break
+        }
+        if isSecret { return key.hasSuffix("TOKEN") ? "your-api-token" : "your-api-key" }
+        switch kind {
+        case "url": return "https://api.example.com/v1"
+        case "int": return "3"
+        case "float": return "0.5"
+        case "csv": return "value1,value2"
+        default: return "example"
+        }
+    }
+
     init?(_ value: JSONValue) {
         guard let raw = value.objectValue, let key = raw.string("key") else { return nil }
         self.key = key

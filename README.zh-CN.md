@@ -33,14 +33,14 @@ Smart Search 把搜索和网页读取服务接到 Codex、Claude Code 等 AI 工
 
 ## 怎么在 App 里配置？
 
-1. **下载并打开 Smart Search。** 在[发行页](https://github.com/konbakuyomu/smartsearch/releases/latest)选择适合系统的安装包。App 自带运行环境。
+1. **下载并打开 Smart Search。** 在[发行页](https://github.com/konbakuyomu/smartsearch/releases/latest)选择适合系统的安装包。首页第一步会自动查找 npm，也可手动指定路径，然后安装并连接独立 CLI。
 2. **打开“服务商”。** 按页面提示配齐主搜索、文档检索和网页读取三类能力。页面会列出缺项和获取 Key 的入口；检查或测试配置后保存。
-3. **打开“更新 Skills”。** 先在“共用独立 CLI 环境”准备命令行工具，再检查最新正式版 Skills，选择 Agent 并确认备份更新。支持 Codex、Claude Code、Cursor 等 17 个目标；Agent 软件由你安装并登录。
-4. **点击“复制 AI 测试指引”。** 粘贴到 AI 的新对话里，先确认命令能运行，再试一次搜索。
+3. **打开“更新 Skills”。** CLI 连接后，读取它提供的 Skills，选择 Agent 并确认备份更新。支持 Codex、Claude Code、Cursor 等 17 个目标；Agent 软件由你安装并登录。
+4. **验证 Agent 接入。** 在 AI 的新对话中使用 Skill 提供的独立 CLI 调用，先确认命令能运行，再试一次搜索。
 
 服务商测试和搜索可能消耗相应服务的付费额度。打开 App 或检查本机环境不会发起付费搜索。
 
-v0.1.24 整合新的原生界面、Windows Velopack 与 macOS Sparkle，并首次发布正式框架更新源。App 与内置引擎整体更新，独立 CLI 升级后自动补齐 Python 环境，Skills 按文件内容判断更新；旧 Inno 安装需先完成一次完整迁移。Windows 的 `-signed.exe` 包使用**自签名证书**，仍可能出现 SmartScreen 提示，详见 [Windows 签名与首次启动](docs/windows-signing.md)。macOS 使用 ad-hoc 包完整性签名和独立的 Sparkle EdDSA 更新签名，尚无 Developer ID 签名或公证。最终 GUI 与旧安装迁移验收继续单独记录，不由自动构建和升级检查替代。
+v0.1.24 整合新的原生界面、Windows Velopack 与 macOS Sparkle，并首次发布正式框架更新源。当前开发版将 App 与独立 CLI 分别管理和更新，Skills 由 CLI 维护并保留个人修改；旧 Inno 安装需先完成一次完整迁移。Windows 的 `-signed.exe` 包使用**自签名证书**，仍可能出现 SmartScreen 提示，详见 [Windows 签名与首次启动](docs/windows-signing.md)。macOS 使用 ad-hoc 包完整性签名和独立的 Sparkle EdDSA 更新签名，尚无 Developer ID 签名或公证。最终 GUI 与旧安装迁移验收继续单独记录，不由自动构建和升级检查替代。
 
 [查看 App 配置步骤、支持平台和排障说明 →](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/zh-CN/app.md)
 
