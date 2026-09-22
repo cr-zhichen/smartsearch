@@ -16654,5 +16654,49 @@
   "下载已取消，请重新检查更新。": [
     "下载已取消，请重新检查更新。",
     "Download cancelled. Check for updates again to retry."
+  ],
+  "App 与 CLI 协议版本不兼容，请更新 CLI 或 App。": [
+    "App 与 CLI 协议版本不兼容，请更新 CLI 或 App。",
+    "The App and CLI protocols are incompatible. Update the CLI or App."
+  ],
+  "CLI version": [
+    "CLI 版本",
+    "CLI version"
+  ],
+  "CLI 安装由 App 的独立安装管理器处理。": [
+    "CLI 安装由 App 的独立安装管理器处理。",
+    "The App's independent installation manager handles CLI installations."
+  ],
+  "CLI 版本": [
+    "CLI 版本",
+    "CLI version"
+  ],
+  "Detect again": [
+    "重新检测",
+    "Detect again"
+  ],
+  "Read the current CLI instructions for Agents.": [
+    "读取当前 CLI 提供给 Agent 的使用说明。",
+    "Read the current CLI instructions for Agents."
+  ],
+  "Remove selected Skills, keeping a backup of their files.": [
+    "移除所选 Skills 并保留文件备份。",
+    "Remove selected Skills, keeping a backup of their files."
+  ],
+  "使用的 CLI": [
+    "使用的 CLI",
+    "CLI installation"
+  ],
+  "自动维护登记失败；Skill 文件已保留，请重试。": [
+    "自动维护登记失败；Skill 文件已保留，请重试。",
+    "Could not register automatic maintenance. Skill files were retained; try again."
+  ],
+  "重新检查": [
+    "重新检查",
+    "Check again"
+  ],
+  "重新检测": [
+    "重新检测",
+    "Detect again"
   ]
 }

@@ -3,9 +3,7 @@
 Both native clients implement this contract. The Python core owns configuration,
 validation, routing and status. Do not open an HTTP listener or invoke a shell.
 
-Launch bundled `backend/smart-search.exe --desktop-backend` on Windows;
-`Contents/Resources/backend/smart-search --desktop-backend` in the macOS bundle.
-For development an explicitly selected backend path may override this location.
+Launch the user-selected independent CLI with `--desktop-backend`. For npm installations, use the identified Node executable and package wrapper with that argument. Probe `--desktop-capabilities` for `product:smart-search` and `desktop_protocol_version:1` first. Product versions need not match. The native App contains no CLI or Python runtime. An explicitly selected development path may override discovery.
 Redirect UTF-8 stdin/stdout/stderr; keep the console hidden on Windows. Each stdin
 and stdout line is one compact JSON object. stderr is diagnostic, never protocol.
 
@@ -21,7 +19,7 @@ Methods below return result objects. Ordinary business errors have `ok:false`.
 | Method | Parameters | Result |
 | --- | --- | --- |
 | `ping` | `{}` | `protocol_version`, `version`, `generation` |
-| `initialize` | `protocol_version:1`, optional absolute `config_dir`, `app_version`, `lang:auto\|zh\|en`, `enable_update_checks:true` for production native clients | full state below |
+| `initialize` | `protocol_version:1`, optional absolute `config_dir`, `app_version`, `lang:auto\|zh\|en`, `independent_cli:true`, `enable_update_checks:false` for native clients | full state below |
 | `language.set` | `lang:auto\|zh\|en` | refreshed state; refuses changes during environment writes or CLI updates |
 | `get_state` | `{}` | full state, local/read-only |
 | `profile.select` | absolute `config_dir` | full state |
@@ -34,15 +32,16 @@ Methods below return result objects. Ordinary business errors have `ok:false`.
 | `providers.reset` | optional `providers` id array | `ok`, `cleared` |
 | `skills.status` | optional `targets` id array | `ok`, `targets` array |
 | `skills.install` | nonempty `targets` array | `ok`, `run_id` |
-| `skills.catalog` | `{}` | all Agent targets compared with verified stable Skills or clearly labelled bundled/cache fallback; `source`, `cached`, `targets`, `cli_version`, `compatibility`, `plan_id`, `can_sync` |
-| `skills.check` | `{}` | check and cache official npm stable Skills; completion via `skills` event; never writes Agent directories |
-| `skills.auto` | `enabled` boolean | persisted daily Skills check preference; no automatic installation |
+| `skills.catalog` | `{}` | all Agent targets compared with the selected CLI’s local Skill source; `source`, `cached`, `targets`, `cli_version`, `compatibility`, `plan_id`, `can_sync` |
+| `skills.check` | `{}` | refresh the current CLI source and local target state; never downloads an independent Skill source |
+| `skills.auto` | `enabled` boolean | persisted CLI-owned maintenance preference for connected targets |
 | `skills.sync` | `confirm:true`, nonempty `targets`, `plan_id` from catalog | explicit backup and sync; completion via `skills` event with `result.installed` (paths and backups) / `result.failed` |
+| `skills.remove` | `confirm:true`, nonempty `targets` | back up selected directories, remove maintenance receipts; `result.removed` / `result.failed` |
 | `activity.list` | optional absolute `directories` array, `limit` 1..1000 | `ok`, `runs`, `errors`, `enabled` |
 | `activity.clear` | `{}` | `ok`, clears completed metadata only |
 | `activity.enabled` | `enabled` boolean | `ok`, `enabled` |
 | `activity.details` | `run_id`, optional absolute `config_dir` | `ok`, `run`, metadata-only `events`, `events_truncated` |
-| `cli.status` | `{}` | `bundled_path`, `external_path`, `version`, external version or null |
+| `cli.status` | `{}` | current CLI identity and protocol, without discovering another CLI when `independent_cli:true` |
 | `cli.enable` | `confirm:true`, sent only by explicit user action | `ok`, `path`, `message`; refuses command conflicts |
 | `environment.status` | `{}` | current environment snapshot without probing or network |
 | `environment.check` | `{}` | starts read-only local discovery; completion via `environment` event |
@@ -51,7 +50,7 @@ Methods below return result objects. Ordinary business errors have `ok:false`.
 | `environment.cancel` | `{}` | cancels only the cancellable download stage; package-manager writes are not force-cancelled |
 | `cli.update-check` | `{}`; explicit manual CLI check | independent CLI update state; completion via `updates` event |
 | `updates.state` | `{}` | latest update state (no network) |
-| `updates.auto` | `enabled` boolean | persist shared automatic-check preference; native clients synchronize their SDK scheduler |
+| `updates.auto` | `enabled` boolean | legacy CLI check preference; never controls the App SDK scheduler |
 | `cli.update` | `confirm:true`, exact checked `version` | call only the identified npm/mise manager; terminal event includes actual version and bounded sanitized log |
 | `app.update-prepare` | `{}` | reject owned runs or protected writes, then lock requests until `shutdown`; the native SDK installs only after backend shutdown |
 | `shutdown` | `{}` | `ok`; cancels own work and exits |
@@ -116,82 +115,25 @@ This additive desktop-only field is not added to public CLI JSON output.
 Close with own active work offers background/stop-and-quit/return. Background
 has a tray/menu-bar entry. Never terminate external CLI processes.
 
-The backend update state contains the shared automatic-check preference, independent
-CLI metadata and `cli_update` status. `app` reports only the current bundled identity
-with `managed_by: "native"`; historical App download caches are not restored.
-Only npm CLI metadata is fetched by this module. CLI/Skills checks retain their
-production handshake opt-in and daily throttle.
+The native App owns its update settings and scheduler. Sparkle / Velopack check at launch and every 24 hours while enabled. Automatic downloads remain off. Skipping a version persists across launches; manual checks can reveal it again. App update checks and prompts do not require a CLI connection.
 
-Velopack (Windows) and Sparkle (macOS) own App metadata, downloads, integrity checks,
-full/delta packages and installation. Their native state is not fabricated by the
-Python backend. Both keep automatic downloads disabled and honor the saved
-`updates.auto` preference. There is no second App downloader in this protocol.
+Native clients protect unsaved drafts, owned tasks and protected writes before installation. If connected, request `app.update-prepare` and stop the App-owned protocol process; if disconnected, the SDK can still update the App. No external CLI process is terminated and no CLI installation is replaced by an App update.
 
-Native clients protect unsaved drafts and UI operations before requesting
-`app.update-prepare`. The backend rejects active owned runs, environment work,
-CLI upgrades and Skills writes; after success it rejects every request except
-`shutdown`. Clients stop the backend before allowing the SDK to replace the App.
-If the SDK cannot apply the update, the client reconnects a fresh backend. No
-external CLI process is killed or relocated. Normal shutdown remains available.
+## Independent CLI management
 
-`cli.status` and full refresh re-resolve the effective entry. Ownership fields
-include `manager/manager_label/can_update/resolved_path/update_note`; unknown,
-project, ambiguous, or unsupported constrained installations remain manual.
-CLI updates use the original manager with an exact checked version, no shell or
-bulk upgrade. The frontends prevent quit/reconnect during the manager operation;
-no forced cancellation or rollback is promised. Readback must confirm the target
-effective version and private Python runtime before `cli_update.status` becomes
-`finished`. If the manager skipped lifecycle scripts, the explicit update prepares
-the verified target package's private venv and installs its bundled Python project,
-using the same commands as environment setup. Source/manager changes refuse this
-step; ordinary discovery never initializes a runtime. Fresh metadata can enable a
-same-version retry when `cli.runtime_needs_repair` is true. Installer failures retain
-their logs and do not count as successful updates. CLI cards explain cached results
-and incomplete runtimes next to the action.
+The App's Swift / C# installation manager runs outside this protocol. It discovers the user's npm or accepts a manual npm path, binds its Node executable and original global prefix, and manages only that npm installation. Invalid explicit paths do not fall back to another environment. Install, repair, update and removal invoke npm directly, without a working CLI or Python dependency. The npm platform package supplies its own runtime; the App verifies the installed CLI version and protocol before connecting. The App never downloads Node/Python, elevates permissions or changes PATH/npm settings. Configuration and Skills survive CLI removal and App removal.
 
-Environment snapshots/events contain `status`, `busy`, `can_cancel`, `message`,
-`error`, bounded sanitized `log`, `steps`, `node`, `python`, `cli`, `targets`,
-`plan`, `plan_id`, `can_install`, `blocked`, `checked_at`, `tools_dir`, `config_dir`
-and a shell-quoted `invocation` for the user's AI test instructions. Download
-stages add actual `received`/`total` bytes. `ready` means the operation ended;
-each step and target must still be inspected. It never means an AI has invoked
-the skill. Files, installed AI commands, local engine execution and provider
-configuration are distinct facts. Checks do not run legacy auto-repair wrappers.
+Native clients check npm latest at startup and every 24 hours while enabled. CLI preferences, timestamps and environment identity are independent of App updates; failed checks retain the last successful result and defer retries. Only versions declaring self-contained platform packages are offered for installation.
 
-New runtimes and the npm prefix live in `%LOCALAPPDATA%/SmartSearchTools` or
-`~/.local/share/smart-search-tools`, outside the App bundle. Their manifest stores
-only independent paths, not secrets. AI skills invoke that independent Node/npm
-installation with absolute paths; no App executable or running App is required.
-Windows publishes only the new installation's user PATH entries and preserves
-existing entries; already running clients require a refreshed environment. A
-sibling node.exe makes the npm shim independent of another Node earlier in PATH.
-macOS GUI clients use the absolute invocation without modifying shell profiles.
-
-Codex user skills use `.agents/skills`, with `.codex/skills` reported as a legacy
-location; Claude uses `.claude/skills` or its explicit `CLAUDE_CONFIG_DIR`. Changed
-skill files are kept unless replacement was explicitly chosen; replacement first
-backs up the old tree and preserves extra files. Installation is checked again
-against `plan_id` before mutation. Environment writes exclude competing CLI/App
-updates, skills writes and profile switching; clients keep the operation busy
-across page changes and guard exit/reconnect until its actual terminal event.
+`cli.enable`, `cli.update*`, `updates.*` and `environment.*` remain compatibility APIs for older clients. Current native clients do not call them to manage installations or App updates. `cli.enable` rejects independent mode.
 
 ## Agent Skills updates
 
-Skills state has `auto_check`, `last_attempt`, `checking`, `busy`, `source`
-(`version`, `checked_at`, `integrity`, `url`), `cached`, `error`, all `targets`,
-`cli_version`, `cli_ready`, `compatibility`, `plan_id`, `can_sync`, and `result`.
-Automatic checks use the production handshake opt-in and the independent daily
-Skills preference. They download only official npm data, with SHA512 and bounded
-archive validation; no lifecycle script or package code runs. A failed check keeps
-old installations and labels previous data as cached. Sync requires a successful
-check in this session. Package versions do not determine Skill content changes or
-block sync when the CLI is older or unverified. CLI readiness is informational;
-unverified local invocation notes are preserved, not regenerated.
-The confirmed fingerprint is rechecked against the current source, target files
-and CLI invocation. Skills writes exclude environment/CLI updates, language and
-profile changes; closing waits for the writer. Existing `skills.status/install`
-remain compatible bundled-source APIs; native clients use the new stable-source
-methods and pass no Skill targets to `environment.install`.
+Skills state has `auto_check`, `last_attempt`, `checking`, `busy`, `source` (`version`, `managed_by:cli`), `error`, `targets`, `cli_version`, `cli_ready`, `plan_id`, `can_sync`, `result` and `maintenance`.
+
+Catalog, source bytes, target paths, comparison, writes, backups and removal are owned by the selected CLI. The installed short Skill entry calls `smart-search agent-guide [relative-path]` to read that CLI's current documentation. Explicit sync rechecks `plan_id` and registers the selected target for automatic maintenance. Removal moves files to a backup and unregisters the target.
+
+Automatic maintenance checks during normal CLI use, immediately after a CLI version change and daily thereafter. It needs neither a running App nor a network request. Receipts bind each target to its original CLI installation and config directory, and retain hashes of installed files. Personal edits, missing files and unregistered targets are preserved. Process locks serialize receipt and target writes; disabling maintenance persists across App/CLI restarts. Metadata probes and `skills status` stay read-only.
 
 Every target uses the shared registry/path resolver, including Cline and Roo Code.
 Managed local invocation notes are composed consistently and recognized by the
