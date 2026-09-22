@@ -60,6 +60,7 @@ class Backend:
         self.generation = uuid.uuid4().hex
         self.directory = ""
         self.initialized = False
+        self.independent_cli = False
         self.include_config_secrets = False
         self.language = "zh"  # Protocol v1 clients without a language keep their existing presentation.
         self.stopping = False
@@ -148,6 +149,15 @@ class Backend:
         return data
 
     def cli_status(self):
+        if self.independent_cli:
+            data = {"external_path": sys.executable, "resolved_path": sys.executable,
+                    "external_version": cli._get_version(), "version": cli._get_version(),
+                    "manager": "self", "manager_label": "CLI", "can_update": False,
+                    "external_runtime_verified": True, "activity_protocol_version": 1,
+                    "external_activity_protocol_version": 1, "other_paths": [],
+                    "update_note": tr('CLI 安装由 App 的独立安装管理器处理。')}
+            self.updates.refresh_installed(data)
+            return data
         if self.cli_info is not None:
             self.updates.refresh_installed(self.cli_info)
             return self.cli_info
@@ -315,6 +325,8 @@ class Backend:
             self.updates.changed()
 
     def enable_cli(self, params):
+        if self.independent_cli:
+            raise ValueError(tr("CLI 安装由 App 的独立安装管理器处理。"))
         if self.environment.state["busy"]:
             raise ValueError(tr('环境操作正在进行，请等待完成。'))
         if params.get("confirm") is not True:
@@ -499,9 +511,10 @@ class Backend:
             return {"protocol_version": 1, "version": cli._get_version(), "generation": self.generation}
         if method == "initialize":
             if type(params.get("protocol_version")) is not int or params["protocol_version"] != PROTOCOL_VERSION:
-                raise ValueError(tr('App 与后端协议版本不匹配，请安装完整的同版本 App。'))
+                raise ValueError(tr('App 与 CLI 协议版本不兼容，请更新 CLI 或 App。'))
             self.directory = absolute_directory(params["config_dir"]) if params.get("config_dir") else str(config.config_file.parent)
             self.initialized = True
+            self.independent_cli = params.get("independent_cli") is True
             self.include_config_secrets = params.get("include_config_secrets") is True
             self.updates.current_version = str(params.get("app_version", cli._get_version()))
             self.updates.state["app"]["current_version"] = self.updates.current_version
@@ -539,7 +552,7 @@ class Backend:
                 return ui_api.reset_health(params)
             if method == "skills.status":
                 return ui_api.skills_status(params.get("targets"))
-            if method in {"skills.catalog", "skills.check", "skills.sync", "skills.auto"}:
+            if method in {"skills.catalog", "skills.check", "skills.sync", "skills.remove", "skills.auto"}:
                 if method == "skills.auto":
                     if type(params.get("enabled")) is not bool:
                         raise ValueError(tr('enabled 必须为布尔值。'))
@@ -547,12 +560,14 @@ class Backend:
                     self.skills.save()
                     self.skills.changed()
                     return self.skills.state
-                if method in {"skills.catalog", "skills.check", "skills.sync"}:
+                if method in {"skills.catalog", "skills.check", "skills.sync", "skills.remove"}:
                     if self.environment.state["busy"] or self.updates.state["cli_update"]["status"] == "running":
                         raise ValueError(tr('环境操作或 CLI 更新正在进行，请等待完成。'))
                     self.cli_info = None
                     info = self.cli_status()
                     await asyncio.to_thread(self.skills.snapshot, manager_environment(self.directory), info, self.directory)
+                if method == "skills.remove":
+                    return self.skills.remove(params)
                 if method == "skills.sync":
                     if any(run["command"] == "skills.install" and run["status"] in {"running", "cancelling"} for run in self.runs.values()):
                         raise ValueError(tr('Skills 操作正在进行，请等待完成。'))
@@ -655,8 +670,9 @@ async def serve():
             if backend.initialized and not backend.app_update_pending:
                 backend.event("activity", backend.activity())
                 backend.updates.auto_check(backend.cli_status())
-                if backend.updates.enabled:
-                    backend.skills.auto_check(manager_environment(backend.directory), backend.cli_status(), backend.directory)
+                if (backend.independent_cli or backend.updates.enabled) and not backend.skills.state["busy"] and not backend.environment.state["busy"]:
+                    with config.snapshot(directory=backend.directory):
+                        backend.skills.auto_check(manager_environment(backend.directory), backend.cli_status(), backend.directory)
 
     poller = asyncio.create_task(poll())
     try:

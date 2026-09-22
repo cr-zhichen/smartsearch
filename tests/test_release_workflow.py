@@ -171,13 +171,11 @@ def test_ci_workflow_is_no_publish_and_covers_the_release_runtime_matrix():
     assert len(matrix) == 3
 
     for command in [
-        "npm ci",
         "npm test",
-        "node npm/bin/smart-search.js regression",
-        "node npm/bin/smart-search.js smoke --mock --format json",
+        "python -m smart_search.cli regression",
+        "python -m smart_search.cli smoke --mock --format json",
         "npm run check:skill-parity",
         "npm run pack:dry",
-        "npm run smoke:tarball",
         "git diff --check HEAD^1 HEAD",
         "git diff-tree --check --root -r --no-commit-id HEAD",
     ]:
@@ -206,9 +204,9 @@ def test_release_version_metadata_and_tarball_support_are_synchronized():
         "regression",
         "smoke",
         "--mock",
-        "assertPackContents",
-        "src/smart_search/assets/skills/smart-search-cli/",
-        'path.extname(filePath) === ".py"',
+        "--ignore-scripts",
+        "PYTHONHOME",
+        "--desktop-backend",
     ]:
         assert marker in tarball_smoke
 

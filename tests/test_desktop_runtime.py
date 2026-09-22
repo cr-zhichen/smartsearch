@@ -209,7 +209,7 @@ async def test_backend_protocol_catalog_and_real_worker(tmp_path):
     with pytest.raises(ValueError, match="握手"):
         await backend.handle("config.apply", {"revision": "", "set": {}})
     for version in (999, True, 1.0):
-        with pytest.raises(ValueError, match="不匹配"):
+        with pytest.raises(ValueError, match="协议"):
             await backend.handle("initialize", {"protocol_version": version})
     state = await backend.handle("initialize", {"protocol_version": 1, "config_dir": str(tmp_path)})
     catalog = {item["id"]: item for item in state["commands"]}

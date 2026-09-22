@@ -15,21 +15,13 @@
     "smart-search": "npm/bin/smart-search.js"
   },
   "files": [
-    "assets/branding/smart-search.png",
-    "assets/branding/README.md",
-    "npm/",
+    "npm/bin/",
     "skills/smart-search-cli/**",
-    "src/smart_search/**/*.py",
-    "src/smart_search/assets/skills/smart-search-cli/**",
-    "src/smart_search/assets/ui/**",
-    "src/smart_search/assets/i18n/**",
-    "pyproject.toml",
     "README.md",
     "README.zh-CN.md",
     "LICENSE"
   ],
   "scripts": {
-    "postinstall": "node npm/scripts/postinstall.js",
     "test": "node npm/scripts/test.js",
     "set-version": "node npm/scripts/set-package-version.js",
     "sync:python-version": "node npm/scripts/sync-python-version.js",
@@ -44,5 +36,14 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "smartSearchBinary": true,
+  "optionalDependencies": {
+    "@konbakuyomu/smart-search-darwin-x64": "0.1.24",
+    "@konbakuyomu/smart-search-darwin-arm64": "0.1.24",
+    "@konbakuyomu/smart-search-win32-x64": "0.1.24",
+    "@konbakuyomu/smart-search-win32-arm64": "0.1.24",
+    "@konbakuyomu/smart-search-linux-x64": "0.1.24",
+    "@konbakuyomu/smart-search-linux-arm64": "0.1.24"
   }
 }
