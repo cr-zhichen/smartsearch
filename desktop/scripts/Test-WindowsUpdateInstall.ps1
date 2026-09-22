@@ -6,7 +6,7 @@ $ErrorActionPreference = 'Stop'
 $expected = Get-ExpectedSigningCertificate (Join-Path $PSScriptRoot '../packaging/windows/smart-search.cer')
 try {
     $results = foreach ($relative in @('SmartSearch.Desktop.exe', 'Update.exe', 'current/SmartSearch.Desktop.exe',
-        'current/SmartSearch.Desktop.dll', 'current/backend/smart-search.exe')) {
+        'current/SmartSearch.Desktop.dll')) {
         Test-WindowsSignature (Join-Path $Installation $relative) $expected
     }
     $results | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $ResultFile -Encoding utf8

@@ -189,6 +189,14 @@ def validate_release(root, version, macos_certificate_sha256=None):
             if path.name != expected:
                 raise ValueError("Sparkle update architecture mismatch")
             required.add(path.name)
+    for platform, architectures in (("macos", ("arm64", "x86_64")), ("windows", ("arm64", "x64"))):
+        for architecture in architectures:
+            name = f"smart-search-cli-{version}-{platform}-{architecture}.zip"
+            archive = file_path(root, name)
+            checksum = file_path(root, name + ".sha256")
+            if checksum.read_text().strip() != f"{sha256(archive)}  {name}":
+                raise ValueError("Standalone CLI archive checksum mismatch")
+            required |= {name, checksum.name}
     actual = {p.name for p in root.iterdir() if p.is_file()}
     if actual != required:
         raise ValueError(f"Missing or unexpected release files: {sorted(actual ^ required)}")

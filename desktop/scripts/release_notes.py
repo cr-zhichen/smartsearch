@@ -24,7 +24,10 @@ def with_downloads(body: str, version: str, directory: Path, repository: str = R
         ("Windows x64", windows_installer(version, "x64"), "Intel / AMD 64-bit"),
         ("Windows ARM64", windows_installer(version, "arm64"), "Snapdragon / ARM64"),
     ]
-    for name in [entry[1] for entry in entries] + ["SHA256SUMS.txt"]:
+    cli_entries = [(f"{platform} {architecture}", f"smart-search-cli-{version}-{platform}-{architecture}.zip")
+                   for platform, architectures in (("macos", ("arm64", "x86_64")), ("windows", ("arm64", "x64")))
+                   for architecture in architectures]
+    for name in [entry[1] for entry in entries + cli_entries] + ["SHA256SUMS.txt"]:
         if not (directory / name).is_file() or (directory / name).stat().st_size == 0:
             raise ValueError(f"Download asset is missing or empty: {name}")
     signing = [json.loads((directory / f"macos-signing-{arch}.json").read_text())
@@ -53,6 +56,11 @@ def with_downloads(body: str, version: str, directory: Path, repository: str = R
             "| 系统 / System | 下载文件 / Download | 适用设备 / Devices |",
             "| --- | --- | --- |"]
     rows.extend(f"| {system} | [{name}]({base}{name}) | {devices} |" for system, name, devices in entries)
+    rows += ["", "### 独立 CLI / Standalone CLI", "",
+             "App 通过系统 npm 安装和管理 CLI；以下独立包也可直接用于命令行。App 与 CLI 分别更新。",
+             "The App installs and manages the CLI through system npm. These standalone archives also work directly in a terminal.", "",
+             "| 系统 / System | CLI |", "| --- | --- |"]
+    rows.extend(f"| {system} | [{name}]({base}{name}) |" for system, name in cli_entries)
     rows += ["", "选择与系统对应的安装包；Mac 不确定芯片型号时可选通用版。",
              "Choose the installer for your system; the universal Mac app supports both chip families.", "",
              "### macOS 安装与首次打开", "",

@@ -35,8 +35,8 @@ def main(build_file, signing_mode):
     staged = Path(build["staged_project_directory"])
     for name in ("AppUpdater.cs", "MainWindow.xaml.cs", "Program.cs"):
         assert (staged / name).read_bytes() == (ROOT / "desktop/windows" / name).read_bytes(), f"Stale build: {name}"
-    package = json.loads((publish / "backend/package.json").read_text())
-    version = package["version"]
+    assert not (publish / "backend").exists(), "The App must not bundle a CLI"
+    version = build["version"]
     architecture = build["installer"]["channel"].removeprefix("win-").removesuffix("-stable")
     old_version = "0.0.1"
     test_id = "com.smartsearch.test." + uuid.uuid4().hex
@@ -54,8 +54,6 @@ def main(build_file, signing_mode):
     try:
         old = root / "old-publish"
         shutil.copytree(publish, old)
-        old_package = {**package, "version": old_version}
-        (old / "backend/package.json").write_text(json.dumps(old_package), encoding="utf-8")
         for source, target_version, label, previous in ((old, old_version, "old", None), (publish, version, "new", root / "old-feed")):
             command = ["pwsh", "-NoProfile", "-File", ROOT / "desktop/scripts/Package-Windows.ps1",
                        "-PublishDirectory", source, "-OutputDirectory", root / (label + "-feed"),
@@ -105,17 +103,16 @@ def main(build_file, signing_mode):
                  old_version, version, architecture, receipt], evidence / (label + ".log"), timeout=180)
             assert any(p.endswith("-delta.nupkg") for p in downloaded), downloaded
             assert any(p.endswith("-full.nupkg") for p in downloaded) == corrupt_delta, downloaded
-            for relative in ("SmartSearch.Desktop.exe", "SmartSearch.Desktop.dll", "backend/smart-search.exe", "backend/package.json"):
+            for relative in ("SmartSearch.Desktop.exe", "SmartSearch.Desktop.dll"):
                 assert hashlib.sha256((target / "current" / relative).read_bytes()).digest() == hashlib.sha256((publish / relative).read_bytes()).digest(), relative
-            run([target / "current/backend/smart-search.exe", "--version"], evidence / (label + "-backend.log"))
-            assert (evidence / (label + "-backend.log")).read_text(encoding="utf-8").strip() == "smart-search " + version
+            assert not (target / "current/backend").exists(), "App update bundled a CLI"
             if signing_mode == "Required":
                 run(["pwsh", "-NoProfile", "-File", ROOT / "desktop/scripts/Test-WindowsUpdateInstall.ps1",
                      "-Installation", target, "-ResultFile", evidence / (label + "-signatures.json")], evidence / (label + "-signatures.log"))
             receipts.append({"case": label, "requests": list(downloaded), "installed_version": version})
         (evidence / "receipt.json").write_text(json.dumps({"result": "passed", "root": str(root), "build": str(build_file),
             "build_run_directory": build["run_directory"], "test_identity": test_id, "cases": receipts,
-            "baseline": "Current payload with version 0.0.1 in framework and backend manifests",
+            "baseline": "Current payload with version 0.0.1 in the framework manifest",
             "cancel_at_completion_blocked": True, "production_install_modified": False, "gui_tested": False}, indent=2), encoding="utf-8")
         print(evidence / "receipt.json")
     finally:

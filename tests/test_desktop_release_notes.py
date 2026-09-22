@@ -25,6 +25,9 @@ def assets(tmp_path):
         (tmp_path / name).write_bytes(b"verified release asset")
     for arch in ("universal", "arm64", "x86_64"):
         (tmp_path / f"macos-signing-{arch}.json").write_text(json.dumps({"kind": "self-signed", "certificate_sha256": "A" * 64}))
+    for platform, architectures in (("macos", ("arm64", "x86_64")), ("windows", ("arm64", "x64"))):
+        for architecture in architectures:
+            (tmp_path / f"smart-search-cli-1.2.3-{platform}-{architecture}.zip").write_bytes(b"cli")
     return tmp_path
 
 
@@ -34,7 +37,7 @@ def test_downloads_keep_original_notes_and_only_link_existing_assets(notes, asse
     assert output.endswith(original)
     assert notes.with_downloads(output, "1.2.3", assets) == output
     links = re.findall(r"\]\(https://github.com/konbakuyomu/smartsearch/releases/download/v1\.2\.3/([^)]*)\)", output)
-    assert len(links) == 6
+    assert len(links) == 10
     assert {path.name for path in assets.iterdir() if path.suffix != ".json"} == set(links)
     assert "fixed self-signed certificate" in output
 
