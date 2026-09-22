@@ -43,6 +43,36 @@ def release_files(root):
         ET.ElementTree(rss).write(root / f"appcast-macos-{arch}.xml")
 
 
+@pytest.mark.parametrize("damage", [None, "test-identity", "wrong-certificate", "missing-evidence", "adhoc", "empty-pin"])
+def test_macos_signed_release_requires_maintainer_identity(tmp_path, damage):
+    release_files(tmp_path)
+    digest = "A" * 64
+    for arch in ("arm64", "x86_64"):
+        dmg = tmp_path / f"SmartSearch-{VERSION}-macos-{arch}-unsigned-test.dmg"
+        dmg.rename(dmg.with_name(dmg.name.replace("unsigned-test", "self-signed")))
+        (tmp_path / f"macos-signing-{arch}.json").write_text(json.dumps({
+            "kind": "self-signed", "certificate_sha256": digest,
+        }))
+    evidence = tmp_path / "macos-signing-arm64.json"
+    if damage == "missing-evidence":
+        evidence.unlink()
+    elif damage in {"test-identity", "wrong-certificate"}:
+        data = json.loads(evidence.read_text())
+        data["kind" if damage == "test-identity" else "certificate_sha256"] = "self-signed-test" if damage == "test-identity" else "B" * 64
+        evidence.write_text(json.dumps(data))
+    elif damage == "adhoc":
+        dmg = tmp_path / f"SmartSearch-{VERSION}-macos-arm64-self-signed.dmg"
+        dmg.rename(dmg.with_name(dmg.name.replace("self-signed", "unsigned-test")))
+    elif damage == "empty-pin":
+        digest = ""
+    if damage:
+        with pytest.raises(ValueError):
+            updates.validate_release(tmp_path, VERSION, digest)
+        assert not (tmp_path / "SHA256SUMS.txt").exists()
+    else:
+        assert updates.validate_release(tmp_path, VERSION, digest)["assets"] == 14
+
+
 @pytest.mark.parametrize("duplicate", [False, True])
 def test_workflow_flattens_nested_assets_without_overwriting(tmp_path, monkeypatch, duplicate):
     root = tmp_path / "release-packages"

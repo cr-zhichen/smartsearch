@@ -14,6 +14,8 @@ import tempfile
 import threading
 import uuid
 
+from macos_signing import sign_app, verify_app
+
 ROOT = Path(__file__).resolve().parents[2]
 SPARKLE_COMMIT = "ac2def288cbff5cfc7df3ffef6abdf45b72bcb0a"  # Sparkle 2.9.6
 
@@ -56,7 +58,8 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
         assert commit == SPARKLE_COMMIT, "Unexpected Sparkle CLI source"
         derived = root / "tool-build"
         run(["xcodebuild", "-project", source / "Sparkle.xcodeproj", "-scheme", "sparkle-cli", "-configuration", "Release",
-             "-derivedDataPath", derived, "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_ALLOWED=YES"], evidence / "tool-build.log")
+             "-derivedDataPath", derived, "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_ALLOWED=YES",
+             "MACOSX_DEPLOYMENT_TARGET=13.0"], evidence / "tool-build.log")
         tool_app = derived / "Build/Products/Release/sparkle.app"
         tool_plist = tool_app / "Contents/Info.plist"
         tool_info = plistlib.loads(tool_plist.read_bytes())
@@ -96,7 +99,11 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
         prefix = f"http://127.0.0.1:{server.server_port}/"
         feed_url = prefix + f"appcast-macos-{architecture}.xml"
         receipts = []
-        for case in ("delta", "full-fallback", "wrong-public-key"):
+        certificate = build.get("signing", {}).get("certificate_sha256")
+        cases = ["delta", "full-fallback", "wrong-public-key"]
+        if certificate:
+            cases.append("adhoc-migration")
+        for case in cases:
             case_root = root / case
             case_root.mkdir()
             bundle_id = "com.smartsearch.test." + uuid.uuid4().hex
@@ -113,7 +120,11 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
                 backend = app / "Contents/Resources/backend/package.json"
                 package = json.loads(backend.read_text())
                 backend.write_text(json.dumps({**package, "version": app_version}))
-                run(["codesign", "--force", "--sign", "-", app], evidence / f"{case}-{label}-sign.log")
+                if certificate and not (case == "adhoc-migration" and label == "old"):
+                    signed = sign_app(app)
+                    (evidence / f"{case}-{label}-sign.json").write_text(json.dumps(signed, indent=2))
+                else:
+                    run(["codesign", "--force", "--deep", "--sign", "-", app], evidence / f"{case}-{label}-sign.log")
                 previous = case_root / "old-feed" if label == "new" else ""
                 run(["bash", ROOT / "desktop/scripts/package-sparkle.sh", app, build["sparkle_tools"],
                      case_root / (label + "-feed"), key, architecture, previous], evidence / f"{case}-{label}-package.log",
@@ -123,7 +134,10 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
                 info = plistlib.loads((apps[0] / "Contents/Info.plist").read_bytes())
                 info["SUPublicEDKey"] = wrong_public.read_text()
                 (apps[0] / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
-                run(["codesign", "--force", "--sign", "-", apps[0]], evidence / f"{case}-resign.log")
+                if certificate:
+                    sign_app(apps[0])
+                else:
+                    run(["codesign", "--force", "--sign", "-", apps[0]], evidence / f"{case}-resign.log")
             current.update(directory=case_root / "new-feed", case=case)
             requests.clear()
             result = run([cli, apps[0], "--check-immediately", "--feed-url", feed_url, "--user-agent-name", "Smart Search isolated update test", "--verbose"],
@@ -139,6 +153,8 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
                 backend = apps[0] / "Contents/Resources/backend/smart-search"
                 check = run([backend, "--version"], evidence / f"{case}-backend.log")
                 assert check.stdout.strip() == "smart-search " + version
+                if certificate:
+                    verify_app(apps[0], certificate)
             receipts.append({"case": case, "requests": list(requests), "version": installed, "exit_code": result.returncode})
         (evidence / "receipt.json").write_text(json.dumps({"status": "passed", "architecture": architecture, "root": str(root),
             "build": str(build_file), "cases": receipts, "gui_tested": False, "production_install_modified": False}, indent=2))

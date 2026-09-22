@@ -12,6 +12,7 @@ import tempfile
 from pathlib import Path
 
 from build_backend import smoke_backend
+from macos_signing import verify_app
 
 
 def verify_frontend_sdk(executable: Path, architecture: str, minimum_os: str, expected_sdk: str | None = None) -> None:
@@ -40,6 +41,8 @@ def main() -> None:
     parser.add_argument("--architecture", required=True, choices=("arm64", "x86_64"))
     parser.add_argument("--version", required=True)
     parser.add_argument("--sdk-version", help="Expected SDK used by the build toolchain")
+    parser.add_argument("--signing-mode", choices=("adhoc", "required"), default="adhoc")
+    parser.add_argument("--certificate-sha256", default=os.environ.get("SMART_SEARCH_MACOS_CERT_SHA256", ""))
     args = parser.parse_args()
 
     with tempfile.TemporaryDirectory(prefix="smartsearch-dmg-") as directory:
@@ -53,6 +56,8 @@ def main() -> None:
         try:
             app = mount / "Smart Search.app"
             subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], check=True)
+            if args.signing_mode == "required":
+                verify_app(app, args.certificate_sha256)
             info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
             if info["CFBundleShortVersionString"] != args.version or info["CFBundleVersion"] != args.version:
                 raise RuntimeError("The packaged app version differs from the build source")
@@ -69,9 +74,11 @@ def main() -> None:
             installed = root / "Applications/Smart Search.app"
             subprocess.run(["ditto", str(app), str(installed)], check=True)
             subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(installed)], check=True)
+            if args.signing_mode == "required":
+                verify_app(installed, args.certificate_sha256)
             smoke_backend(installed / "Contents/Resources/backend/smart-search", root, args.version)
             print("DMG verified: signature, version, architecture, frontend SDK, install layout and installed backend startup.")
-            print("Ad-hoc signatures do not establish Developer ID trust or Apple notarization.")
+            print("Local/self-signed code identities do not establish Developer ID trust or Apple notarization.")
         finally:
             subprocess.run(["hdiutil", "detach", str(mount)], check=True)
 
