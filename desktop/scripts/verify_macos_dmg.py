@@ -13,6 +13,46 @@ from pathlib import Path
 
 from build_backend import smoke_backend
 
+MACHO_MAGIC = {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe",
+               b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"}
+
+
+def verify_binary_architectures(path: Path, architectures: tuple[str, ...]) -> None:
+    actual = subprocess.check_output(["xcrun", "lipo", "-archs", str(path)], text=True).split()
+    if not set(architectures).issubset(actual):
+        raise RuntimeError(f"{path} requires {architectures}, found {actual}")
+
+
+def verify_macho_tree(directory: Path, architectures: tuple[str, ...]) -> None:
+    seen = set()
+    for path in directory.rglob("*"):
+        resolved = path.resolve()
+        if not path.is_file() or resolved in seen:
+            continue
+        seen.add(resolved)
+        with path.open("rb") as stream:
+            is_macho = stream.read(4) in MACHO_MAGIC
+        if is_macho:
+            verify_binary_architectures(path, architectures)
+
+
+def verify_app_architectures(app: Path, architecture: str, expected_sdk: str | None = None) -> None:
+    architectures = ("arm64", "x86_64") if architecture == "universal" else (architecture,)
+    desktop = app / "Contents/MacOS/SmartSearchDesktop"
+    backend = app / "Contents/Resources/backend"
+    info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
+    for executable in (desktop, backend / "smart-search"):
+        verify_binary_architectures(executable, architectures)
+    for arch in architectures:
+        verify_frontend_sdk(desktop, arch, info["LSMinimumSystemVersion"], expected_sdk)
+        if architecture == "universal":
+            if not (backend / arch / "smart-search").is_file():
+                raise RuntimeError(f"Universal app is missing its {arch} backend")
+            verify_macho_tree(backend / arch, (arch,))
+        else:
+            verify_macho_tree(backend, (arch,))
+    verify_macho_tree(app / "Contents/Frameworks", architectures)
+
 
 def verify_frontend_sdk(executable: Path, architecture: str, minimum_os: str, expected_sdk: str | None = None) -> None:
     """Check the real Mach-O linked-on SDK, not the compiler or plist version."""
@@ -37,7 +77,9 @@ def verify_frontend_sdk(executable: Path, architecture: str, minimum_os: str, ex
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("dmg", type=Path)
-    parser.add_argument("--architecture", required=True, choices=("arm64", "x86_64"))
+    parser.add_argument("--architecture", required=True, choices=("arm64", "x86_64", "universal"))
+    parser.add_argument("--runtime-architecture", choices=("arm64", "x86_64"),
+                        help="Force the backend smoke architecture (Intel needs Rosetta on Apple Silicon)")
     parser.add_argument("--version", required=True)
     parser.add_argument("--sdk-version", help="Expected SDK used by the build toolchain")
     args = parser.parse_args()
@@ -60,16 +102,13 @@ def main() -> None:
                 raise RuntimeError("The DMG is missing its Applications installation link")
             if not (mount / ".DS_Store").is_file() or not (mount / ".background.tiff").is_file():
                 raise RuntimeError("The DMG is missing its Finder layout or Retina background")
-            desktop = app / "Contents/MacOS/SmartSearchDesktop"
-            backend = app / "Contents/Resources/backend/smart-search"
-            for executable in (desktop, backend):
-                subprocess.run(["xcrun", "lipo", str(executable), "-verify_arch", args.architecture], check=True)
-            verify_frontend_sdk(desktop, args.architecture, info["LSMinimumSystemVersion"], args.sdk_version)
+            verify_app_architectures(app, args.architecture, args.sdk_version)
             # Copy exactly what a Finder install copies, including resource seals.
             installed = root / "Applications/Smart Search.app"
             subprocess.run(["ditto", str(app), str(installed)], check=True)
             subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(installed)], check=True)
-            smoke_backend(installed / "Contents/Resources/backend/smart-search", root, args.version)
+            smoke_backend(installed / "Contents/Resources/backend/smart-search", root, args.version,
+                          architecture=args.runtime_architecture)
             print("DMG verified: signature, version, architecture, frontend SDK, install layout and installed backend startup.")
             print("Ad-hoc signatures do not establish Developer ID trust or Apple notarization.")
         finally:

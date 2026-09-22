@@ -12,6 +12,17 @@ import xml.etree.ElementTree as ET
 
 REPOSITORY = "konbakuyomu/smartsearch"
 SPARKLE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+MACOS_ARCHITECTURES = ("universal", "arm64", "x86_64")
+
+
+def macos_stem(version, architecture):
+    suffix = "" if architecture == "universal" else f"-{architecture}"
+    return f"SmartSearch-v{version}{suffix}"
+
+
+def windows_installer(version, architecture):
+    download_architecture = "x86_64" if architecture == "x64" else architecture
+    return f"SmartSearch-v{version}-windows-Setup-{download_architecture}.exe"
 
 
 def version_tuple(version):
@@ -41,7 +52,7 @@ def gh(*args):
 
 def fetch_baseline(platform, architecture, version, output):
     if platform not in {"windows", "macos"} or architecture not in (
-        {"x64", "arm64"} if platform == "windows" else {"arm64", "x86_64"}
+        {"x64", "arm64"} if platform == "windows" else set(MACOS_ARCHITECTURES)
     ):
         raise ValueError("A matching platform and architecture are required")
     target = version_tuple(version)
@@ -92,7 +103,22 @@ def fetch_baseline(platform, architecture, version, output):
             raise ValueError("Baseline feed does not identify one matching full package")
         download(entries[0]["FileName"])
     else:
-        download(f"SmartSearch-{previous}-macos-{architecture}-sparkle.zip")
+        items = [item for item in ET.parse(feed).findall("./channel/item")
+                 if item.findtext(f"{{{SPARKLE}}}version") == previous]
+        if len(items) != 1 or len(items[0].findall("enclosure")) != 1:
+            raise ValueError("Baseline feed does not identify one full Sparkle archive")
+        enclosure = items[0].find("enclosure")
+        prefix = f"https://github.com/{REPOSITORY}/releases/download/v{previous}/"
+        names = {macos_stem(previous, architecture) + "-sparkle.zip"}
+        if architecture != "universal":
+            # v0.1.24 is the first update baseline and uses the old naming scheme.
+            names.add(f"SmartSearch-{previous}-macos-{architecture}-sparkle.zip")
+        name = next((name for name in names if enclosure.get("url") == prefix + name), None)
+        if name is None or not enclosure.get(f"{{{SPARKLE}}}edSignature"):
+            raise ValueError("Baseline Sparkle URL or signature is invalid")
+        archive = download(name)
+        if archive.stat().st_size != int(enclosure.attrib["length"]):
+            raise ValueError("Baseline Sparkle size mismatch")
     return {"status": "verified", "directory": str(output.resolve()), "version": previous, "feed": feed.name}
 
 
@@ -101,7 +127,7 @@ def validate_release(root, version):
     required = set()
     for arch in ("x64", "arm64"):
         name = f"releases.win-{arch}-stable.json"
-        required |= {name, f"SmartSearch-{version}-win-{arch}-Setup-signed.exe"}
+        required |= {name, windows_installer(version, arch)}
         feed = json.loads(file_path(root, name).read_text(encoding="utf-8-sig"))
         full = 0
         names = set()
@@ -120,9 +146,9 @@ def validate_release(root, version):
             required.add(path.name)
         if full != 1:
             raise ValueError("Each Windows feed must have one full target package")
-    for arch in ("arm64", "x86_64"):
+    for arch in MACOS_ARCHITECTURES:
         name = f"appcast-macos-{arch}.xml"
-        required |= {name, f"SmartSearch-{version}-macos-{arch}-unsigned-test.dmg"}
+        required |= {name, macos_stem(version, arch) + ".dmg"}
         feed = ET.parse(file_path(root, name))
         current = [item for item in feed.findall("./channel/item")
                    if item.findtext(f"{{{SPARKLE}}}version") == version]
@@ -131,7 +157,7 @@ def validate_release(root, version):
         full = current[0].findall("enclosure")
         if len(full) != 1:
             raise ValueError("Sparkle feed must have one full target archive")
-        if not full[0].get("url", "").endswith(f"/SmartSearch-{version}-macos-{arch}-sparkle.zip"):
+        if not full[0].get("url", "").endswith("/" + macos_stem(version, arch) + "-sparkle.zip"):
             raise ValueError("Sparkle full archive does not match the target")
         for enclosure in current[0].iter("enclosure"):
             prefix = f"https://github.com/{REPOSITORY}/releases/download/v{version}/"
@@ -141,7 +167,15 @@ def validate_release(root, version):
             path = file_path(root, url[len(prefix):])
             if path.stat().st_size != int(enclosure.attrib["length"]):
                 raise ValueError("Sparkle update size mismatch")
-            if f"macos-{arch}" not in path.name:
+            delta_from = enclosure.get(f"{{{SPARKLE}}}deltaFrom")
+            if delta_from is None:
+                expected = macos_stem(version, arch) + "-sparkle.zip"
+            else:
+                if version_tuple(delta_from) >= version_tuple(version):
+                    raise ValueError("Sparkle delta must upgrade an older version")
+                suffix = "" if arch == "universal" else f"-{arch}"
+                expected = f"SmartSearch-v{version}-from-{delta_from}{suffix}.delta"
+            if path.name != expected:
                 raise ValueError("Sparkle update architecture mismatch")
             required.add(path.name)
     actual = {p.name for p in root.iterdir() if p.is_file()}
@@ -156,13 +190,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=["baseline", "validate"])
     parser.add_argument("--platform", choices=["windows", "macos"])
-    parser.add_argument("--architecture", choices=["x64", "arm64", "x86_64"])
+    parser.add_argument("--architecture", choices=["x64", *MACOS_ARCHITECTURES])
     parser.add_argument("--version", required=True)
     parser.add_argument("--directory", type=Path, required=True)
     parser.add_argument("--result", type=Path)
     args = parser.parse_args()
     if args.operation == "baseline":
-        if not args.platform or args.architecture not in ({"x64", "arm64"} if args.platform == "windows" else {"arm64", "x86_64"}):
+        if not args.platform or args.architecture not in ({"x64", "arm64"} if args.platform == "windows" else set(MACOS_ARCHITECTURES)):
             parser.error("A matching platform and architecture are required")
         result = fetch_baseline(args.platform, args.architecture, args.version, args.directory)
     else:

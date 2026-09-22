@@ -210,7 +210,7 @@ jobs:
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
           git fetch --no-tags --depth=1 origin "$WORKFLOW_SHA"
-          git restore --source="$WORKFLOW_SHA" -- mise.toml assets/branding desktop/scripts/build_backend.py desktop/scripts/build-macos.sh desktop/scripts/compile-macos.sh desktop/scripts/compile-macos-icon.sh desktop/scripts/check-macos-backend.sh desktop/scripts/verify_macos_dmg.py desktop/scripts/package-sparkle.sh desktop/scripts/test_sparkle_updates.py desktop/scripts/update_artifacts.py desktop/checks desktop/packaging/macos
+          git restore --source="$WORKFLOW_SHA" -- mise.toml assets/branding desktop/scripts desktop/checks desktop/packaging/macos
       - name: Set up packaging tools
         uses: jdx/mise-action@v3
       - name: Install build dependencies
@@ -264,6 +264,20 @@ jobs:
       - name: Remove only the temporary release key
         if: always() && github.event_name == 'workflow_dispatch' && (inputs.sign_macos_updates || inputs.release_tag != '')
         run: .venv/bin/python -c 'import os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"],"smartsearch-sparkle-key").unlink(missing_ok=True)'
+      - name: Archive native inputs for the universal app
+        run: |
+          builds=(.desktop-artifacts/macos-${{ matrix.architecture }}-*/result.json)
+          test "${#builds[@]}" -eq 1
+          build="$(dirname "${builds[0]}")"
+          files=('Smart Search.app')
+          if [[ '${{ matrix.architecture }}' == arm64 ]]; then files+=(sparkle-tools); fi
+          tar -czf "$RUNNER_TEMP/macos-${{ matrix.architecture }}.tar.gz" -C "$build" "${files[@]}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: universal-input-${{ matrix.architecture }}
+          path: ${{ runner.temp }}/macos-${{ matrix.architecture }}.tar.gz
+          if-no-files-found: error
+          retention-days: 1
       - name: Stage complete macOS release assets
         if: inputs.sign_macos_updates || inputs.release_tag != ''
         uses: actions/upload-artifact@v4
@@ -287,9 +301,127 @@ jobs:
           include-hidden-files: true
           retention-days: 7
 
+  macos-universal:
+    name: macOS universal package and native ARM verification
+    needs: macos
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.release_tag || github.ref }}
+          persist-credentials: false
+      - name: Load macOS packaging from the workflow revision
+        if: inputs.release_tag != ''
+        env:
+          WORKFLOW_SHA: ${{ github.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$WORKFLOW_SHA"
+          git restore --source="$WORKFLOW_SHA" -- mise.toml desktop/scripts desktop/checks desktop/packaging/macos
+      - uses: jdx/mise-action@v3
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: universal-input-*
+          path: native-inputs
+          merge-multiple: true
+      - name: Extract matching native builds
+        run: |
+          for architecture in arm64 x86_64; do
+            mkdir "native-inputs/$architecture"
+            tar -xzf "native-inputs/macos-$architecture.tar.gz" -C "native-inputs/$architecture"
+          done
+      - name: Fetch and verify previous universal Sparkle archive
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="$(mise run python -c 'import json; print(json.load(open("package.json"))["version"])')"
+          mise run desktop:release:baseline --platform macos --architecture universal --version "$version" --directory "$RUNNER_TEMP/previous-universal" --result "$RUNNER_TEMP/universal-baseline.json"
+      - name: Prepare explicitly configured Sparkle release signing
+        if: github.event_name == 'workflow_dispatch' && (inputs.sign_macos_updates || inputs.release_tag != '')
+        env:
+          SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY: ${{ secrets.SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY }}
+          SMART_SEARCH_SPARKLE_PUBLIC_KEY: ${{ vars.SMART_SEARCH_SPARKLE_PUBLIC_KEY }}
+        run: |
+          set -euo pipefail
+          test -n "$SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY" && test -n "$SMART_SEARCH_SPARKLE_PUBLIC_KEY"
+          expected="$(mise run python -c 'import json; print(json.load(open("desktop/packaging/macos/sparkle-public-key.json"))["public_key"])')"
+          test "$SMART_SEARCH_SPARKLE_PUBLIC_KEY" = "$expected"
+          umask 077
+          printf '%s' "$SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY" > "$RUNNER_TEMP/smartsearch-sparkle-key"
+      - name: Build and verify the universal App and DMG
+        env:
+          SIGN_SPARKLE_UPDATES: ${{ inputs.sign_macos_updates || inputs.release_tag != '' }}
+        run: |
+          args=(--arm64-app "$PWD/native-inputs/arm64/Smart Search.app" --x86_64-app "$PWD/native-inputs/x86_64/Smart Search.app" --sparkle-tools "$PWD/native-inputs/arm64/sparkle-tools")
+          if [[ "$SIGN_SPARKLE_UPDATES" == true ]]; then args+=(--update-key-file "$RUNNER_TEMP/smartsearch-sparkle-key"); fi
+          if [[ -f "$RUNNER_TEMP/universal-baseline.json" ]]; then
+            previous="$(mise run python -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/universal-baseline.json"))["directory"] or "")')"
+            if [[ -n "$previous" ]]; then args+=(--previous-release-directory "$previous"); fi
+          fi
+          mise run desktop:macos:universal "${args[@]}"
+      - name: Verify universal Sparkle delta, fallback and wrong-key rejection
+        run: |
+          builds=(.desktop-artifacts/macos-universal-*/result.json)
+          test "${#builds[@]}" -eq 1
+          mise run desktop:macos:updates-check "${builds[0]}"
+      - name: Remove only the temporary release key
+        if: always() && github.event_name == 'workflow_dispatch' && (inputs.sign_macos_updates || inputs.release_tag != '')
+        run: mise run python -c 'import os,pathlib; pathlib.Path(os.environ["RUNNER_TEMP"],"smartsearch-sparkle-key").unlink(missing_ok=True)'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: universal-dmg
+          path: .desktop-artifacts/macos-universal-*/*.dmg
+          if-no-files-found: error
+          retention-days: 1
+      - name: Stage complete universal release assets
+        if: inputs.sign_macos_updates || inputs.release_tag != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-package-macos-universal
+          path: .desktop-artifacts/macos-universal-*/updates/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload universal verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smart-search-macos-universal-evidence
+          path: |
+            .desktop-artifacts/macos-universal-*/result.json
+            .desktop-artifacts/sparkle-check-*/*.json
+            .desktop-artifacts/sparkle-check-*/*.log
+          retention-days: 7
+
+  macos-universal-intel:
+    name: Verify the same universal DMG on native Intel
+    needs: macos-universal
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: jdx/mise-action@v3
+      - uses: actions/download-artifact@v4
+        with:
+          name: universal-dmg
+          path: universal-dmg
+      - name: Verify both slices and run the installed Intel backend
+        run: |
+          shopt -s nullglob
+          dmgs=(universal-dmg/*/SmartSearch-v*.dmg universal-dmg/SmartSearch-v*.dmg)
+          test "${#dmgs[@]}" -eq 1
+          version="$(basename "${dmgs[0]}" .dmg)"
+          mise run desktop:macos:verify "${dmgs[0]}" --architecture universal --runtime-architecture x86_64 --version "${version#SmartSearch-v}"
+
   release-assets:
     if: github.event_name == 'workflow_dispatch' && inputs.release_tag != '' && !inputs.windows_only
-    needs: [windows, macos]
+    needs: [windows, macos, macos-universal-intel]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -303,7 +435,10 @@ jobs:
           WORKFLOW_SHA: ${{ github.sha }}
         run: |
           git fetch --no-tags --depth=1 origin "$WORKFLOW_SHA"
-          git restore --source="$WORKFLOW_SHA" -- desktop/scripts/update_artifacts.py
+          git restore --source="$WORKFLOW_SHA" -- mise.toml desktop/scripts/update_artifacts.py desktop/scripts/release_notes.py
+      - uses: jdx/mise-action@v3
+        with:
+          install_args: python
       - uses: actions/download-artifact@v4
         with:
           pattern: release-package-*
@@ -334,7 +469,7 @@ jobs:
                       raise ValueError(f'Release asset target exists: {target}')
                   path.rename(target)
           PY
-          python3 desktop/scripts/update_artifacts.py validate --version "${RELEASE_TAG#v}" --directory release-packages
+          mise run desktop:release:validate --version "${RELEASE_TAG#v}" --directory release-packages
       - name: Attach verified packages before exposing update feeds
         env:
           GH_TOKEN: ${{ github.token }}
@@ -355,3 +490,12 @@ jobs:
           done
           gh release upload "$RELEASE_TAG" "${packages[@]}" --repo "$GITHUB_REPOSITORY" "${upload_args[@]}"
           gh release upload "$RELEASE_TAG" "${feeds[@]}" --repo "$GITHUB_REPOSITORY" "${upload_args[@]}"
+      - name: Update release download tables after all uploads succeed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/existing-notes.md"
+          mise run desktop:release:notes --version "${RELEASE_TAG#v}" --directory release-packages --repository "$GITHUB_REPOSITORY" --existing "$RUNNER_TEMP/existing-notes.md" --output "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$RUNNER_TEMP/release-notes.md"

@@ -84,7 +84,8 @@ foreach ($asset in $feed.Assets) { Copy-Item -LiteralPath (Join-Path $working $a
 $feed | ConvertTo-Json -Depth 10 | Set-Content -LiteralPath (Join-Path $OutputDirectory "releases.$channel.json") -Encoding utf8
 $setup = Join-Path $working "$packId-$channel-Setup.exe"
 $label = if ($SigningMode -eq 'Required') { 'signed' } else { 'unsigned-test' }
-$installer = Join-Path $OutputDirectory "SmartSearch-$Version-win-$Architecture-Setup-$label.exe"
+$downloadArchitecture = if ($Architecture -eq 'x64') { 'x86_64' } else { $Architecture }
+$installer = Join-Path $OutputDirectory "SmartSearch-v$Version-windows-Setup-$downloadArchitecture.exe"
 Copy-Item -LiteralPath $setup -Destination $installer
 $signatures = @()
 if ($SigningMode -eq 'Required') {

@@ -306,7 +306,7 @@ def test_v015_release_notes_cover_beta_and_stable_lanes():
 def test_native_release_requires_all_platforms_and_excludes_pr_secrets():
     workflow = yaml.safe_load((ROOT / ".github/workflows/desktop-build.yml").read_text())
     release = workflow["jobs"]["release-assets"]
-    assert release["needs"] == ["windows", "macos"]
+    assert release["needs"] == ["windows", "macos", "macos-universal-intel"]
     assert "github.event_name == 'workflow_dispatch'" in release["if"]
     assert "inputs.release_tag != ''" in release["if"]
     assert "!inputs.windows_only" in release["if"]
@@ -314,7 +314,7 @@ def test_native_release_requires_all_platforms_and_excludes_pr_secrets():
     events = read_workflow_events((ROOT / ".github/workflows/desktop-build.yml").read_text())
     assert events["workflow_dispatch"]["inputs"]["windows_only"]["default"] == "false"
     assert events["workflow_dispatch"]["inputs"]["sign_macos_updates"]["default"] == "false"
-    for job in (workflow["jobs"]["windows"], workflow["jobs"]["macos"]):
+    for job in (workflow["jobs"]["windows"], workflow["jobs"]["macos"], workflow["jobs"]["macos-universal"]):
         for step in job["steps"]:
             if "secrets." in str(step.get("env", {})):
                 assert "github.event_name == 'workflow_dispatch'" in step["if"]
@@ -325,7 +325,8 @@ def test_native_release_requires_all_platforms_and_excludes_pr_secrets():
     assert signing["if"] in mac_steps["Remove only the temporary release key"]["if"]
     windows_steps = {step.get("name"): step for step in workflow["jobs"]["windows"]["steps"]}
     assert "Sparkle signing requires macOS jobs" in windows_steps["Validate release source before loading signing keys"]["run"]
-    script = release["steps"][-1]["run"]
+    release_steps = {step.get("name"): step for step in release["steps"]}
+    script = release_steps["Attach verified packages before exposing update feeds"]["run"]
     assert script.index('"${packages[@]}"') < script.index('"${feeds[@]}"')
     assert "set -euo pipefail" in script
-    assert "update_artifacts.py validate" in release["steps"][-2]["run"]
+    assert "desktop:release:validate" in release_steps["Verify every feed reference and create checksums"]["run"]

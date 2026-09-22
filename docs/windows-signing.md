@@ -2,11 +2,11 @@
 
 ## 下载与信任 / Download and trust
 
-Windows 安装器文件名以 `-signed.exe` 结尾时，使用 Smart Search 的**自签名代码签名证书**。旧 `-unsigned-test.exe` 包没有因此变成已签名；请以对应版本的文件和验签结果为准。macOS 不属于这套 Windows 签名流程；新框架候选使用 ad-hoc 签名，不具备 Apple Developer ID 或公证。Sparkle EdDSA 只验证更新包。
+Windows 正式发布的安装器使用 Smart Search 的**自签名代码签名证书**。新构建命名为 `SmartSearch-vX.Y.Z-windows-Setup-{x86_64,arm64}.exe`，签名状态不再放进文件名；正式发布仍要求签名和验签成功，候选的状态查看构建 `result.json`。旧 `-signed.exe` 包使用同一自签名身份，旧 `-unsigned-test.exe` 包仍未签名，请以对应版本的验签结果为准。macOS 使用 ad-hoc 签名，不具备 Apple Developer ID 或公证；Sparkle EdDSA 只验证更新包。
 
 Windows 默认不信任自签名证书。请从[官方 GitHub Releases](https://github.com/konbakuyomu/smartsearch/releases)下载并核对来源。如果 SmartScreen 显示提示，且系统策略提供“更多信息 → 仍要运行”，可以在确认来源后自行选择；这只是运行选择，不是永久信任证书。不保证只提示一次，受管理设备也可能禁止继续。无需关闭 SmartScreen，也不要为使用 App 自动导入根证书。
 
-Windows installers ending in `-signed.exe` use Smart Search's **self-signed code-signing certificate**. Older `-unsigned-test.exe` files remain unsigned. macOS is outside this Windows signing workflow; native updater candidates use ad-hoc signing without Apple Developer ID or notarization. Sparkle EdDSA verifies update packages separately.
+Published Windows installers use Smart Search's **self-signed code-signing certificate**. New builds are named `SmartSearch-vX.Y.Z-windows-Setup-{x86_64,arm64}.exe`; signing status is recorded in the build `result.json` and release notes, rather than the filename. Publication still requires successful signing and verification. Older `-signed.exe` files use the same identity; older `-unsigned-test.exe` files remain unsigned. macOS uses ad-hoc signing without Developer ID or notarization. Sparkle EdDSA verifies update packages separately.
 
 Windows does not trust this certificate by default. Download from the official Releases page and verify the source. If SmartScreen offers **More info → Run anyway**, decide whether to continue after checking the source. This is a run choice, not permanent certificate trust; future downloads may prompt again, and managed devices may prohibit it. Do not disable SmartScreen or automatically import a root certificate.
 
@@ -22,7 +22,7 @@ Windows does not trust this certificate by default. Download from the official R
 The public CER contains no private key. Read the installer signer's fingerprint in PowerShell, replacing the path with your downloaded file:
 
 ```powershell
-$signature = Get-AuthenticodeSignature -LiteralPath 'C:\Downloads\SmartSearch-version-win-x64-Setup-signed.exe'
+$signature = Get-AuthenticodeSignature -LiteralPath 'C:\Downloads\SmartSearch-vX.Y.Z-windows-Setup-x86_64.exe'
 $signature.SignerCertificate.GetCertHashString([Security.Cryptography.HashAlgorithmName]::SHA256)
 $signature.Status
 ```

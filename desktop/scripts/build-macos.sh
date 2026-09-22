@@ -190,31 +190,5 @@ if [[ ! -x "$app_directory/Contents/Resources/backend/smart-search" ]]; then
   exit 1
 fi
 
-# The linker only signs the Mach-O executable. Seal the completed bundle after
-# copying every resource, or Gatekeeper reports a damaged app (missing resources).
-# This is an ad-hoc test signature, not Developer ID signing or notarization.
-codesign --force --deep --sign - "$app_directory"
-codesign --verify --deep --strict --verbose=2 "$app_directory"
-bash "$repository_root/desktop/scripts/check-macos-backend.sh" "$app_directory/Contents/Resources/backend/smart-search"
-
-dmg="$run_directory/SmartSearch-$version-macos-$architecture-unsigned-test.dmg"
-"${DMGBUILD:-dmgbuild}" -s "$repository_root/desktop/packaging/macos/dmg-settings.py" \
-  -D "app=$app_directory" -D "assets=$repository_root/desktop/packaging/macos" "Smart Search" "$dmg"
-"$python_bin" "$repository_root/desktop/scripts/verify_macos_dmg.py" "$dmg" \
-  --architecture "$architecture" --version "$version" --sdk-version "$(xcrun --sdk macosx --show-sdk-version)"
-echo "macOS ad-hoc signed, unnotarized test artifact: $dmg"
-
-updates_directory=""
-if [[ -n "$update_key_file" ]]; then
-  updates_directory="$run_directory/updates"
-  bash "$repository_root/desktop/scripts/package-sparkle.sh" "$app_directory" "$sparkle_tools" \
-    "$updates_directory" "$update_key_file" "$architecture" "$previous_release_directory"
-  cp "$dmg" "$updates_directory/"
-fi
-"$python_bin" - "$run_directory/result.json" "$app_directory" "$dmg" "$sparkle_tools" "$updates_directory" "$architecture" <<'PY'
-import json, sys
-from pathlib import Path
-result, app, dmg, tools, updates, architecture = sys.argv[1:]
-Path(result).write_text(json.dumps(dict(app=app, dmg=dmg, sparkle_tools=tools, updates_directory=updates,
-    architecture=architecture, code_signing='ad-hoc-test', notarized=False), indent=2))
-PY
+bash "$repository_root/desktop/scripts/package-macos.sh" "$app_directory" "$sparkle_tools" "$architecture" \
+  "$python_bin" "$update_key_file" "$previous_release_directory"

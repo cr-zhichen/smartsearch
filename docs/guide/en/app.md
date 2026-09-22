@@ -12,7 +12,15 @@ Version 0.1.24 introduces the first official Velopack/Sparkle update feeds and t
 
 Open **Smart Search** from the Start menu or Applications. Existing configuration is reused. Overview shows whether you have providers for main search, documentation lookup, and page reading.
 
-On macOS, open the DMG, drag Smart Search to Applications, then launch it from Applications. If macOS says it is damaged or the developer cannot be verified, follow the [macOS troubleshooting steps](troubleshooting.md#macos-says-the-app-is-damaged-or-the-developer-cannot-be-verified) to check integrity and first-launch restrictions.
+### macOS installation and first launch
+
+1. Choose a Mac installer from the release download table. The universal version supports both Apple Silicon and Intel.
+2. Open the DMG, drag **Smart Search** to **Applications**, and wait for the copy to finish.
+3. Double-click **Smart Search** in Applications once to attempt the first launch.
+4. If macOS cannot verify the developer or check the app, confirm it came from this project's release page. Open **Apple menu → System Settings → Privacy & Security**, scroll to Security, and click **Open Anyway** beside the Smart Search message.
+5. Authenticate if requested, then click **Open** in the confirmation dialog. macOS remembers the exception for this app; future launches can use Applications directly.
+
+If Open Anyway is missing, try launching the app again before returning to Settings. Organization-managed Macs may restrict this setting. See [Apple's first-launch instructions](https://support.apple.com/en-us/102445). For a damaged-app or will-damage-your-computer warning, first check the source, integrity and signature using the [macOS troubleshooting guide](troubleshooting.md#macos-says-the-app-is-damaged-or-the-developer-cannot-be-verified), rather than treating it as an unidentified-developer warning.
 
 ## Configure services
 

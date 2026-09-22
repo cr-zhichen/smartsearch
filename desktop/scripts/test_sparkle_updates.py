@@ -29,6 +29,8 @@ def run(argv, log, *, env=None, timeout=600, check=True):
 
 def main(build_file):
     build = json.loads(build_file.read_text())
+    actual_app = Path(build["app"])
+    actual = plistlib.loads((actual_app / "Contents/Info.plist").read_bytes())
     root = Path(tempfile.mkdtemp(prefix="ss-sparkle-"))
     evidence = ROOT / ".desktop-artifacts" / ("sparkle-check-" + uuid.uuid4().hex)
     evidence.mkdir()
@@ -56,7 +58,8 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
         assert commit == SPARKLE_COMMIT, "Unexpected Sparkle CLI source"
         derived = root / "tool-build"
         run(["xcodebuild", "-project", source / "Sparkle.xcodeproj", "-scheme", "sparkle-cli", "-configuration", "Release",
-             "-derivedDataPath", derived, "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_ALLOWED=YES"], evidence / "tool-build.log")
+             "-derivedDataPath", derived, "CODE_SIGN_IDENTITY=-", "CODE_SIGNING_ALLOWED=YES",
+             f"MACOSX_DEPLOYMENT_TARGET={actual['LSMinimumSystemVersion']}"], evidence / "tool-build.log")
         tool_app = derived / "Build/Products/Release/sparkle.app"
         tool_plist = tool_app / "Contents/Info.plist"
         tool_info = plistlib.loads(tool_plist.read_bytes())
@@ -65,8 +68,6 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
         tool_plist.write_bytes(plistlib.dumps(tool_info))
         run(["codesign", "--force", "--sign", "-", tool_app], evidence / "tool-sign.log")
         cli = tool_app / "Contents/MacOS/sparkle"
-        actual_app = Path(build["app"])
-        actual = plistlib.loads((actual_app / "Contents/Info.plist").read_bytes())
         version = actual["CFBundleVersion"]
         architecture = build["architecture"]
         current = {"directory": root, "case": ""}
@@ -110,9 +111,12 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
                         "SUFeedURL": feed_url, "SSUpdateTestBuild": True,
                         "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True}}
                 (app / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
-                backend = app / "Contents/Resources/backend/package.json"
-                package = json.loads(backend.read_text())
-                backend.write_text(json.dumps({**package, "version": app_version}))
+                manifests = [app / "Contents/Resources/backend/package.json"]
+                if architecture == "universal":
+                    manifests += [app / f"Contents/Resources/backend/{arch}/package.json" for arch in ("arm64", "x86_64")]
+                for backend in manifests:
+                    package = json.loads(backend.read_text())
+                    backend.write_text(json.dumps({**package, "version": app_version}))
                 run(["codesign", "--force", "--sign", "-", app], evidence / f"{case}-{label}-sign.log")
                 previous = case_root / "old-feed" if label == "new" else ""
                 run(["bash", ROOT / "desktop/scripts/package-sparkle.sh", app, build["sparkle_tools"],
