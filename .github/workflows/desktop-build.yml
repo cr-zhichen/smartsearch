@@ -374,6 +374,7 @@ jobs:
         with:
           name: universal-dmg
           path: .desktop-artifacts/macos-universal-*/*.dmg
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 1
       - name: Stage complete universal release assets
@@ -382,6 +383,7 @@ jobs:
         with:
           name: release-package-macos-universal
           path: .desktop-artifacts/macos-universal-*/updates/*
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 7
       - name: Upload universal verification evidence
@@ -393,6 +395,7 @@ jobs:
             .desktop-artifacts/macos-universal-*/result.json
             .desktop-artifacts/sparkle-check-*/*.json
             .desktop-artifacts/sparkle-check-*/*.log
+          include-hidden-files: true
           retention-days: 7
 
   macos-universal-intel:
