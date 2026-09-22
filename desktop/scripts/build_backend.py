@@ -112,7 +112,7 @@ def verify_asset_inventory(source_assets: Path, packaged_assets: Path) -> int:
     return len(source_files)
 
 
-def smoke_backend(executable: Path, run_directory: Path, expected_version: str) -> None:
+def smoke_backend(executable: Path, run_directory: Path, expected_version: str, *, architecture: str | None = None) -> None:
     smoke_config = run_directory / "smoke-config"
     smoke_config.mkdir()
     requests = [
@@ -124,8 +124,11 @@ def smoke_backend(executable: Path, run_directory: Path, expected_version: str) 
         {"id": 2, "method": "shutdown", "params": {}},
     ]
     try:
+        command = [str(executable), "--desktop-backend"]
+        if architecture:
+            command = ["arch", "-arch", architecture, *command]
         completed = subprocess.run(
-            [str(executable), "--desktop-backend"],
+            command,
             input="\n".join(json.dumps(request, ensure_ascii=False) for request in requests) + "\n",
             cwd=run_directory,
             capture_output=True,

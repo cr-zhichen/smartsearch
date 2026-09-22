@@ -60,17 +60,17 @@ Configure the two Secrets and the public Variable above using the upstream maint
 3. 保持 `release_tag` 为空；不必开启 `sign_windows` 或 `sign_macos_updates`。
 4. 检查 macOS arm64、x86_64 任务成功，下载对应候选的 `signing.json`、`result.json` 与 Sparkle 检查回执。
 
-两个架构的 `certificate_sha256` 应与公开指纹一致；App 的 `designated_requirement` 应一致且绑定证书和 `com.smartsearch.desktop`。候选文件以 `-self-signed.dmg` 结尾。钥匙串只在一次构建/验证命令期间存在，成功和失败都会清理；不更改用户的系统信任设置。
+两种原生架构及通用版的 `certificate_sha256` 应与公开指纹一致；App 的 `designated_requirement` 应一致且绑定证书和 `com.smartsearch.desktop`。文件名统一为 `SmartSearch-vX.Y.Z{可选架构后缀}.dmg`，`result.json` 与 `signing.json` 记录 `self-signed` 状态。钥匙串只在一次构建/验证命令期间存在，成功和失败都会清理；不更改用户的系统信任设置。
 
-Run the workflow with `sign_macos=true`, `windows_only=false`, and an empty `release_tag`. Both Mac jobs must pass. Compare the certificate fingerprint and App designated requirement across architectures. Inspect the copied-install verification and native-update receipts. This run does not publish a release.
+Run the workflow with `sign_macos=true`, `windows_only=false`, and an empty `release_tag`. Both native Mac jobs and the universal ARM/Intel checks must pass. Compare the certificate fingerprint and App designated requirement across all three packages. Signing status is in `result.json` and `signing.json`, not the filename. Inspect the copied-install verification and native-update receipts. This run does not publish a release.
 
 ### 4. 后续正式发布 / Subsequent releases
 
 填写 `release_tag` 时强制使用作者的 macOS 证书、Windows 证书及 Sparkle 更新密钥。开启 `sign_macos_updates` 同样要求正式 macOS 证书。缺少 Secrets、密码错误、指纹不符、签名/验签失败均中止，不降级为 ad-hoc 或自动生成测试身份。先配置作者证书，再启用新的发布流程。
 
-普通 PR 和未开启正式签名的手动构建使用临时测试证书，文件名为 `-self-signed-test.dmg`。测试身份不跨运行复用；测试私钥、P12 和临时钥匙串不进入 Secrets 或 artifact，公开测试证书会嵌入签名并随候选产物分发。它只证明实现能够正确签名与验证，不能作为正式身份的验收。普通本地 `mise run desktop:macos:build --architecture arm64` 仍默认 ad-hoc，并生成 `-unsigned-test.dmg`。
+普通 PR 和未开启正式签名的手动构建使用临时测试证书，元数据标为 `self-signed-test`。测试身份不跨运行复用；测试私钥、P12 和临时钥匙串不进入 Secrets 或 artifact，公开测试证书会嵌入签名并随候选产物分发。它只证明实现能够正确签名与验证，不能作为正式身份的验收。普通本地 `mise run desktop:macos:build --architecture arm64` 仍默认 ad-hoc，元数据标为 `ad-hoc-test`；三种模式使用相同命名规则，不能凭文件名判断身份。
 
-Release mode requires the maintainer's Mac certificate as well as the existing Windows and Sparkle keys. Missing or invalid configuration stops the release. Secret-free PR/manual candidates use `-self-signed-test.dmg`; local ad-hoc builds use `-unsigned-test.dmg`. Neither is accepted by the signed release-asset gate.
+Release mode requires the maintainer's Mac certificate as well as the existing Windows and Sparkle keys. Missing or invalid configuration stops the release. Secret-free PR/manual candidates record `self-signed-test`; local ad-hoc builds record `ad-hoc-test`. Neither is accepted by the signed release-asset gate. These modes share the download naming scheme, so inspect the signing metadata.
 
 本地验证正式身份时，可通过安全凭据管理方式设置上述三个环境变量，然后执行：
 

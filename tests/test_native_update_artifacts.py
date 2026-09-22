@@ -23,16 +23,18 @@ def release_files(root):
     for arch in ("x64", "arm64"):
         package = root / f"com.smartsearch.desktop.win-{arch}-{VERSION}-full.nupkg"
         package.write_bytes(b"full " + arch.encode())
-        (root / f"SmartSearch-{VERSION}-win-{arch}-Setup-signed.exe").write_bytes(b"installer")
+        download_arch = "x86_64" if arch == "x64" else arch
+        (root / f"SmartSearch-v{VERSION}-windows-Setup-{download_arch}.exe").write_bytes(b"installer")
         (root / f"releases.win-{arch}-stable.json").write_text(json.dumps({"Assets": [{
             "PackageId": f"com.smartsearch.desktop.win-{arch}", "Version": VERSION,
             "Type": "Full", "FileName": package.name, "Size": package.stat().st_size,
             "SHA256": hashlib.sha256(package.read_bytes()).hexdigest(),
         }]}))
-    for arch in ("arm64", "x86_64"):
-        package = root / f"SmartSearch-{VERSION}-macos-{arch}-sparkle.zip"
+    for arch in ("universal", "arm64", "x86_64"):
+        suffix = "" if arch == "universal" else f"-{arch}"
+        package = root / f"SmartSearch-v{VERSION}{suffix}-sparkle.zip"
         package.write_bytes(b"mac full")
-        (root / f"SmartSearch-{VERSION}-macos-{arch}-unsigned-test.dmg").write_bytes(b"dmg")
+        (root / f"SmartSearch-v{VERSION}{suffix}.dmg").write_bytes(b"dmg")
         rss = ET.Element("rss")
         item = ET.SubElement(ET.SubElement(rss, "channel"), "item")
         ET.SubElement(item, f"{{{updates.SPARKLE}}}version").text = VERSION
@@ -44,16 +46,15 @@ def release_files(root):
 
 
 @pytest.mark.parametrize("damage", [None, "test-identity", "wrong-certificate", "missing-evidence", "adhoc", "empty-pin"])
-def test_macos_signed_release_requires_maintainer_identity(tmp_path, damage):
+@pytest.mark.parametrize("damaged_architecture", ["arm64", "universal"])
+def test_macos_signed_release_requires_maintainer_identity(tmp_path, damage, damaged_architecture):
     release_files(tmp_path)
     digest = "A" * 64
-    for arch in ("arm64", "x86_64"):
-        dmg = tmp_path / f"SmartSearch-{VERSION}-macos-{arch}-unsigned-test.dmg"
-        dmg.rename(dmg.with_name(dmg.name.replace("unsigned-test", "self-signed")))
+    for arch in ("universal", "arm64", "x86_64"):
         (tmp_path / f"macos-signing-{arch}.json").write_text(json.dumps({
             "kind": "self-signed", "certificate_sha256": digest,
         }))
-    evidence = tmp_path / "macos-signing-arm64.json"
+    evidence = tmp_path / f"macos-signing-{damaged_architecture}.json"
     if damage == "missing-evidence":
         evidence.unlink()
     elif damage in {"test-identity", "wrong-certificate"}:
@@ -61,8 +62,7 @@ def test_macos_signed_release_requires_maintainer_identity(tmp_path, damage):
         data["kind" if damage == "test-identity" else "certificate_sha256"] = "self-signed-test" if damage == "test-identity" else "B" * 64
         evidence.write_text(json.dumps(data))
     elif damage == "adhoc":
-        dmg = tmp_path / f"SmartSearch-{VERSION}-macos-arm64-self-signed.dmg"
-        dmg.rename(dmg.with_name(dmg.name.replace("self-signed", "unsigned-test")))
+        evidence.write_text(json.dumps({"kind": "ad-hoc-test"}))
     elif damage == "empty-pin":
         digest = ""
     if damage:
@@ -70,7 +70,7 @@ def test_macos_signed_release_requires_maintainer_identity(tmp_path, damage):
             updates.validate_release(tmp_path, VERSION, digest)
         assert not (tmp_path / "SHA256SUMS.txt").exists()
     else:
-        assert updates.validate_release(tmp_path, VERSION, digest)["assets"] == 14
+        assert updates.validate_release(tmp_path, VERSION, digest)["assets"] == 18
 
 
 @pytest.mark.parametrize("duplicate", [False, True])
@@ -94,11 +94,11 @@ def test_workflow_flattens_nested_assets_without_overwriting(tmp_path, monkeypat
         assert (nested / name).read_bytes() == original
     else:
         exec(compile(python, "desktop-build.yml:flatten", "exec"), {})
-        assert updates.validate_release(root, VERSION)["assets"] == 12
+        assert updates.validate_release(root, VERSION)["assets"] == 15
         assert (root / name).read_bytes() == original
 
 
-@pytest.mark.parametrize("architecture", ["arm64", "x86_64"])
+@pytest.mark.parametrize("architecture", ["universal", "arm64", "x86_64"])
 def test_sparkle_delta_names_are_architecture_specific_and_urls_are_decoded(tmp_path, monkeypatch, architecture):
     from urllib.parse import quote
 
@@ -120,11 +120,12 @@ def test_sparkle_delta_names_are_architecture_specific_and_urls_are_decoded(tmp_
     })
     tree.write(feed)
     script = (Path(__file__).resolve().parents[1] / "desktop/scripts/package-sparkle.sh").read_text(encoding="utf-8")
-    python = script.split("<<'PY'\n", 1)[1].split("\nPY", 1)[0]
+    python = script.rsplit("<<'PY'\n", 1)[1].split("\nPY", 1)[0]
     monkeypatch.setattr(sys, "argv", ["package-sparkle", str(stage), str(output), str(feed),
                                      VERSION, architecture, "true", prefix])
     exec(compile(python, "package-sparkle.sh:python", "exec"), {})
-    target = f"SmartSearch-{VERSION}-from-1.0.0-macos-{architecture}.delta"
+    suffix = "" if architecture == "universal" else f"-{architecture}"
+    target = f"SmartSearch-v{VERSION}-from-1.0.0{suffix}.delta"
     assert (output / target).read_bytes() == delta.read_bytes()
     enclosures = list(ET.parse(output / feed.name).find("./channel/item").iter("enclosure"))
     assert len(enclosures) == 2
@@ -133,15 +134,16 @@ def test_sparkle_delta_names_are_architecture_specific_and_urls_are_decoded(tmp_
     assert len(list(output.iterdir())) == 3
 
 
-@pytest.mark.parametrize("damage", [None, "unsigned", "corrupt", "architecture", "traversal", "duplicate", "missing-full", "missing-signature", "foreign-url"])
+@pytest.mark.parametrize("damage", [None, "missing-installer", "missing-universal", "corrupt", "architecture", "traversal", "duplicate", "missing-full", "missing-signature", "foreign-url"])
 def test_release_assets_fail_closed(tmp_path, damage):
     release_files(tmp_path)
     windows = tmp_path / "releases.win-x64-stable.json"
     feed = json.loads(windows.read_text())
     asset = feed["Assets"][0]
-    if damage == "unsigned":
-        signed = tmp_path / f"SmartSearch-{VERSION}-win-x64-Setup-signed.exe"
-        signed.rename(signed.with_name(signed.name.replace("-signed", "-unsigned-test")))
+    if damage == "missing-installer":
+        (tmp_path / f"SmartSearch-v{VERSION}-windows-Setup-x86_64.exe").unlink()
+    elif damage == "missing-universal":
+        (tmp_path / f"SmartSearch-v{VERSION}.dmg").unlink()
     elif damage == "corrupt":
         (tmp_path / asset["FileName"]).write_bytes(b"bad")
     elif damage == "architecture":
@@ -168,7 +170,7 @@ def test_release_assets_fail_closed(tmp_path, damage):
             updates.validate_release(tmp_path, VERSION)
         assert not (tmp_path / "SHA256SUMS.txt").exists()
     else:
-        assert updates.validate_release(tmp_path, VERSION)["assets"] == 12
+        assert updates.validate_release(tmp_path, VERSION)["assets"] == 15
         for row in (tmp_path / "SHA256SUMS.txt").read_text().splitlines():
             digest, name = row.split("  ")
             assert digest == hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
@@ -204,3 +206,30 @@ def test_previous_release_integrity_and_first_release_are_distinct(tmp_path, mon
         assert result["status"] == ("first-framework-release" if failure == "no-baseline" else "verified")
         if failure is None:
             assert (Path(result["directory"]) / package_name).read_bytes() == package
+
+
+@pytest.mark.parametrize("archive_name", ["SmartSearch-1.0.0-macos-arm64-sparkle.zip", "SmartSearch-v1.0.0-arm64-sparkle.zip"])
+def test_macos_baseline_follows_verified_feed_across_filename_migration(tmp_path, monkeypatch, archive_name):
+    package = b"previous Mac archive"
+    feed_name = "appcast-macos-arm64.xml"
+    feed = f'''<rss xmlns:sparkle="{updates.SPARKLE}"><channel><item>
+      <sparkle:version>1.0.0</sparkle:version><enclosure
+      url="https://github.com/{updates.REPOSITORY}/releases/download/v1.0.0/{archive_name}"
+      length="{len(package)}" sparkle:edSignature="fixture" /></item></channel></rss>'''.encode()
+    data = {feed_name: feed, archive_name: package}
+    release = {"tag_name": "v1.0.0", "assets": [{"name": name, "size": len(content),
+               "digest": "sha256:" + hashlib.sha256(content).hexdigest()} for name, content in data.items()]}
+
+    def gh(*args):
+        if args[0] == "api":
+            return json.dumps([[release]])
+        name = args[args.index("--pattern") + 1]
+        (Path(args[args.index("--dir") + 1]) / name).write_bytes(data[name])
+        return ""
+
+    monkeypatch.setattr(updates, "gh", gh)
+    result = updates.fetch_baseline("macos", "arm64", VERSION, tmp_path / "baseline")
+    assert (Path(result["directory"]) / archive_name).read_bytes() == package
+    # A per-architecture release is not a universal delta baseline.
+    result = updates.fetch_baseline("macos", "universal", VERSION, tmp_path / "universal")
+    assert result == {"status": "first-framework-release", "directory": None}

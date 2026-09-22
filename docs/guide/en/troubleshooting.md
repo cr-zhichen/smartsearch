@@ -62,7 +62,16 @@ codesign --verify --deep --strict --verbose=2 "/Applications/Smart Search.app"
 
 If verification fails, use a new build containing the packaging fix. Do not just remove quarantine to hide an invalid signature. A matching SHA-256 only proves that the download matches the published file.
 
-If verification passes but macOS blocks launch, follow [Apple's instructions](https://support.apple.com/en-us/102445) to use **System Settings → Privacy & Security → Open Anyway**. If this unnotarized test build still shows “damaged”, only after checking its official source, checksum and signature and deciding to trust it, remove the download quarantine flag from this app and reopen it:
+If verification passes and macOS says it cannot verify the developer or check the app, follow [Apple's instructions](https://support.apple.com/en-us/102445):
+
+1. Attempt to open **Smart Search** from Applications once.
+2. Open **Apple menu → System Settings → Privacy & Security**, then scroll to Security.
+3. Click **Open Anyway** beside the Smart Search message and authenticate if requested.
+4. Click **Open** in the confirmation dialog. Future launches can open the app directly.
+
+If Open Anyway is missing, attempt another launch before returning to Settings; organization-managed devices may restrict this option. If macOS says the app will damage your computer or detects malicious content, stop opening it and report the warning to the project.
+
+If this unnotarized test build still shows “damaged”, only after checking its official source, checksum and signature and deciding to trust it, remove the download quarantine flag from this app and reopen it:
 
 ```bash
 xattr -dr com.apple.quarantine "/Applications/Smart Search.app"

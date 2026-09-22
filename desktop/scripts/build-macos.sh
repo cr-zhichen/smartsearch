@@ -203,41 +203,5 @@ if [[ ! -x "$app_directory/Contents/Resources/backend/smart-search" ]]; then
   exit 1
 fi
 
-# The linker only signs the Mach-O executable. Seal the completed bundle after
-# copying every resource, or Gatekeeper reports a damaged app (missing resources).
-# Self-signed code uses one pinned identity; ad-hoc remains a local opt-in path.
-signing_result="$run_directory/signing.json"
-label=unsigned-test
-if [[ "$signing_mode" == required ]]; then
-  "$python_bin" "$repository_root/desktop/scripts/macos_signing.py" sign "$app_directory" --result "$signing_result"
-  label="$SMART_SEARCH_MACOS_SIGNING_KIND"
-else
-  codesign --force --deep --sign - "$app_directory"
-  printf '{"kind":"ad-hoc-test"}\n' > "$signing_result"
-fi
-codesign --verify --deep --strict --verbose=2 "$app_directory"
-bash "$repository_root/desktop/scripts/check-macos-backend.sh" "$app_directory/Contents/Resources/backend/smart-search"
-
-dmg="$run_directory/SmartSearch-$version-macos-$architecture-$label.dmg"
-"${DMGBUILD:-dmgbuild}" -s "$repository_root/desktop/packaging/macos/dmg-settings.py" \
-  -D "app=$app_directory" -D "assets=$repository_root/desktop/packaging/macos" "Smart Search" "$dmg"
-"$python_bin" "$repository_root/desktop/scripts/verify_macos_dmg.py" "$dmg" \
-  --architecture "$architecture" --version "$version" --sdk-version "$(xcrun --sdk macosx --show-sdk-version)" --signing-mode "$signing_mode"
-echo "macOS $label artifact: $dmg"
-
-updates_directory=""
-if [[ -n "$update_key_file" ]]; then
-  updates_directory="$run_directory/updates"
-  bash "$repository_root/desktop/scripts/package-sparkle.sh" "$app_directory" "$sparkle_tools" \
-    "$updates_directory" "$update_key_file" "$architecture" "$previous_release_directory"
-  cp "$dmg" "$updates_directory/"
-  cp "$signing_result" "$updates_directory/macos-signing-$architecture.json"
-fi
-"$python_bin" - "$run_directory/result.json" "$app_directory" "$dmg" "$sparkle_tools" "$updates_directory" "$architecture" "$signing_result" <<'PY'
-import json, sys
-from pathlib import Path
-result, app, dmg, tools, updates, architecture, signing_result = sys.argv[1:]
-signing = json.loads(Path(signing_result).read_text())
-Path(result).write_text(json.dumps(dict(app=app, dmg=dmg, sparkle_tools=tools, updates_directory=updates,
-    architecture=architecture, code_signing=signing['kind'], signing=signing, notarized=False), indent=2))
-PY
+bash "$repository_root/desktop/scripts/package-macos.sh" "$app_directory" "$sparkle_tools" "$architecture" \
+  "$python_bin" "$update_key_file" "$previous_release_directory" "$signing_mode"
