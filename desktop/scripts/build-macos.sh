@@ -3,9 +3,9 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: bash desktop/scripts/build-macos.sh --architecture arm64|x86_64 [--python PATH] [--output-root PATH] [--update-key-file PATH] [--update-public-key BASE64] [--previous-release-directory PATH] [--release-updates]
+Usage: bash desktop/scripts/build-macos.sh --architecture arm64|x86_64 [--python PATH] [--output-root PATH] [--signing-mode adhoc|required] [--update-key-file PATH] [--update-public-key BASE64] [--previous-release-directory PATH] [--release-updates]
 
-Builds a fresh ad-hoc signed, unnotarized .app and DMG; an explicit update key also enables Sparkle packaging. The Python interpreter and host must
+Builds a fresh .app and DMG. Local builds default to ad-hoc; use the with-signing task for a fixed certificate. Release updates require the maintainer's code-signing and Sparkle identities. The Python interpreter and host must
 match the requested architecture because PyInstaller does not cross-compile.
 EOF
 }
@@ -20,6 +20,7 @@ previous_release_directory=""
 release_updates=false
 test_package_id=""
 test_feed_url=""
+signing_mode="${SMART_SEARCH_MACOS_SIGNING_MODE:-adhoc}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -35,6 +36,7 @@ while [[ $# -gt 0 ]]; do
       output_root="${2:-}"
       shift 2
       ;;
+    --signing-mode) signing_mode="${2:-}"; shift 2 ;;
     --update-key-file) update_key_file="${2:-}"; shift 2 ;;
     --update-public-key) update_public_key="${2:-}"; shift 2 ;;
     --previous-release-directory) previous_release_directory="${2:-}"; shift 2 ;;
@@ -57,6 +59,14 @@ if [[ "$architecture" != "arm64" && "$architecture" != "x86_64" ]]; then
   echo "--architecture must be arm64 or x86_64" >&2
   exit 2
 fi
+if [[ "$signing_mode" != adhoc && "$signing_mode" != required ]]; then
+  echo '--signing-mode must be adhoc or required' >&2
+  exit 2
+fi
+if $release_updates && [[ "$signing_mode" != required || "${SMART_SEARCH_MACOS_SIGNING_KIND:-}" != self-signed ]]; then
+  echo 'Release updates require the maintainer-owned macOS signing certificate; test/ad-hoc fallback is forbidden.' >&2
+  exit 1
+fi
 if $release_updates && [[ -z "$update_key_file" || -z "$update_public_key" || -n "$test_package_id" || -n "$test_feed_url" ]]; then
   echo 'Release updates require an explicit signing key and pinned public key, without a test identity.' >&2
   exit 1
@@ -78,6 +88,9 @@ fi
 if [[ ! -x "$python_bin" ]]; then
   echo "Python executable is not available: $python_command" >&2
   exit 1
+fi
+if [[ "$signing_mode" == required ]]; then
+  "$python_bin" "$repository_root/desktop/scripts/macos_signing.py" preflight
 fi
 if ! command -v swift >/dev/null 2>&1 || ! command -v hdiutil >/dev/null 2>&1; then
   echo "Swift and hdiutil are required on macOS to build the desktop test package." >&2
@@ -192,17 +205,25 @@ fi
 
 # The linker only signs the Mach-O executable. Seal the completed bundle after
 # copying every resource, or Gatekeeper reports a damaged app (missing resources).
-# This is an ad-hoc test signature, not Developer ID signing or notarization.
-codesign --force --deep --sign - "$app_directory"
+# Self-signed code uses one pinned identity; ad-hoc remains a local opt-in path.
+signing_result="$run_directory/signing.json"
+label=unsigned-test
+if [[ "$signing_mode" == required ]]; then
+  "$python_bin" "$repository_root/desktop/scripts/macos_signing.py" sign "$app_directory" --result "$signing_result"
+  label="$SMART_SEARCH_MACOS_SIGNING_KIND"
+else
+  codesign --force --deep --sign - "$app_directory"
+  printf '{"kind":"ad-hoc-test"}\n' > "$signing_result"
+fi
 codesign --verify --deep --strict --verbose=2 "$app_directory"
 bash "$repository_root/desktop/scripts/check-macos-backend.sh" "$app_directory/Contents/Resources/backend/smart-search"
 
-dmg="$run_directory/SmartSearch-$version-macos-$architecture-unsigned-test.dmg"
+dmg="$run_directory/SmartSearch-$version-macos-$architecture-$label.dmg"
 "${DMGBUILD:-dmgbuild}" -s "$repository_root/desktop/packaging/macos/dmg-settings.py" \
   -D "app=$app_directory" -D "assets=$repository_root/desktop/packaging/macos" "Smart Search" "$dmg"
 "$python_bin" "$repository_root/desktop/scripts/verify_macos_dmg.py" "$dmg" \
-  --architecture "$architecture" --version "$version" --sdk-version "$(xcrun --sdk macosx --show-sdk-version)"
-echo "macOS ad-hoc signed, unnotarized test artifact: $dmg"
+  --architecture "$architecture" --version "$version" --sdk-version "$(xcrun --sdk macosx --show-sdk-version)" --signing-mode "$signing_mode"
+echo "macOS $label artifact: $dmg"
 
 updates_directory=""
 if [[ -n "$update_key_file" ]]; then
@@ -210,11 +231,13 @@ if [[ -n "$update_key_file" ]]; then
   bash "$repository_root/desktop/scripts/package-sparkle.sh" "$app_directory" "$sparkle_tools" \
     "$updates_directory" "$update_key_file" "$architecture" "$previous_release_directory"
   cp "$dmg" "$updates_directory/"
+  cp "$signing_result" "$updates_directory/macos-signing-$architecture.json"
 fi
-"$python_bin" - "$run_directory/result.json" "$app_directory" "$dmg" "$sparkle_tools" "$updates_directory" "$architecture" <<'PY'
+"$python_bin" - "$run_directory/result.json" "$app_directory" "$dmg" "$sparkle_tools" "$updates_directory" "$architecture" "$signing_result" <<'PY'
 import json, sys
 from pathlib import Path
-result, app, dmg, tools, updates, architecture = sys.argv[1:]
+result, app, dmg, tools, updates, architecture, signing_result = sys.argv[1:]
+signing = json.loads(Path(signing_result).read_text())
 Path(result).write_text(json.dumps(dict(app=app, dmg=dmg, sparkle_tools=tools, updates_directory=updates,
-    architecture=architecture, code_signing='ad-hoc-test', notarized=False), indent=2))
+    architecture=architecture, code_signing=signing['kind'], signing=signing, notarized=False), indent=2))
 PY

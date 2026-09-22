@@ -96,8 +96,10 @@ def fetch_baseline(platform, architecture, version, output):
     return {"status": "verified", "directory": str(output.resolve()), "version": previous, "feed": feed.name}
 
 
-def validate_release(root, version):
+def validate_release(root, version, macos_certificate_sha256=None):
     version_tuple(version)
+    if macos_certificate_sha256 is not None and not re.fullmatch(r"[0-9A-Fa-f]{64}", macos_certificate_sha256):
+        raise ValueError("A pinned macOS certificate SHA-256 is required for signed releases")
     required = set()
     for arch in ("x64", "arm64"):
         name = f"releases.win-{arch}-stable.json"
@@ -122,7 +124,17 @@ def validate_release(root, version):
             raise ValueError("Each Windows feed must have one full target package")
     for arch in ("arm64", "x86_64"):
         name = f"appcast-macos-{arch}.xml"
-        required |= {name, f"SmartSearch-{version}-macos-{arch}-unsigned-test.dmg"}
+        label = "self-signed" if macos_certificate_sha256 is not None else "unsigned-test"
+        required |= {name, f"SmartSearch-{version}-macos-{arch}-{label}.dmg"}
+        if macos_certificate_sha256 is not None:
+            signing_name = f"macos-signing-{arch}.json"
+            signing_path = file_path(root, signing_name)
+            if not signing_path.is_file():
+                raise ValueError("Missing macOS release signing evidence")
+            signing = json.loads(signing_path.read_text())
+            if signing.get("kind") != "self-signed" or signing.get("certificate_sha256") != macos_certificate_sha256.upper():
+                raise ValueError("macOS release signing evidence does not match the maintainer identity")
+            required.add(signing_name)
         feed = ET.parse(file_path(root, name))
         current = [item for item in feed.findall("./channel/item")
                    if item.findtext(f"{{{SPARKLE}}}version") == version]
@@ -160,13 +172,14 @@ if __name__ == "__main__":
     parser.add_argument("--version", required=True)
     parser.add_argument("--directory", type=Path, required=True)
     parser.add_argument("--result", type=Path)
+    parser.add_argument("--macos-certificate-sha256", help="Require maintainer-signed macOS assets and matching signing evidence")
     args = parser.parse_args()
     if args.operation == "baseline":
         if not args.platform or args.architecture not in ({"x64", "arm64"} if args.platform == "windows" else {"arm64", "x86_64"}):
             parser.error("A matching platform and architecture are required")
         result = fetch_baseline(args.platform, args.architecture, args.version, args.directory)
     else:
-        result = validate_release(args.directory, args.version)
+        result = validate_release(args.directory, args.version, args.macos_certificate_sha256)
     if args.result:
         args.result.write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result))

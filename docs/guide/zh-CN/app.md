@@ -6,7 +6,7 @@
 
 在[发行页](https://github.com/konbakuyomu/smartsearch/releases/latest)下载适合系统与架构的安装包。Windows 安装到当前用户目录。App 自带运行环境，使用 App 不需要先安装 Python、Node.js 或独立 CLI。
 
-环境准备和完整 App/CLI 语言切换从 v0.1.21 起提供，“更新 Skills”页面从 v0.1.22 起提供，Windows 自签名和新透明图标从 v0.1.23 起提供。Windows 的 `-signed.exe` 包采用自签名，Windows 默认不信任该证书，仍可能弹出 SmartScreen 提示。先核对官方发行来源和[公开证书指纹](../../windows-signing.md)，再按系统允许的选项决定是否运行；这不等同永久信任证书，不需要关闭安全保护。旧 `-unsigned-test.exe` 包仍未签名；macOS 使用 ad-hoc 完整性签名，尚无 Developer ID 签名或公证。macOS、Windows ARM64、干净机器完整使用和 DPI 矩阵尚未全部完成实机验收。
+环境准备和完整 App/CLI 语言切换从 v0.1.21 起提供，“更新 Skills”页面从 v0.1.22 起提供，Windows 自签名和新透明图标从 v0.1.23 起提供。Windows 的 `-signed.exe` 包采用自签名，Windows 默认不信任该证书，仍可能弹出 SmartScreen 提示。先核对官方发行来源和[公开证书指纹](../../windows-signing.md)，再按系统允许的选项决定是否运行；这不等同永久信任证书，不需要关闭安全保护。旧 `-unsigned-test.exe` 包仍未签名；macOS 历史包使用 ad-hoc；配置作者证书后的包使用固定证书自签名，仍无 Developer ID 或公证，见 [macOS 签名](../../macos-signing.md)。macOS、Windows ARM64、干净机器完整使用和 DPI 矩阵尚未全部完成实机验收。
 
 v0.1.24 首次提供正式 Velopack/Sparkle 更新源，并整合新的原生界面。现有 Inno 安装需按下方说明完成一次完整迁移。首次框架发行提供完整更新包，后续发行可基于这一已验证基线生成差分。
 
@@ -82,6 +82,6 @@ App 私有引擎的绝对路径也能在关闭窗口后调用，但卸载 App �
 
 首次从 Inno Setup 版迁移需要完整安装：完成写入，退出旧 App，在 Windows 设置中卸载旧 App，再运行新的官方 Setup，并使用新快捷方式。检测与迁移说明不会自动卸载任何内容。macOS 需关闭旧 App 并完整替换一次。共享配置、独立 CLI、SmartSearchTools、Agent Skills、研究证据和导出结果留在原位置；之后 App 才能通过框架更新。
 
-Windows 正式包仍为自签名。Sparkle 使用独立 EdDSA 更新签名，不等于 Apple Developer ID 签名或公证。macOS 本地候选只有 ad-hoc 签名；未配置更新密钥的候选关闭更新。Windows 开发散包同样需先完整安装到框架布局才能更新。
+Windows 正式包仍为自签名。Sparkle 使用独立 EdDSA 更新签名，不等于 Apple Developer ID 签名或公证。macOS 本地默认使用 ad-hoc，CI 测试候选使用临时证书，正式候选需配置作者的固定证书；未配置更新密钥的候选关闭更新。Windows 开发散包同样需先完整安装到框架布局才能更新。
 
 构建与协议说明见 [desktop README](../../../desktop/README.md) 和[桌面协议](../../../desktop/PROTOCOL.md)。遇到问题可查[排障](troubleshooting.md)。
