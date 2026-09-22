@@ -33,14 +33,14 @@ These tasks need information from the web and a way to trace it back to its sour
 
 ## Get started in the App
 
-1. **Download and open Smart Search.** Choose the package for your system from [Releases](https://github.com/konbakuyomu/smartsearch/releases/latest). The App includes its own runtime.
+1. **Download and open Smart Search.** Choose the package for your system from [Releases](https://github.com/konbakuyomu/smartsearch/releases/latest). The first step on Overview detects npm or accepts a manual npm path, then installs and connects the independent CLI.
 2. **Open Providers.** Add services for the three required jobs: answering searches, finding documentation, and reading pages. The page shows what is still missing and where to obtain each key. Check or test the settings, then save them.
-3. **Open Update Skills.** Prepare the command-line tool under Shared independent CLI environment, then check the latest stable Skills, select your Agents, and confirm backup and sync. Codex, Claude Code, Cursor and 14 other targets are supported. Install and sign in to the Agent applications yourself.
-4. **Copy the AI test instructions.** Paste them into a new AI conversation. First check that the command runs; then try a search.
+3. **Open Update Skills.** Once the CLI is connected, read its Skills, select your Agents, and confirm backup and sync. Codex, Claude Code, Cursor and 14 other targets are supported. Install and sign in to the Agent applications yourself.
+4. **Verify the Agent connection.** In a new AI conversation, use the independent CLI invocation supplied by the Skill. First check that the command runs; then try a search.
 
 Provider tests and searches may use your providers' paid quota. Opening the App or checking the local environment does not run a paid search.
 
-Version 0.1.24 combines the refreshed native interface with Velopack on Windows and Sparkle on macOS, and publishes the first official framework update feeds. App updates include the private engine; independent CLI updates initialize their Python runtime, while Skills updates compare file contents. Existing Inno installations require a one-time full migration. Windows `-signed.exe` packages use a **self-signed certificate** and may still trigger SmartScreen; see [Windows signatures and first launch](docs/windows-signing.md). macOS uses ad-hoc bundle integrity signing and separate Sparkle EdDSA update signatures, without Developer ID signing or notarization. Final GUI and old-install migration acceptance remains separate from automated build and upgrade checks.
+Version 0.1.24 combines the refreshed native interface with Velopack on Windows and Sparkle on macOS, and publishes the first official framework update feeds. The current development version manages App and CLI updates independently; the CLI maintains connected Skills while preserving personal edits. Existing Inno installations require a one-time full migration. Windows `-signed.exe` packages use a **self-signed certificate** and may still trigger SmartScreen; see [Windows signatures and first launch](docs/windows-signing.md). macOS uses ad-hoc bundle integrity signing and separate Sparkle EdDSA update signatures, without Developer ID signing or notarization. Final GUI and old-install migration acceptance remains separate from automated build and upgrade checks.
 
 [App setup, supported platforms, and troubleshooting →](https://github.com/konbakuyomu/smartsearch/blob/main/docs/guide/en/app.md)
 

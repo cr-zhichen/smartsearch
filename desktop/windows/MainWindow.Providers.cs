@@ -20,6 +20,21 @@ public sealed partial class MainWindow
 
     private List<JsonElement> ConfigurationFields => Items(Property(Property(_state, "metadata"), "fields")).ToList();
 
+    private Task NavigateToProvidersAsync(string? capability = null)
+    {
+        _providerFilter = capability is null ? string.Empty : CapabilityLabel(capability);
+        if (capability is null) return NavigateToAsync("providers");
+        var candidates = ConfigurationFields.Where(field => Text(field, "provider").Length > 0)
+            .GroupBy(field => Text(field, "provider"))
+            .Where(group => ProviderCapabilities(group.Key, group).Contains(capability))
+            .Select(group => group.Key).ToList();
+        var preferred = Items(Property(Property(_state, "capability_chains"), capability))
+            .Select(item => item.GetString()).FirstOrDefault(id => id is not null && candidates.Contains(id));
+        var provider = preferred ?? candidates.Order(StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+        _providerSelection = provider is null ? string.Empty : "provider:" + provider;
+        return NavigateToAsync("providers");
+    }
+
     private UIElement BuildProvidersPage(Dictionary<string, FieldDraft>? preservedDraft)
     {
         _fieldEditors.Clear();
@@ -89,10 +104,12 @@ public sealed partial class MainWindow
             Content = Secondary(title), IsEnabled = false, IsTabStop = false, Padding = new Thickness(12, 16, 12, 4)
         });
         bool Matches(string text) => string.IsNullOrWhiteSpace(_providerFilter) || text.Contains(_providerFilter.Trim(), StringComparison.CurrentCultureIgnoreCase);
-        if (fields.Any(field => Text(field, "section") == "routing"))
+        if (Matches(L("意图路由")) && fields.Any(field => Text(field, "section") == "routing"))
             AddItem("section:routing", L("意图路由"), ChoiceLabel("SMART_SEARCH_INTENT_ROUTER", EffectiveConfigurationValue("SMART_SEARCH_INTENT_ROUTER")));
         var providers = fields.Where(field => Text(field, "provider").Length > 0).GroupBy(field => Text(field, "provider"))
-            .Where(group => Matches(group.Key + " " + ProviderPurpose(group.Key, group))).ToList();
+            .Where(group => Matches(group.Key + " " + ProviderLabel(group.Key) + " " + ProviderPurpose(group.Key, group)
+                + " " + string.Join(" ", ProviderCapabilities(group.Key, group))))
+            .ToList();
         var categories = providers.Select(group => ProviderCapabilities(group.Key, group).FirstOrDefault() ?? "other").Distinct().ToList();
         foreach (var category in CapabilityOrder.Where(categories.Contains).Concat(categories.Except(CapabilityOrder).Order()))
         {
@@ -289,6 +306,7 @@ public sealed partial class MainWindow
         var locked = source.Equals("environment", StringComparison.OrdinalIgnoreCase);
         var providerToggle = Bool(field, "provider_toggle");
         var input = providerToggle ? CompactSwitch(Label(field), ConfigurationBoolean(initialValue)) : CreateFieldInput(field, secret, initialValue, locked);
+        if (input is TextBox or PasswordBox) ToolTipService.SetToolTip(input, ConfigurationPlaceholder(field));
         if (providerToggle) input.IsEnabled = !locked;
         AutomationProperties.SetName(input, Label(field));
         input.HorizontalAlignment = HorizontalAlignment.Stretch;
@@ -300,7 +318,7 @@ public sealed partial class MainWindow
         void UpdatePlaceholder()
         {
             if (input is PasswordBox password)
-                password.PlaceholderText = HasSavedSecret(field) && clear?.IsOn != true ? "••••••••" : L("输入新值以替换；留空表示保持");
+                password.PlaceholderText = HasSavedSecret(field) && clear?.IsOn != true ? "••••••••" : ConfigurationPlaceholder(field);
         }
         void Changed(bool edited = false)
         {
@@ -363,6 +381,38 @@ public sealed partial class MainWindow
                 links.Children.Add(new HyperlinkButton { Content = label, NavigateUri = uri, Padding = new Thickness(0) });
         if (links.Children.Count > 0) row.Children.Add(links);
         return row;
+    }
+
+    private static string ConfigurationPlaceholder(JsonElement field) => L("示例：{0}", ConfigurationExample(field));
+
+    private static string ConfigurationExample(JsonElement field)
+    {
+        var placeholder = Text(field, "placeholder");
+        if (!string.IsNullOrWhiteSpace(placeholder)) return placeholder;
+        var defaultValue = Text(field, "default");
+        if (!string.IsNullOrWhiteSpace(defaultValue)) return defaultValue;
+        var key = Text(field, "key");
+        switch (key)
+        {
+            case "OPENAI_COMPATIBLE_MODEL":
+            case "INTENT_CLASSIFIER_MODEL": return "gpt-4o";
+            case "OPENAI_COMPATIBLE_FALLBACK_MODELS": return "gpt-4o,deepseek-chat";
+            case "JINA_RESPOND_WITH": return "readerlm-v2";
+            case "INTENT_EMBEDDING_API_URL": return "https://api.siliconflow.cn/v1/embeddings";
+            case "INTENT_EMBEDDING_MODEL": return "Qwen/Qwen3-Embedding-8B";
+            case "INTENT_CLASSIFIER_API_URL": return "https://api.example.com/v1/chat/completions";
+            case "SMART_SEARCH_RESEARCH_PREFERRED_PROVIDERS": return "exa,tavily";
+            case "SMART_SEARCH_RESEARCH_DISABLED_PROVIDERS": return "anysearch,sciverse";
+        }
+        if (IsSecret(field)) return key.EndsWith("TOKEN", StringComparison.Ordinal) ? "your-api-token" : "your-api-key";
+        return Text(field, "kind") switch
+        {
+            "url" => "https://api.example.com/v1",
+            "int" => "3",
+            "float" => "0.5",
+            "csv" => "value1,value2",
+            _ => "example"
+        };
     }
 
     private static string ChoiceLabel(string key, string value) => key switch

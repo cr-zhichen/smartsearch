@@ -20,7 +20,7 @@ if (-not (Test-Path -LiteralPath (Join-Path $PublishDirectory 'SmartSearch.Deskt
 if ($SigningMode -eq 'Required') {
     $expected = Get-ExpectedSigningCertificate (Join-Path $PSScriptRoot '../packaging/windows/smart-search.cer')
     try {
-        foreach ($owned in @('SmartSearch.Desktop.exe', 'SmartSearch.Desktop.dll', 'backend/smart-search.exe')) {
+        foreach ($owned in @('SmartSearch.Desktop.exe', 'SmartSearch.Desktop.dll')) {
             Test-WindowsSignature (Join-Path $PublishDirectory $owned) $expected | Out-Null
         }
     }

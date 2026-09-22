@@ -20,6 +20,11 @@ VERSION = "1.2.3"
 
 
 def release_files(root):
+    for platform, architectures in (("macos", ("arm64", "x86_64")), ("windows", ("arm64", "x64"))):
+        for architecture in architectures:
+            name = f"smart-search-cli-{VERSION}-{platform}-{architecture}.zip"
+            (root / name).write_bytes(b"independent cli " + architecture.encode())
+            (root / (name + ".sha256")).write_text(f"{hashlib.sha256((root / name).read_bytes()).hexdigest()}  {name}\n")
     for arch in ("x64", "arm64"):
         package = root / f"com.smartsearch.desktop.win-{arch}-{VERSION}-full.nupkg"
         package.write_bytes(b"full " + arch.encode())
@@ -70,7 +75,7 @@ def test_macos_signed_release_requires_maintainer_identity(tmp_path, damage, dam
             updates.validate_release(tmp_path, VERSION, digest)
         assert not (tmp_path / "SHA256SUMS.txt").exists()
     else:
-        assert updates.validate_release(tmp_path, VERSION, digest)["assets"] == 18
+        assert updates.validate_release(tmp_path, VERSION, digest)["assets"] == 26
 
 
 @pytest.mark.parametrize("duplicate", [False, True])
@@ -94,7 +99,7 @@ def test_workflow_flattens_nested_assets_without_overwriting(tmp_path, monkeypat
         assert (nested / name).read_bytes() == original
     else:
         exec(compile(python, "desktop-build.yml:flatten", "exec"), {})
-        assert updates.validate_release(root, VERSION)["assets"] == 15
+        assert updates.validate_release(root, VERSION)["assets"] == 23
         assert (root / name).read_bytes() == original
 
 
@@ -170,7 +175,7 @@ def test_release_assets_fail_closed(tmp_path, damage):
             updates.validate_release(tmp_path, VERSION)
         assert not (tmp_path / "SHA256SUMS.txt").exists()
     else:
-        assert updates.validate_release(tmp_path, VERSION)["assets"] == 15
+        assert updates.validate_release(tmp_path, VERSION)["assets"] == 23
         for row in (tmp_path / "SHA256SUMS.txt").read_text().splitlines():
             digest, name = row.split("  ")
             assert digest == hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
@@ -233,3 +238,15 @@ def test_macos_baseline_follows_verified_feed_across_filename_migration(tmp_path
     # A per-architecture release is not a universal delta baseline.
     result = updates.fetch_baseline("macos", "universal", VERSION, tmp_path / "universal")
     assert result == {"status": "first-framework-release", "directory": None}
+
+
+@pytest.mark.parametrize("damage", ["missing", "tampered"])
+def test_cli_archives_are_required_and_verified(tmp_path, damage):
+    release_files(tmp_path)
+    archive = tmp_path / f"smart-search-cli-{VERSION}-macos-arm64.zip"
+    if damage == "missing":
+        archive.unlink()
+    else:
+        archive.write_bytes(b"tampered")
+    with pytest.raises((ValueError, FileNotFoundError)):
+        updates.validate_release(tmp_path, VERSION)

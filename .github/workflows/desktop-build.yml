@@ -304,6 +304,7 @@ jobs:
             .desktop-artifacts/macos-${{ matrix.architecture }}-*/*.dmg
             .desktop-artifacts/macos-${{ matrix.architecture }}-*/result.json
             .desktop-artifacts/macos-${{ matrix.architecture }}-*/signing.json
+            .desktop-artifacts/macos-${{ matrix.architecture }}-*/cli/*
             .desktop-artifacts/macos-${{ matrix.architecture }}-*/updates/*
             .desktop-artifacts/sparkle-check-*/*.json
             .desktop-artifacts/sparkle-check-*/*.log
@@ -432,7 +433,7 @@ jobs:
         with:
           name: universal-dmg
           path: universal-dmg
-      - name: Verify both slices and run the installed Intel backend
+      - name: Verify both slices and the installed Intel App
         env:
           FORMAL_SIGNING: ${{ github.event_name == 'workflow_dispatch' && (inputs.sign_macos || inputs.sign_macos_updates || inputs.release_tag != '') }}
           SMART_SEARCH_MACOS_CERT_SHA256: ${{ vars.SMART_SEARCH_MACOS_CERT_SHA256 }}

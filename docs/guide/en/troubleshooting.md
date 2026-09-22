@@ -44,7 +44,7 @@ smart-search deep "深度搜索一下最近的比特币行情" --format json | C
 
 ## The CLI package updated but its runtime is not ready
 
-Managers such as mise may skip npm lifecycle scripts, so the package version can change before its Python runtime exists. The App's Update CLI action verifies installation ownership, prepares that package's private Python environment, then checks actual execution. Failures retain their logs and allow a same-version retry after checking again. Ordinary refresh remains read-only. If no independent Python is available, use Shared independent CLI environment first. Running `smart-search --version` in a terminal may also repair a missing runtime, making the first invocation slower.
+The new npm CLI needs neither lifecycle scripts nor system Python. If its native package is missing, run `npm install -g @konbakuyomu/smart-search@latest --include=optional` with the same npm, then detect again; do not use `--omit=optional`. A manual npm path needs its matching Node.js and a writable global prefix. Published npm 0.1.24 requires updating after the new binary release is available.
 
 ## App update failed or is unavailable
 

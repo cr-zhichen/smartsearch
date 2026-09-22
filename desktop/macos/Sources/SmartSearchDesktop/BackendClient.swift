@@ -12,11 +12,11 @@ enum BackendClientError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case let .backendNotFound(path):
-            return L("找不到内置后端：{0}。开发环境请在设置中明确选择后端文件。", "\(path)")
+            return L("找不到所选 CLI：{0}。请在设置中安装或修复 CLI。", path)
         case .notConnected:
             return L("后端尚未连接。")
         case .incompatibleProtocol:
-            return L("App 与内置后端的协议版本不兼容，未执行任何写入。")
+            return L("App 与所选 CLI 的协议不兼容，请更新 CLI 或 App。")
         case .timedOut:
             return L("后端未在设定时间内响应。")
         case .disconnected:
@@ -80,7 +80,7 @@ actor BackendClient {
         timeoutSeconds = min(max(seconds, 5), 300)
     }
 
-    func start(backendURL: URL) async throws {
+    func start(backendURL: URL, arguments: [String] = [], environment: [String: String] = [:]) async throws {
         await shutdown()
         guard FileManager.default.isExecutableFile(atPath: backendURL.path) else {
             throw BackendClientError.backendNotFound(backendURL.path)
@@ -91,7 +91,8 @@ actor BackendClient {
         let error = Pipe()
         let newProcess = Process()
         newProcess.executableURL = backendURL
-        newProcess.arguments = ["--desktop-backend"]
+        newProcess.arguments = arguments + ["--desktop-backend"]
+        newProcess.environment = ProcessInfo.processInfo.environment.merging(environment) { _, value in value }
         newProcess.standardInput = input
         newProcess.standardOutput = output
         newProcess.standardError = error
@@ -143,11 +144,11 @@ actor BackendClient {
         }
     }
 
-    func initialize(configDirectory: String? = nil, enableUpdateChecks: Bool = true, language: String = "auto") async throws -> JSONValue {
+    func initialize(configDirectory: String? = nil, enableUpdateChecks: Bool = true, language: String = "auto", independentCLI: Bool = false) async throws -> JSONValue {
         var params: [String: JSONValue] = ["protocol_version": .number(Double(Self.protocolVersion)),
             "app_version": .string(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "development"),
             "enable_update_checks": .bool(enableUpdateChecks), "lang": .string(language),
-            "include_config_secrets": .bool(true)]
+            "include_config_secrets": .bool(true), "independent_cli": .bool(independentCLI)]
         if let configDirectory, !configDirectory.isEmpty {
             params["config_dir"] = .string(configDirectory)
         }
@@ -317,11 +318,6 @@ enum BackendLocator {
         if let overridePath, !overridePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return URL(fileURLWithPath: overridePath)
         }
-        guard let resources = Bundle.main.resourceURL else {
-            throw BackendClientError.backendNotFound("Contents/Resources/backend/smart-search")
-        }
-        return resources
-            .appendingPathComponent("backend", isDirectory: true)
-            .appendingPathComponent("smart-search", isDirectory: false)
+        throw BackendClientError.backendNotFound(L("尚未选择 CLI"))
     }
 }

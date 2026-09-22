@@ -18,6 +18,7 @@ internal sealed class AppUpdater
     internal bool Downloading { get; private set; }
     internal bool Ready { get; private set; }
     internal bool Available => _update is not null && Error.Length == 0;
+    internal bool CanCheck => Installed && !Checking && !Downloading && !Ready;
     internal string Error { get; private set; } = "";
     internal int Progress { get; private set; }
     internal DateTimeOffset? CheckedAt { get; private set; }
@@ -31,7 +32,7 @@ internal sealed class AppUpdater
 
     internal async Task CheckAsync()
     {
-        if (!Installed || Checking || Downloading) return;
+        if (!CanCheck) return;
         Checking = true;
         Error = "";
         _update = null;
@@ -54,6 +55,7 @@ internal sealed class AppUpdater
         Downloading = true;
         Progress = 0;
         Ready = false;
+        changed();
         try
         {
             await _manager.DownloadUpdatesAsync(_update!, value => { Progress = value; changed(); }, cancellationToken);

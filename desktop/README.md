@@ -2,7 +2,7 @@
 
 脚本默认构建未做发行者签名的测试产物：macOS 本地默认使用 ad-hoc，固定证书签名与作者配置见 [macOS 签名](../docs/macos-signing.md)；Windows 显式使用 `-SigningMode Required` 时生成自签名产物，签名失败即停止。不创建 GitHub Release、不修改 PATH，也不会读取或删除共享配置、用户结果或外部 npm CLI。每次执行都会在 `.desktop-artifacts/` 新建独立目录；失败现场保留供排查。
 
-Python 后端固定为 PyInstaller `onedir`：`smart-search.exe`（Windows）或 `smart-search`（macOS），并验证 `smart_search/assets` 全量存在、`smart-search` 包元数据存在。Mac 通用版保留两套完整后端，由双架构启动器选择当前架构。`--smoke` 仅发送本机 `initialize` 与 `shutdown` 协议消息，使用本次运行目录中的空配置目录，不发真实服务商请求。
+独立 CLI 固定为 PyInstaller `onedir`：`smart-search.exe`（Windows）或 `smart-search`（macOS / Linux），并验证 `smart_search/assets` 全量存在、`smart-search` 包元数据存在。App 不包含 CLI 或 Python 运行环境；npm 平台包和独立 ZIP 各自携带对应架构的完整 CLI。`--smoke` 仅发送本机 `initialize` 与 `shutdown` 协议消息，使用本次运行目录中的空配置目录，不发真实服务商请求。
 
 ## 发布文件名与下载入口
 
@@ -28,7 +28,7 @@ Python 后端固定为 PyInstaller `onedir`：`smart-search.exe`（Windows）或
 mise run desktop:windows:build -Architecture x64
 ```
 
-脚本先构建并验证后端，再把 `desktop/windows` 的源文件阶段化到本次 artifact 目录中执行 `dotnet publish --self-contained true`，最后把完整 onedir 后端复制到 `publish\backend\smart-search.exe`。阶段化会跳过工作树已有的 `bin`、`obj` 和 `.desktop-artifacts`，因此每次构建不依赖或清空旧中间文件。Windows x64 与 ARM64 必须在对应架构的 Windows 上分别构建和运行；脚本会拒绝 Python 架构与目标不一致的 PyInstaller 交叉构建。本机 x64 的成功不能代表 ARM64 已验证。
+脚本先构建并验证独立 CLI，再阶段化 `desktop/windows` 源码并执行 `dotnet publish --self-contained true`。App 的 `publish` 目录不含 CLI、Python 或搜索引擎；CLI 单独发布为 `smart-search-cli-VERSION-windows-ARCH.zip`。保留原有的 Windows 架构、签名和资源校验；x64 构建不能代替 ARM64 实机验收。
 
 安装包由仓库锁定的 Velopack `vpk` 工具生成，默认按当前用户安装；`-InstallerMode Skip` 只生成散包。生产安装身份为 `com.smartsearch.desktop.win-x64` 或 `com.smartsearch.desktop.win-arm64`，渠道为 `win-x64-stable` / `win-arm64-stable`。散包不能充当已安装的更新客户端，界面提示先完整安装。
 
@@ -36,7 +36,7 @@ mise run desktop:windows:build -Architecture x64
 
 传入 `-PreviousReleaseDirectory` 可用已校验的同架构上一版完整包生成差分，目标完整包始终保留。没有框架基线是首版；已有基线下载或校验失败会阻止发布。`test_windows_updates.py <result.json>` 使用独立测试身份、目录和本地 feed，验证真实 SDK 差分安装及损坏差分后的完整包回退，不覆盖正式安装。
 
-Windows 签名覆盖自有 App EXE/DLL、后端、Velopack Setup、启动包装器及负责更新/卸载的 Update.exe，使用固定公开证书、SHA-256 和 RFC3161 时间戳。第三方文件保持原字节，不修改用户信任库。说明及操作见 [Windows 签名](../docs/windows-signing.md)。
+Windows 签名覆盖自有 App EXE/DLL、Velopack Setup、启动包装器及负责更新/卸载的 Update.exe，使用固定公开证书、SHA-256 和 RFC3161 时间戳。第三方文件保持原字节，不修改用户信任库。说明及操作见 [Windows 签名](../docs/windows-signing.md)。
 
 ## macOS
 
@@ -48,7 +48,7 @@ mise run desktop:macos:install
 mise run desktop:macos:build --architecture arm64
 ```
 
-脚本要求 Python、宿主机和目标架构一致，避免把 PyInstaller 的原生二进制误当成交叉编译产物。它用 Xcode 提供的 Swift 工具链和独立 SwiftPM scratch 目录构建 `desktop/macos` 的 `SmartSearchDesktop`，将后端放入 `Smart Search.app/Contents/Resources/backend/smart-search`。Intel 构建使用 `--architecture x86_64`。
+脚本要求 Python、宿主机和目标架构一致。Swift 主程序与 Sparkle 构成 App，PyInstaller 产物作为独立 CLI ZIP 发布，不复制到 App 中。Intel 构建使用 `--architecture x86_64`。
 
 两种原生产物就绪后，使用同版本、同更新公钥的完整 App 生成通用版：
 
@@ -59,15 +59,15 @@ mise run desktop:macos:universal \
   --sparkle-tools /path/to/arm64/sparkle-tools
 ```
 
-通用版通过 `lipo` 合并 Swift 主程序，并携带 `backend/arm64`、`backend/x86_64` 两套未经合并的 PyInstaller 分发目录。`backend/smart-search` 是一个 Universal 启动器，使用当前执行切片选择后端，通过 `execv` 保留参数、IPC 管道与进程生命周期。[PyInstaller 不支持用 lipo 合并两份冻结可执行文件](https://pyinstaller.org/en/stable/feature-notes.html#macos-multi-arch-support)。所有应用、引擎依赖和 Sparkle helper 都会检查目标架构；之后重新签署整个 App，再创建和挂载 DMG 验证。
+通用版通过 `lipo` 合并 Swift 主程序，验证 framework/helper 的双架构后重新签名和生成 DMG。CLI 的 ZIP 可用于独立验收；App 安装统一通过用户 npm，由 npm 选择与 Node.js 进程架构匹配的平台包。
 
 构建原生界面需要选中带 macOS SDK 26 或更新版本的 Xcode，最低运行版本仍是 macOS 13。`compile-macos.sh` 将同一个实际 SDK 路径/版本同时传入编译和链接，避免 SwiftPM 将最低系统版本误记为 linked-on SDK，导致新版 macOS 仍显示旧控件样式。打包验证会读取真实 Mach-O 的 SDK 和最低版本，并拒绝旧 SDK 或与构建 SDK 不一致的产物。
 
-所有资源组装完成后，脚本对完整 `.app` 签名，并强制执行 `codesign --verify --deep --strict`。固定证书模式从内向外签署嵌套程序、框架和后端库，记录证书指纹与稳定的身份规则；默认本地构建使用 ad-hoc。编译器为单个可执行文件生成的 linker signature 不能代替完整应用签名；修复前 v0.1.22 的应用会报 `code has no resources but signature indicates they must be present`。SHA-256 一致也无法发现这种打包错误。
+所有资源组装完成后，脚本对完整 `.app` 签名，并强制执行 `codesign --verify --deep --strict`。固定证书模式从内向外签署嵌套程序和框架，记录证书指纹与稳定的身份规则；默认本地构建使用 ad-hoc。编译器为单个可执行文件生成的 linker signature 不能代替完整应用签名；修复前 v0.1.22 的应用会报 `code has no resources but signature indicates they must be present`。SHA-256 一致也无法发现这种打包错误。
 
 DMG 沿用 Codex Tweaks / DJOneHub 的 660×440 安装窗口：中英双语提示、青色拖拽箭头、112pt 图标、Applications 链接，以及 1×/2× 背景。布局位于 `packaging/macos/dmg-settings.py`，修改 SVG 后运行 `mise run desktop:macos:background` 重新生成两个 PNG。打包不依赖 Finder 自动化，支持无界面的 CI。
 
-构建最后会只读挂载实际 DMG，校验应用签名、版本、架构和安装资源，复制到临时 Applications 目录，再检查复制后的签名并执行隔离配置的后端启动/退出 smoke。也可单独检查：
+构建最后会只读挂载实际 DMG，校验应用签名、版本、架构和安装资源，复制到临时 Applications 目录，再检查复制后的签名，并确认 App 未捆绑 CLI；独立 CLI 的启动/退出 smoke 在 CLI 构建阶段执行。也可单独检查：
 
 ```bash
 mise run desktop:macos:verify /path/to/SmartSearch.dmg --architecture arm64 --version 0.1.22
@@ -84,38 +84,42 @@ mise run desktop:packaging:lint
 
 `.github/workflows/desktop-build.yml` 在 PR 或手动触发时分别构建 Windows x64/ARM64 与 macOS arm64/x86_64，并运行各平台的真实框架升级检查；PR 不获取发布 Secrets。Mac 使用 PR #51 已验证的 Xcode 26.3、mise 工具与 ensurepip 安装路径。手动开启 `sign_windows`、`sign_macos` 或 `sign_macos_updates` 可生成相应平台使用正式身份签名的候选；macOS PR 使用临时测试证书，不读取正式 Secrets；`release_tag` 为空时不会发布。`windows_only` 仅用于独立 Windows 候选，不能同时开启 `sign_macos`、`sign_macos_updates` 或填写 `release_tag`。
 
-原生 Mac job 将 App 和 ARM job 的 Sparkle 工具封装为短期 tar artifact，保留可执行权限和符号链接。通用版 job 合并后在原生 ARM runner 上验证安装及 Sparkle 更新；随后原生 Intel runner 下载并验证同一个 DMG 的安装与后端启动。任何平台或通用版验证失败均阻止 Release 上传。
+原生 Mac job 将 App 和 ARM job 的 Sparkle 工具封装为短期 tar artifact，保留可执行权限和符号链接。通用版 job 合并后在原生 ARM runner 上验证安装及 Sparkle 更新；随后原生 Intel runner 下载并验证同一个 DMG 的安装、签名与架构。任何平台或通用版验证失败均阻止 Release 上传。
 
 填写已有稳定 `release_tag` 属于显式发布：强制维护者的 Windows、macOS 代码签名和 Sparkle EdDSA 身份，四架构及通用版全部通过后，先上传安装器、完整包、差分包与校验清单，最后上传引用它们的 feed 和下载表格。发布源必须已经包含原生更新客户端，不能把旧下载器产品和新更新包拼成一个发行版。桌面工作流不会创建 Release/Tag；但仓库独立的 `publish-npm.yml` 会在 main 推送后自动发布 npm beta 并创建 GitHub 预发布，正式 latest 由稳定 tag 控制。
 
-macOS 签名 CI 验证跨版本身份一致、复制安装、错误密码/证书、内容篡改拒绝及临时钥匙串清理。Windows 签名 CI 运行错误密码/证书、内容/签名/时间戳篡改及签名失败检查；真实隔离升级后验签落盘的 App、后端、启动包装器与 Update.exe，不启动 GUI。结果保存在构建 `result.json`、升级 `receipt.json` 与签名检查记录。构建、验签和隔离安装不能代替用户 GUI、干净机器或 SmartScreen 提示验收。
+macOS 签名 CI 验证跨版本身份一致、复制安装、错误密码/证书、内容篡改拒绝及临时钥匙串清理。Windows 签名 CI 运行错误密码/证书、内容/签名/时间戳篡改及签名失败检查；真实隔离升级后验签落盘的 App、启动包装器与 Update.exe，不启动 GUI。结果保存在构建 `result.json`、升级 `receipt.json` 与签名检查记录。构建、验签和隔离安装不能代替用户 GUI、干净机器或 SmartScreen 提示验收。
 
-修复已有原生更新发行版的包装时，产品源码仍固定在 tag；Mac 打包脚本、成品校验、安装资源、mise 配置及发布资产校验器可取工作流提交。`replace_existing_assets` 仅用于明确批准的附件修复，不应重打同一已安装版本；正常更新提高版本号。后端携带固定路径的 `package.json` 清单，以实际版本读回确认升级。
+修复已有原生更新发行版的包装时，产品源码仍固定在 tag；Mac 打包脚本、成品校验、安装资源、mise 配置及发布资产校验器可取工作流提交。`replace_existing_assets` 仅用于明确批准的附件修复，不应重打同一已安装版本；正常更新提高版本号。独立 CLI 携带 `package.json` 清单；App 与 CLI 分别读回实际版本。
 
 Windows 新构建统一使用 `windows-Setup-{架构}.exe`，不以文件名判断签名状态；正式发布仍强制 self-signed 签名及验签，未签名候选不会进入发布上传步骤。Sparkle 更新签名不是 Apple Developer ID 或公证。正式 Sparkle 配置为 Secret `SMART_SEARCH_SPARKLE_EDDSA_PRIVATE_KEY`（Base64 编码的 32 字节 Ed25519 seed）与公开变量 `SMART_SEARCH_SPARKLE_PUBLIC_KEY`；公钥必须与 [仓库记录](packaging/macos/sparkle-public-key.json) 一致。后续发行复用这一身份，私钥只保存于受限加密备份与 GitHub Secrets，不进入仓库或构建附件。缺少正式密钥时仍能跑隔离更新测试，但不能上传正式 Sparkle 更新资产。 作者必须按 [macOS 证书生成与 Secrets 配置](../docs/macos-signing.md) 完成首次设置；此变更不提供正式证书。
 
 ## App 和 CLI 更新
 
-设置中的“版本与更新”分别展示 App/内置引擎与实际生效的独立 CLI。Windows App 由 Velopack、macOS App 由 Sparkle 检查官方稳定源；启用时在到期后检查，间隔至少 24 小时，可关闭且保留手动检查。退出后没有检查服务。自动检查只取元数据，发现更新提示“更新/稍后”，同一会话不重复提示同一版本。
+设置分别显示 App 更新与独立 CLI 管理。App 使用 Sparkle / Velopack，启用自动检查时每次启动检查，保持运行时每 24 小时再检查。发现版本可更新、稍后或跳过；跳过记录跨重启保留，手动检查仍能查看该版本。CLI 缺失或损坏不影响 App 检查更新。
 
-点击更新后由 SDK 下载和校验，优先使用适用差分，失败时按框架规则回退完整包。安装前保护草稿、自有任务、CLI 升级、环境和 Skills 写入，安全关闭 sidecar 后由框架安装重启。下载完成不代表安装完成，重启后核对 App 与内置引擎实际版本。不会强行停止外部 CLI。
+App 更新由 SDK 下载和校验，优先使用适用差分，失败时按框架规则回退完整包。安装前保护草稿、自有任务和 CLI/Skills 写入，关闭 App 自己的协议进程后安装重启。App 更新不替换独立 CLI。
 
-独立 CLI 只在确认属于普通全局 npm 或全局 mise npm 时可更新。点击前展示来源、路径和目标版本；执行保留原管理器，补齐目标包私有 Python，读回实际运行结果后才成功。同版本未就绪可显式重试。复杂 mise 选项、项目范围、版本约束、未知或冲突来源保留手动说明，不改 PATH。普通探测只读；管理器写入期间保持 App 打开。
+CLI 安装管理由 App 原生代码调用用户 npm 执行，CLI 不可用时仍可操作。自动检测和手动路径选择都会固定配套 Node.js、npm 和原全局 prefix，不接管 pip/uv 开发版。首页始终显示安装、连接与更新状态；CLI 默认启动时及每 24 小时检查，只提示，不自动安装。配置和 Skills 保留。
 
 ## 环境准备与 App/CLI 解耦
 
-“更新 Skills → 共用独立 CLI 环境”提供“检测环境 → 安装缺少的组件 → 验证可用性”。健康的 Node/npm、支持 venv/pip 的 Python 和明确来源的 CLI 优先复用。缺失时从 Node 官方 LTS 发行版和经校验的 uv/Astral CPython 准备运行环境，再安装锁定的 npm 稳定版 CLI；无需预装 mise，也不代装或登录 Codex/Claude Code。
+App 不内置 CLI，也不负责搜索或 Skill 规则。首页第一步查找用户的 Node.js 18+ / npm；环境路径和更新偏好集中在 CLI 设置弹窗中。缺失时提供安装 Node.js 与手动指定 npm 路径的入口。CLI 平台包自带 Python 解释器和依赖，并隔离用户 Python 环境；App 不下载或配置 Node/Python。
 
-新环境位于 `%LOCALAPPDATA%/SmartSearchTools` 或 `~/.local/share/smart-search-tools`，独立 npm prefix 在其 `cli` 子目录。它们不是 App 文件，关闭、更新或卸载 App 不会移除它们。AI 接入文件包含独立 Node 和 npm CLI 的绝对调用路径。Windows 为新安装补充自己的用户 PATH 项并提示重新打开 AI/终端；macOS 不修改 shell 配置，图形 AI 可以按技能中的完整路径调用。
+`npm-binaries.yml` 为 macOS、Windows、Linux 的 x64/arm64 构建平台包，真实执行 npm tarball 安装与无 Python 环境验证。发布管线待六个平台通过后，先发布平台包，再发布 npm 主包。首次发布需要在 npm 为六个 scoped 平台包配置发布权限/可信发布者；旧 0.1.24 不能覆盖，需使用新版本号。
 
-“更新 Skills”统一列出所有 Agent 目标，区分 Skill 文件状态、独立 CLI 版本和实际 AI 调用。最新源是官方 npm 稳定包，下载通过 SHA512 与归档边界检查，只读取说明文件。默认每天检查并提示；用户选择目标、核对路径后才备份并更新。备份路径在结果中显示，额外文件、未选目标与历史副本保留。Codex 使用 `.agents/skills`，Claude 尊重 `CLAUDE_CONFIG_DIR`，也支持 Cursor、Copilot、Gemini、OpenCode、Cline、Roo Code 等注册目标。更新会刷新独立 CLI 的本机调用说明。离线缓存不能冒充本次最新检查成功；CLI 未就绪不阻止正文同步，实际 AI 调用前仍需准备独立 CLI。检查不发收费请求，AI 内调用仍由用户验证。
+本地通过 `mise run desktop:cli:build --result-file <manifest>` 构建 CLI，再用 `mise run npm:binary:package --manifest <manifest> --output <新目录>` 和 `mise run npm:binary:smoke <新目录>` 检查 npm 分发。
 
-安装失败保留已成功组件，重新检测后补缺。只有下载可取消；包管理器写入期间保持 App 打开。实现检查必须使用隔离配置、环境和技能目录；Windows x64 的实测不代表 macOS/ARM64 或真实 AI 会话已经验证。
+CLI 安装在所选 npm 的全局 prefix 中，由 npm 创建命令入口。App 不修改 PATH 或 npm 配置；卸载 App 不影响 CLI、搜索配置和已接入的 Skills。历史 SmartSearchTools 目录保留，不自动迁移或删除。
+
+“更新 Skills”的清单、内容、状态、写入、备份和移除全部来自当前 CLI。安装的 Skill 是短入口，通过 `smart-search agent-guide [relative-path]` 获取当前 CLI 的完整说明。手动同步只处理确认的目标；默认自动维护已接入目标，在 CLI 升级后的首次使用及后续每日检查执行，不依赖 App 打开。个人修改和额外文件保留；缺失文件或冲突需要手动处理。移除先备份并取消维护。
+
+npm 操作失败后显示错误，重新检测可读回当前安装状态。包管理器写入期间保持 App 打开。实现检查必须使用隔离配置、环境和技能目录；Windows x64 的实测不代表 macOS/ARM64 或真实 AI 会话已经验证。
 
 ## 双语界面与手册
 
 App 在设置页选择自动、简体中文或 English，偏好独立于 CLI 保存。
-App 将当前语言传给私有后端；切换保留草稿与任务，环境写入或 CLI 更新期间暂不可切换。
+App 将当前语言传给所选 CLI 的协议进程；切换保留草稿与任务，环境写入或 CLI 更新期间暂不可切换。
 CLI 通过 `SMART_SEARCH_LANGUAGE` 和单次 `--lang` 选择语言，命令名、机器字段及来源原文不翻译。
 共享语言资源位于 `src/smart_search/assets/i18n/messages.json`，Windows 直接嵌入，macOS 资源副本须保持字节一致。
 

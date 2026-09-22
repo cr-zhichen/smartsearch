@@ -117,12 +117,11 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
                         "SUFeedURL": feed_url, "SSUpdateTestBuild": True,
                         "NSAppTransportSecurity": {"NSAllowsLocalNetworking": True}}
                 (app / "Contents/Info.plist").write_bytes(plistlib.dumps(info))
-                manifests = [app / "Contents/Resources/backend/package.json"]
-                if architecture == "universal":
-                    manifests += [app / f"Contents/Resources/backend/{arch}/package.json" for arch in ("arm64", "x86_64")]
-                for backend in manifests:
-                    package = json.loads(backend.read_text())
-                    backend.write_text(json.dumps({**package, "version": app_version}))
+                assert not (app / "Contents/Resources/backend").exists(), "The App must not bundle a CLI"
+                if label == "old":
+                    legacy = app / "Contents/Resources/backend"
+                    legacy.mkdir()
+                    (legacy / "old-engine.txt").write_text("Legacy bundled engine removed by the App update")
                 if certificate and not (case == "adhoc-migration" and label == "old"):
                     signed = sign_app(app)
                     (evidence / f"{case}-{label}-sign.json").write_text(json.dumps(signed, indent=2))
@@ -153,9 +152,7 @@ try Curve25519.Signing.PrivateKey().publicKey.rawRepresentation.base64EncodedStr
                 assert result.returncode == 0 and installed == version, f"{case}: update failed"
                 assert any(p.endswith(".delta") for p in requests), requests
                 assert any(p.endswith(".zip") for p in requests) == (case == "full-fallback"), requests
-                backend = apps[0] / "Contents/Resources/backend/smart-search"
-                check = run([backend, "--version"], evidence / f"{case}-backend.log")
-                assert check.stdout.strip() == "smart-search " + version
+                assert not (apps[0] / "Contents/Resources/backend").exists(), "App update bundled a CLI"
                 if certificate:
                     verify_app(apps[0], certificate)
             receipts.append({"case": case, "requests": list(requests), "version": installed, "exit_code": result.returncode})

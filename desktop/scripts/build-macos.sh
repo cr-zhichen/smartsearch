@@ -178,10 +178,11 @@ cp "$repository_root/src/smart_search/assets/i18n/messages.json" "$app_directory
 cmp "$repository_root/src/smart_search/assets/i18n/messages.json" "$app_directory/Contents/Resources/Localization.json"
 plutil -replace CFBundleShortVersionString -string "$version" "$app_directory/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$version" "$app_directory/Contents/Info.plist"
-cp -R "$backend_directory" "$app_directory/Contents/Resources/backend"
-chmod +x "$app_directory/Contents/MacOS/SmartSearchDesktop" "$app_directory/Contents/Resources/backend/smart-search"
+chmod +x "$app_directory/Contents/MacOS/SmartSearchDesktop"
+"$python_bin" "$repository_root/desktop/scripts/package_cli.py" --bundle "$backend_directory" \
+  --output "$run_directory/cli" --platform macos --architecture "$architecture" --version "$version"
 ditto "$sparkle_tools/Sparkle.framework" "$app_directory/Contents/Frameworks/Sparkle.framework"
-plutil -insert SUEnableAutomaticChecks -bool false "$app_directory/Contents/Info.plist"
+plutil -insert SUEnableAutomaticChecks -bool true "$app_directory/Contents/Info.plist"
 plutil -insert SUAutomaticallyUpdate -bool false "$app_directory/Contents/Info.plist"
 plutil -insert SUSendProfileInfo -bool false "$app_directory/Contents/Info.plist"
 plutil -insert SUVerifyUpdateBeforeExtraction -bool true "$app_directory/Contents/Info.plist"
@@ -198,8 +199,8 @@ if [[ -n "$update_public_key" ]]; then
   plutil -insert SUPublicEDKey -string "$update_public_key" "$app_directory/Contents/Info.plist"
 fi
 plutil -lint "$app_directory/Contents/Info.plist"
-if [[ ! -x "$app_directory/Contents/Resources/backend/smart-search" ]]; then
-  echo "The app bundle is missing an executable backend." >&2
+if [[ -e "$app_directory/Contents/Resources/backend" ]]; then
+  echo "The App must not contain a CLI backend." >&2
   exit 1
 fi
 

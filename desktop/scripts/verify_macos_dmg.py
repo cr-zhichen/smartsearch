@@ -11,7 +11,6 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from build_backend import smoke_backend
 from macos_signing import verify_app
 
 MACHO_MAGIC = {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe",
@@ -42,16 +41,11 @@ def verify_app_architectures(app: Path, architecture: str, expected_sdk: str | N
     desktop = app / "Contents/MacOS/SmartSearchDesktop"
     backend = app / "Contents/Resources/backend"
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
-    for executable in (desktop, backend / "smart-search"):
-        verify_binary_architectures(executable, architectures)
+    if backend.exists():
+        raise RuntimeError("The native App must not embed a CLI or Python runtime")
+    verify_binary_architectures(desktop, architectures)
     for arch in architectures:
         verify_frontend_sdk(desktop, arch, info["LSMinimumSystemVersion"], expected_sdk)
-        if architecture == "universal":
-            if not (backend / arch / "smart-search").is_file():
-                raise RuntimeError(f"Universal app is missing its {arch} backend")
-            verify_macho_tree(backend / arch, (arch,))
-        else:
-            verify_macho_tree(backend, (arch,))
     verify_macho_tree(app / "Contents/Frameworks", architectures)
 
 
@@ -80,7 +74,7 @@ def main() -> None:
     parser.add_argument("dmg", type=Path)
     parser.add_argument("--architecture", required=True, choices=("arm64", "x86_64", "universal"))
     parser.add_argument("--runtime-architecture", choices=("arm64", "x86_64"),
-                        help="Force the backend smoke architecture (Intel needs Rosetta on Apple Silicon)")
+                        help="Legacy argument retained for build-script compatibility; the App contains no CLI")
     parser.add_argument("--version", required=True)
     parser.add_argument("--sdk-version", help="Expected SDK used by the build toolchain")
     parser.add_argument("--signing-mode", choices=("adhoc", "required"), default="adhoc")
@@ -114,9 +108,7 @@ def main() -> None:
             subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(installed)], check=True)
             if args.signing_mode == "required":
                 verify_app(installed, args.certificate_sha256)
-            smoke_backend(installed / "Contents/Resources/backend/smart-search", root, args.version,
-                          architecture=args.runtime_architecture)
-            print("DMG verified: signature, version, architecture, frontend SDK, install layout and installed backend startup.")
+            print("DMG verified: signature, version, architecture, frontend SDK, install layout and absence of bundled CLI.")
             print("Local/self-signed code identities do not establish Developer ID trust or Apple notarization.")
         finally:
             subprocess.run(["hdiutil", "detach", str(mount)], check=True)

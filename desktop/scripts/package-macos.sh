@@ -16,7 +16,7 @@ else
   verify_args+=(--sdk-version "$(xcrun --sdk macosx --show-sdk-version)")
 fi
 
-# Sign after final assembly, including both Universal backends and framework slices.
+# Sign after final assembly, including the Universal UI and framework slices.
 signing_result="$run_directory/signing.json"
 if [[ "$signing_mode" == required ]]; then
   "$python_bin" "$repository_root/desktop/scripts/macos_signing.py" sign "$app_directory" --result "$signing_result"
@@ -25,7 +25,6 @@ else
   printf '{"kind":"ad-hoc-test"}\n' > "$signing_result"
 fi
 codesign --verify --deep --strict --verbose=2 "$app_directory"
-bash "$repository_root/desktop/scripts/check-macos-backend.sh" "$app_directory/Contents/Resources/backend/smart-search"
 dmg="$run_directory/SmartSearch-v$version$suffix.dmg"
 "${DMGBUILD:-dmgbuild}" -s "$repository_root/desktop/packaging/macos/dmg-settings.py" \
   -D "app=$app_directory" -D "assets=$repository_root/desktop/packaging/macos" "Smart Search" "$dmg"
@@ -39,6 +38,7 @@ if [[ -n "$update_key_file" ]]; then
     "$updates_directory" "$update_key_file" "$architecture" "$previous_release_directory"
   cp "$dmg" "$updates_directory/"
   cp "$signing_result" "$updates_directory/macos-signing-$architecture.json"
+  if [[ -d "$run_directory/cli" ]]; then cp "$run_directory/cli/"* "$updates_directory/"; fi
 fi
 "$python_bin" - "$run_directory/result.json" "$app_directory" "$dmg" "$sparkle_tools" "$updates_directory" "$architecture" "$signing_result" <<'PY'
 import json, sys

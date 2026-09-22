@@ -149,18 +149,11 @@ foreach ($resource in @("App.xbf", "MainWindow.xbf", "SmartSearch.Desktop.pri", 
         throw "Published Windows app is missing its compiled UI resource: $resource"
     }
 }
-$backendDestination = Join-Path $publishDirectory "backend"
-if (Test-Path -LiteralPath $backendDestination) {
-    throw "Refusing to merge backend files into an existing directory: $backendDestination"
+$standaloneCLI = Join-Path $backendDirectory "smart-search.exe"
+if (Test-Path -LiteralPath (Join-Path $publishDirectory "backend")) {
+    throw 'The native App must not contain a bundled CLI.'
 }
-New-Item -ItemType Directory -Path $backendDestination | Out-Null
-Get-ChildItem -LiteralPath $backendDirectory -Force | Copy-Item -Destination $backendDestination -Recurse
-$bundledBackend = Join-Path $backendDestination "smart-search.exe"
-if (-not (Test-Path -LiteralPath $bundledBackend -PathType Leaf)) {
-    throw "Published Windows app is missing backend\smart-search.exe."
-}
-
-$ownedFiles = @($desktopExecutable, (Join-Path $publishDirectory 'SmartSearch.Desktop.dll'), $bundledBackend)
+$ownedFiles = @($desktopExecutable, (Join-Path $publishDirectory 'SmartSearch.Desktop.dll'), $standaloneCLI)
 $thirdPartyHashes = @{}
 if ($signingEnabled) {
     foreach ($file in Get-ChildItem -LiteralPath $publishDirectory -File -Recurse) {
@@ -194,7 +187,12 @@ if ($signingEnabled) {
     $signingCertificate.Dispose()
 }
 
+$cliOutput = Join-Path $runDirectory 'installer'
+& $python (Join-Path $PSScriptRoot 'package_cli.py') --bundle $backendDirectory --output $cliOutput --platform windows --architecture $Architecture --version $version
+if ($LASTEXITCODE -ne 0) { throw 'Standalone CLI packaging failed.' }
+
 $result = [ordered]@{
+    version = $version
     run_directory = $runDirectory
     staged_project_directory = $stagedProjectDirectory
     publish_directory = $publishDirectory
