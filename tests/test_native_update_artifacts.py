@@ -75,7 +75,7 @@ def test_macos_signed_release_requires_maintainer_identity(tmp_path, damage, dam
             updates.validate_release(tmp_path, VERSION, digest)
         assert not (tmp_path / "SHA256SUMS.txt").exists()
     else:
-        assert updates.validate_release(tmp_path, VERSION, digest)["assets"] == 18
+        assert updates.validate_release(tmp_path, VERSION, digest)["assets"] == 26
 
 
 @pytest.mark.parametrize("duplicate", [False, True])
