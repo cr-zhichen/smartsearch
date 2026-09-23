@@ -2415,14 +2415,34 @@ def _prompt_intent_router(values: dict[str, str], current: dict[str, str], lang:
         if synthesis_default not in {"true", "false", "auto"}:
             synthesis_default = "false"
         values["SMART_SEARCH_JEV_SYNTHESIZE"] = _prompt_select(
-            _t(lang, "选择主模型汇总模式", "Choose main-model synthesis mode"),
+            _t(lang, "选择 JEV 结果汇总模式", "Choose JEV synthesis mode"),
             [
-                {"name": _t(lang, "true: 使用主模型汇总", "true: synthesize with the main model"), "value": "true"},
+                {"name": _t(lang, "true: 使用独立模型汇总", "true: synthesize with the dedicated model"), "value": "true"},
                 {"name": _t(lang, "false: 直接返回证据", "false: return evidence directly"), "value": "false"},
                 {"name": _t(lang, "auto: 由 Jev 判断是否需要汇总", "auto: let Jev decide whether synthesis is needed"), "value": "auto"},
             ],
             synthesis_default,
         )
+        if values["SMART_SEARCH_JEV_SYNTHESIZE"] != "false":
+            synthesis_keys = (
+                "SMART_SEARCH_JEV_SYNTHESIS_API_URL", "SMART_SEARCH_JEV_SYNTHESIS_API_KEY",
+                "SMART_SEARCH_JEV_SYNTHESIS_MODEL",
+            )
+            configured = any(merged.get(key) for key in synthesis_keys)
+            if values["SMART_SEARCH_JEV_SYNTHESIZE"] == "true" or _prompt_yes_no(
+                _t(lang, "配置独立汇总模型?", "Configure a dedicated synthesis model?"), default=configured,
+            ):
+                for key, label in (
+                    ("SMART_SEARCH_JEV_SYNTHESIS_API_URL", _t(lang, "汇总 API 地址", "Synthesis API URL")),
+                    ("SMART_SEARCH_JEV_SYNTHESIS_API_KEY", _t(lang, "汇总 API Key", "Synthesis API key")),
+                    ("SMART_SEARCH_JEV_SYNTHESIS_MODEL", _t(lang, "汇总模型", "Synthesis model")),
+                ):
+                    values[key] = _prompt_value(key, label, merged.get(key, ""), lang=lang)
+                values["SMART_SEARCH_JEV_SYNTHESIS_API_MODE"] = _prompt_select(
+                    _t(lang, "选择汇总接口模式", "Choose synthesis API mode"),
+                    [{"name": mode, "value": mode} for mode in ("chat-completions", "responses")],
+                    merged.get("SMART_SEARCH_JEV_SYNTHESIS_API_MODE", "chat-completions"),
+                )
         return
     if mode != "hybrid":
         return
@@ -2602,6 +2622,10 @@ def _run_advanced_setup_prompts(values: dict[str, str], current: dict[str, str],
         ("OPENAI_COMPATIBLE_FALLBACK_MODELS", "OpenAI-compatible fallback models (comma-separated)", True),
         ("OPENAI_COMPATIBLE_API_MODE", "OpenAI-compatible API mode (chat-completions/responses)", True),
         ("OPENAI_COMPATIBLE_STREAM", "OpenAI-compatible stream mode (true/false)", True),
+        ("SMART_SEARCH_JEV_SYNTHESIS_API_URL", "JEV synthesis API URL", True),
+        ("SMART_SEARCH_JEV_SYNTHESIS_API_KEY", "JEV synthesis API key", True),
+        ("SMART_SEARCH_JEV_SYNTHESIS_MODEL", "JEV synthesis model", True),
+        ("SMART_SEARCH_JEV_SYNTHESIS_API_MODE", "JEV synthesis API mode (chat-completions/responses)", True),
         ("SMART_SEARCH_VALIDATION_LEVEL", "Validation level (fast/balanced/strict)", True),
         ("SMART_SEARCH_FALLBACK_MODE", "Fallback mode (auto/off)", True),
         ("SMART_SEARCH_MINIMUM_PROFILE", "Minimum profile (standard/off)", True),
@@ -3028,6 +3052,10 @@ def _run_setup(args: argparse.Namespace) -> int:
         "OPENAI_COMPATIBLE_FALLBACK_MODELS": args.openai_compatible_fallback_models,
         "OPENAI_COMPATIBLE_API_MODE": args.openai_compatible_api_mode,
         "OPENAI_COMPATIBLE_STREAM": args.openai_compatible_stream,
+        "SMART_SEARCH_JEV_SYNTHESIS_API_URL": args.jev_synthesis_api_url,
+        "SMART_SEARCH_JEV_SYNTHESIS_API_KEY": args.jev_synthesis_api_key,
+        "SMART_SEARCH_JEV_SYNTHESIS_MODEL": args.jev_synthesis_model,
+        "SMART_SEARCH_JEV_SYNTHESIS_API_MODE": args.jev_synthesis_api_mode,
         "SMART_SEARCH_VALIDATION_LEVEL": args.validation_level,
         "SMART_SEARCH_FALLBACK_MODE": args.fallback_mode,
         "SMART_SEARCH_MINIMUM_PROFILE": args.minimum_profile,
@@ -3712,6 +3740,10 @@ def build_parser() -> argparse.ArgumentParser:
     setup_parser.add_argument("--openai-compatible-fallback-models", default="", help="Save OPENAI_COMPATIBLE_FALLBACK_MODELS.")
     setup_parser.add_argument("--openai-compatible-api-mode", default="", help="Save OPENAI_COMPATIBLE_API_MODE (chat-completions or responses).")
     setup_parser.add_argument("--openai-compatible-stream", default="", help="Save OPENAI_COMPATIBLE_STREAM.")
+    setup_parser.add_argument("--jev-synthesis-api-url", default="", help="Save SMART_SEARCH_JEV_SYNTHESIS_API_URL.")
+    setup_parser.add_argument("--jev-synthesis-api-key", default="", help="Save SMART_SEARCH_JEV_SYNTHESIS_API_KEY.")
+    setup_parser.add_argument("--jev-synthesis-model", default="", help="Save SMART_SEARCH_JEV_SYNTHESIS_MODEL.")
+    setup_parser.add_argument("--jev-synthesis-api-mode", default="", help="Save SMART_SEARCH_JEV_SYNTHESIS_API_MODE.")
     setup_parser.add_argument("--validation-level", default="", help="Save SMART_SEARCH_VALIDATION_LEVEL.")
     setup_parser.add_argument("--fallback-mode", default="", help="Save SMART_SEARCH_FALLBACK_MODE.")
     setup_parser.add_argument("--minimum-profile", default="", help="Save SMART_SEARCH_MINIMUM_PROFILE.")

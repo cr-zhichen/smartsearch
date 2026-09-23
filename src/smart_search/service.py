@@ -1239,7 +1239,7 @@ def _configured_for_capability(capability: str, capability_status: dict[str, Any
 
 
 def _safe_provider_overrides() -> tuple[list[str], list[str], list[str]]:
-    known = set(PROVIDER_PROFILES)
+    known = set(PROVIDER_PROFILES) | {"jev-synthesis"}
     preferred = [provider for provider in config.research_preferred_providers if provider in known]
     disabled = [provider for provider in config.research_disabled_providers if provider in known]
     invalid = [
@@ -5346,33 +5346,38 @@ def _main_search_override_config(provider: str, overrides: dict[str, str]) -> di
 async def doctor() -> dict[str, Any]:
     info = config.get_config_info()
 
-    main_provider_configs: list[dict[str, Any]] = []
-    try:
-        main_provider_configs = _main_search_provider_configs()
+    if info["SMART_SEARCH_INTENT_ROUTER"] == "jev":
         info["main_search_connection_tests"] = {}
-        for provider_config in main_provider_configs:
-            info["main_search_connection_tests"][provider_config["provider"]] = await _safe_test_main_provider_connection(provider_config)
-        openai_provider_config = next(
-            (item for item in main_provider_configs if item["provider"] == "openai-compatible"),
-            None,
-        )
-        if openai_provider_config:
-            info["openai_compatible_endpoint"] = openai_compatible_endpoint(
-                openai_provider_config["api_url"],
-                openai_provider_config.get("api_mode", openai_provider_config["mode"]),
+        info["primary_connection_test"] = {
+            "status": "not_required", "message": source_message('Jev evidence mode does not require a main model'),
+        }
+    else:
+        try:
+            main_provider_configs = _main_search_provider_configs()
+            info["main_search_connection_tests"] = {}
+            for provider_config in main_provider_configs:
+                info["main_search_connection_tests"][provider_config["provider"]] = await _safe_test_main_provider_connection(provider_config)
+            openai_provider_config = next(
+                (item for item in main_provider_configs if item["provider"] == "openai-compatible"),
+                None,
             )
-        if main_provider_configs:
-            first_provider = main_provider_configs[0]
-            info["primary_api_mode"] = first_provider["mode"]
-            info["primary_connection_test"] = info["main_search_connection_tests"][first_provider["provider"]]
-        else:
-            info["primary_connection_test"] = {"status": "config_error", "message": MINIMUM_PROFILE_ERROR}
-    except ValueError as e:
-        info["main_search_connection_tests"] = {}
-        info["primary_connection_test"] = {"status": "config_error", "message": sanitize_provider_error_message(e)}
-    except Exception as e:
-        info["main_search_connection_tests"] = {}
-        info["primary_connection_test"] = {"status": "error", "message": source_message('未知错误: {0}', sanitize_provider_error_message(e))}
+            if openai_provider_config:
+                info["openai_compatible_endpoint"] = openai_compatible_endpoint(
+                    openai_provider_config["api_url"],
+                    openai_provider_config.get("api_mode", openai_provider_config["mode"]),
+                )
+            if main_provider_configs:
+                first_provider = main_provider_configs[0]
+                info["primary_api_mode"] = first_provider["mode"]
+                info["primary_connection_test"] = info["main_search_connection_tests"][first_provider["provider"]]
+            else:
+                info["primary_connection_test"] = {"status": "config_error", "message": MINIMUM_PROFILE_ERROR}
+        except ValueError as e:
+            info["main_search_connection_tests"] = {}
+            info["primary_connection_test"] = {"status": "config_error", "message": sanitize_provider_error_message(e)}
+        except Exception as e:
+            info["main_search_connection_tests"] = {}
+            info["primary_connection_test"] = {"status": "error", "message": source_message('未知错误: {0}', sanitize_provider_error_message(e))}
 
     try:
         info["exa_connection_test"] = await _test_exa_connection()
@@ -5457,9 +5462,32 @@ async def doctor() -> dict[str, Any]:
                 "diagnostic",
             )
             info["jev_connection_test"] = {"status": "ok", "model": settings.model, "usage": client.usage()}
-            main_search_ok = main_search_ok if settings.synthesis_mode == "true" else True
-            if not main_provider_configs and settings.synthesis_mode != "true":
-                info["primary_connection_test"] = {"status": "not_required", "message": source_message('Jev evidence mode does not require a main model')}
+            try:
+                dedicated_config = settings.dedicated_synthesis_config()
+            except ValueError as exc:
+                info["jev_synthesis_connection_test"] = {"status": "config_error", "message": str(exc)}
+            else:
+                if dedicated_config is None:
+                    info["jev_synthesis_connection_test"] = {
+                        "status": "not_configured", "message": source_message('Jev synthesis model is not configured'),
+                    }
+                elif settings.synthesis_mode == "false":
+                    info["jev_synthesis_connection_test"] = {
+                        "status": "skipped", "message": source_message('Jev synthesis is disabled'),
+                    }
+                else:
+                    info["jev_synthesis_connection_test"] = await _safe_test_main_provider_connection(dedicated_config)
+            synthesis_test = info["jev_synthesis_connection_test"]
+            synthesis_status = synthesis_test["status"]
+            if synthesis_status == "config_error":
+                main_search_ok = False
+            elif settings.synthesis_mode == "true":
+                main_search_ok = synthesis_status == "ok"
+            else:
+                main_search_ok = True
+            if settings.synthesis_mode == "true" or synthesis_status == "config_error":
+                primary_test = synthesis_test
+                primary_status = synthesis_status
         except (ValueError, ProviderCallError) as exc:
             error_type, error = classify_provider_exception(exc)
             info["jev_connection_test"] = {"status": "error", "error_type": error_type, "message": error}
@@ -5481,7 +5509,7 @@ async def doctor() -> dict[str, Any]:
         info["error_type"] = info["jev_connection_test"]["error_type"]
     else:
         info["error"] = primary_test.get("message", "Primary connection check failed")
-        if primary_status == "config_error":
+        if primary_status in {"config_error", "not_configured"}:
             info["error_type"] = "config_error"
         elif primary_status in {"timeout", "error", "warning"}:
             info["error_type"] = "network_error"
