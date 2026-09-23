@@ -1754,10 +1754,10 @@ def _merge_setup_values(current: dict[str, str], values: dict[str, str]) -> dict
     return merged
 
 
-def _write_setup_status(status: dict[str, Any], lang: str, *, final: bool = False) -> None:
+def _write_setup_status(status: dict[str, Any], lang: str, *, final: bool = False, router_mode: str = "hybrid") -> None:
     title = _t(lang, "最低配置检查", "Minimum profile check") if final else _t(lang, "当前状态", "Current status")
     _write_stderr(f"\n{title}:\n")
-    required = {"main_search", "docs_search", "web_fetch"}
+    required = set() if router_mode == "jev" else {"main_search", "docs_search", "web_fetch"}
     labels = {
         "main_search": _t(lang, "main_search 主搜索", "main_search primary search"),
         "docs_search": _t(lang, "docs_search 文档搜索", "docs_search documentation search"),
@@ -1998,14 +1998,20 @@ def _setup_choice(prompt: str, choices: set[str], default: str) -> str:
 
 
 def _prompt_main_search(values: dict[str, str], current: dict[str, str], lang: str) -> None:
-    status = _setup_status_from_values(_merge_setup_values(current, values))
+    merged = _merge_setup_values(current, values)
+    status = _setup_status_from_values(merged)
     configured = status["main_search"]["configured"]
-    default_selected = configured or ["xai-responses"]
+    jev_mode = merged.get("SMART_SEARCH_INTENT_ROUTER") == "jev"
+    default_selected = configured or ([] if jev_mode else ["xai-responses"])
+    if jev_mode:
+        heading = _t(lang, "[可选] main_search 主搜索", "[Optional] main_search primary search")
+    else:
+        heading = _t(lang, "[1/3 必选] main_search 主搜索", "[1/3 Required] main_search primary search")
     _write_stderr(
-        _t(
+        f"\n{heading}\n" + _t(
             lang,
-            "\n[1/3 必选] main_search 主搜索\n用途: 负责综合搜索回答和最终合成。\n推荐: 有 xAI key 选 xai；有中转服务选 openai；两者都配可以同能力兜底。\n",
-            "\n[1/3 Required] main_search primary search\nPurpose: broad search answers and final synthesis.\nRecommended: choose xai for an xAI key, openai for a relay, or both for same-capability fallback.\n",
+            "用途: 负责非 JEV 模式的搜索回答。JEV 模式可跳过，结果汇总使用独立配置。\n推荐: 有 xAI key 选 xai；有中转服务选 openai；两者都配可以同能力兜底。\n",
+            "Purpose: search answers outside JEV mode. Skip this in JEV mode; JEV synthesis has separate settings.\nRecommended: choose xai for an xAI key, openai for a relay, or both for same-capability fallback.\n",
         )
     )
     selected = _prompt_provider_multi_select(
@@ -2544,12 +2550,14 @@ def _write_setup_examples(lang: str) -> None:
             "  docs_search: 文档/API 优先 Context7；官方域名、论文和低噪声发现再配 Exa。\n"
             "  web_fetch: Tavily 官方地址是 https://api.tavily.com；号池填 https://<host>/api/tavily。\n"
             "  intent embeddings: 推荐 SiliconFlow + Qwen/Qwen3-Embedding-8B，setup 会自动补 threshold=0.475、margin=0.053。\n"
+            "  jev: 可跳过 main_search，配置 TypeSafe Key 和至少一个检索渠道；汇总模型单独配置。\n"
             "  key 都填你自己控制台里的；Zhipu / Firecrawl 可以之后再补。\n",
             "\nIf unsure: first configure main_search + docs_search + web_fetch.\n"
             "  main_search: xAI Responses, or OpenAI-compatible (example: https://api.openai.com/v1)\n"
             "  docs_search: Context7 for docs/API first; add Exa for official domains, papers, and low-noise discovery.\n"
             "  web_fetch: official Tavily endpoint is https://api.tavily.com; pooled endpoints use https://<host>/api/tavily.\n"
             "  intent embeddings: recommended SiliconFlow + Qwen/Qwen3-Embedding-8B; setup auto-fills threshold=0.475 and margin=0.053.\n"
+            "  jev: skip main_search; configure a TypeSafe key and at least one retrieval channel. Synthesis uses separate settings.\n"
             "  Use keys from your own provider consoles. Zhipu / Firecrawl can be added later.\n",
         )
     )
@@ -2569,14 +2577,15 @@ def _run_guided_setup_prompts(
     _write_panel(
         _t(
             lang,
-            f"\nSmart Search 配置向导\n配置文件: {config_file}\n\n目标: standard 最低可用配置\n操作: 方向键移动，空格勾选，回车确认；API key 输入不显示。\n最低要求: main_search + docs_search + web_fetch 各至少一个 provider。\n",
-            f"\nSmart Search setup wizard\nConfig file: {config_file}\n\nGoal: standard minimum profile\nKeys: move with arrow keys, select with Space, confirm with Enter; API key input is hidden.\nMinimum: at least one provider in each of main_search + docs_search + web_fetch.\n",
+            f"\nSmart Search 配置向导\n配置文件: {config_file}\n\n目标: standard 最低可用配置\n操作: 方向键移动，空格勾选，回车确认；API key 输入不显示。\n最低要求: main_search + docs_search + web_fetch 各至少一个 provider；JEV 模式只需 TypeSafe Key 和至少一个检索渠道。\n",
+            f"\nSmart Search setup wizard\nConfig file: {config_file}\n\nGoal: standard minimum profile\nKeys: move with arrow keys, select with Space, confirm with Enter; API key input is hidden.\nMinimum: at least one provider in each of main_search + docs_search + web_fetch; JEV mode needs a TypeSafe key and one retrieval channel instead.\n",
         ),
         lang,
     )
     _write_setup_keep_note(lang)
     _write_setup_examples(lang)
-    _write_setup_status(_setup_status_from_values(_merge_setup_values(current, values)), lang)
+    merged = _merge_setup_values(current, values)
+    _write_setup_status(_setup_status_from_values(merged), lang, router_mode=merged.get("SMART_SEARCH_INTENT_ROUTER", "hybrid"))
     if skill_targets is not None:
         skill_targets[:] = _prompt_skill_targets(lang)
     _prompt_main_search(values, current, lang)
@@ -3172,7 +3181,8 @@ def _run_setup(args: argparse.Namespace) -> int:
         _write_stderr(_t(lang, "\n保存完成。\n", "\nSaved.\n"))
         if skill_result is not None:
             _write_skill_install_summary(skill_result, lang)
-        _write_setup_status(final_status, lang, final=True)
+        router_mode = final_values.get("SMART_SEARCH_INTENT_ROUTER") or service.config.intent_router_mode
+        _write_setup_status(final_status, lang, final=True, router_mode=router_mode)
         missing = [capability for capability in ("main_search", "docs_search", "web_fetch") if not final_status[capability]["ok"]]
         if service.config.intent_router_mode == "jev":
             missing = service.validate_minimum_profile().get("missing", [])

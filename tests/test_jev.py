@@ -833,26 +833,29 @@ async def test_slow_channel_is_cancelled_while_other_evidence_is_retained(monkey
     assert cancelled.is_set()
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("rejected", [False, True])
-@pytest.mark.parametrize("mode", ["false", "auto"])
-async def test_doctor_checks_jev_without_requiring_a_main_model(monkeypatch, configured, rejected, mode):
-    monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIZE", mode)
+def stub_doctor_probes(monkeypatch, *, rejected=False):
     async def probe(*args, **kwargs):
         return {"status": "ok", "message": "fixture"}
-
-    for name in (
-        "_test_exa_connection", "_test_tavily_connection", "_test_jina_connection",
-        "_test_zhipu_connection", "_test_zhipu_mcp_connection", "_test_context7_connection",
-    ):
-        monkeypatch.setattr(service, name, probe)
 
     async def request(self, state, questions, timeout):
         if rejected:
             raise ProviderCallError("auth_error", "TypeSafe rejected credentials")
         return answer_payload(questions, {key: 0.99 for key in questions})
 
+    for name in (
+        "_test_exa_connection", "_test_tavily_connection", "_test_jina_connection",
+        "_test_zhipu_connection", "_test_zhipu_mcp_connection", "_test_context7_connection",
+    ):
+        monkeypatch.setattr(service, name, probe)
     monkeypatch.setattr(JevClient, "_request", request)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rejected", [False, True])
+@pytest.mark.parametrize("mode", ["false", "auto"])
+async def test_doctor_checks_jev_without_requiring_a_main_model(monkeypatch, configured, rejected, mode):
+    monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIZE", mode)
+    stub_doctor_probes(monkeypatch, rejected=rejected)
     result = await service.doctor()
     assert result["ok"] is not rejected
     assert result["intent_router_status"]["mode"] == "jev"
@@ -870,24 +873,13 @@ async def test_doctor_checks_dedicated_synthesis_independently_of_main_model(mon
     monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIS_API_KEY", "summary-secret")
     monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIS_MODEL", "summary-model")
 
-    async def probe(*args, **kwargs):
-        return {"status": "ok", "message": "fixture"}
-
     async def synthesis_probe(provider_config):
         assert provider_config["provider"] == "jev-synthesis"
         assert provider_config["model"] == "summary-model"
         return {"status": "ok", "message": "fixture"}
 
-    async def request(self, state, questions, timeout):
-        return answer_payload(questions, {key: 0.99 for key in questions})
-
-    for name in (
-        "_test_exa_connection", "_test_tavily_connection", "_test_jina_connection",
-        "_test_zhipu_connection", "_test_zhipu_mcp_connection", "_test_context7_connection",
-    ):
-        monkeypatch.setattr(service, name, probe)
+    stub_doctor_probes(monkeypatch)
     monkeypatch.setattr(service, "_safe_test_main_provider_connection", synthesis_probe)
-    monkeypatch.setattr(JevClient, "_request", request)
 
     result = await service.doctor()
     assert result["ok"]
@@ -907,24 +899,35 @@ async def test_doctor_rejects_missing_dedicated_synthesis_even_with_main_model(m
     if dedicated_model:
         monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIS_MODEL", dedicated_model)
 
-    async def probe(*args, **kwargs):
-        return {"status": "ok", "message": "fixture"}
-
-    async def request(self, state, questions, timeout):
-        return answer_payload(questions, {key: 0.99 for key in questions})
-
-    for name in (
-        "_test_exa_connection", "_test_tavily_connection", "_test_jina_connection",
-        "_test_zhipu_connection", "_test_zhipu_mcp_connection", "_test_context7_connection",
-    ):
-        monkeypatch.setattr(service, name, probe)
-    monkeypatch.setattr(JevClient, "_request", request)
+    stub_doctor_probes(monkeypatch)
 
     result = await service.doctor()
     assert not result["ok"] and result["error_type"] == "config_error"
     assert result["jev_synthesis_connection_test"]["status"] == expected_status
     assert result["primary_connection_test"]["status"] == "not_required"
     assert result["main_search_connection_tests"] == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode,expected_status,expected_ok", [
+    ("true", "config_error", False), ("auto", "skipped", True),
+])
+async def test_doctor_skips_disabled_dedicated_synthesis_provider(monkeypatch, configured, mode, expected_status, expected_ok):
+    monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIZE", mode)
+    monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIS_API_URL", "https://summary.example.org/v1")
+    monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIS_API_KEY", "summary-secret")
+    monkeypatch.setenv("SMART_SEARCH_JEV_SYNTHESIS_MODEL", "summary-model")
+    monkeypatch.setenv("SMART_SEARCH_RESEARCH_DISABLED_PROVIDERS", "jev-synthesis")
+    stub_doctor_probes(monkeypatch)
+
+    async def unexpected_probe(provider_config):
+        raise AssertionError("Disabled synthesis provider must not be probed")
+
+    monkeypatch.setattr(service, "_safe_test_main_provider_connection", unexpected_probe)
+    result = await service.doctor()
+    assert result["ok"] is expected_ok
+    assert result["jev_synthesis_connection_test"]["status"] == expected_status
+    assert result["jev_synthesis_connection_test"]["reason"] == "provider_disabled"
 
 
 @pytest.mark.asyncio
